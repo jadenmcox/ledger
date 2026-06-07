@@ -36,6 +36,15 @@ yarn-error.log*
 # vercel
 .vercel
 
+# claude code local state
+.claude/
+
+# local sqlite
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

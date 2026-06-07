@@ -1,26 +1,175 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Warm cream paper */
+  --background: #fafaf7;
+  --surface: #ffffff;
+  --surface-2: #f4f3ee;
+  --foreground: #1f1d1a;
+  --foreground-muted: #6b6862;
+  --foreground-faint: #a8a49d;
+  --border: #ece9e1;
+  --border-strong: #d9d4c7;
+
+  /* Sage — primary, income, savings */
+  --sage: #7fa37f;
+  --sage-deep: #5c7d5c;
+  --sage-tint: #e3ecdf;
+
+  /* Peach — wants, warm accent */
+  --peach: #f0a987;
+  --peach-deep: #d18260;
+  --peach-tint: #fbe8db;
+
+  /* Blush — needs, important */
+  --blush: #e8959a;
+  --blush-deep: #c66a72;
+  --blush-tint: #fadfe1;
+
+  /* Powder blue — secondary accent */
+  --blue: #8db3d4;
+  --blue-deep: #5a86ad;
+  --blue-tint: #dde9f4;
+
+  /* Lavender — tertiary, gentle */
+  --lavender: #b8a3d4;
+  --lavender-tint: #ece4f5;
+
+  /* Classification colors */
+  --need: var(--blush);
+  --want: var(--peach);
+  --savings: var(--sage);
+  --income: var(--sage-deep);
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-foreground-muted: var(--foreground-muted);
+  --color-foreground-faint: var(--foreground-faint);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+
+  --color-sage: var(--sage);
+  --color-sage-deep: var(--sage-deep);
+  --color-sage-tint: var(--sage-tint);
+  --color-peach: var(--peach);
+  --color-peach-deep: var(--peach-deep);
+  --color-peach-tint: var(--peach-tint);
+  --color-blush: var(--blush);
+  --color-blush-deep: var(--blush-deep);
+  --color-blush-tint: var(--blush-tint);
+  --color-blue: var(--blue);
+  --color-blue-deep: var(--blue-deep);
+  --color-blue-tint: var(--blue-tint);
+  --color-lavender: var(--lavender);
+  --color-lavender-tint: var(--lavender-tint);
+
+  --color-need: var(--need);
+  --color-want: var(--want);
+  --color-savings: var(--savings);
+
+  /* Legacy aliases so existing class names keep working */
+  --color-gold: var(--peach);
+  --color-gold-bright: var(--peach-deep);
+  --color-gold-dim: var(--peach-deep);
+  --color-clay: var(--blush);
+  --color-clay-dim: var(--blush-deep);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --font-serif: var(--font-serif);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: var(--border);
 }
 
+html,
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Soft floral background — radial pastel blobs */
+body {
+  background-color: var(--background);
+  background-image:
+    radial-gradient(at 12% 8%, var(--sage-tint) 0px, transparent 45%),
+    radial-gradient(at 88% 6%, var(--peach-tint) 0px, transparent 40%),
+    radial-gradient(at 4% 92%, var(--blue-tint) 0px, transparent 45%),
+    radial-gradient(at 96% 88%, var(--blush-tint) 0px, transparent 42%);
+  background-attachment: fixed;
+}
+
+.serif {
+  font-family: var(--font-serif), ui-serif, Georgia, serif;
+  font-weight: 400;
+  font-variation-settings: "SOFT" 50, "opsz" 144;
+  letter-spacing: -0.02em;
+}
+
+.serif-italic {
+  font-family: var(--font-serif), ui-serif, Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+  font-variation-settings: "SOFT" 100, "opsz" 144, "WONK" 1;
+  letter-spacing: -0.01em;
+}
+
+.mono {
+  font-family: var(--font-mono), ui-monospace, "SF Mono", monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Soft hairline — a fading dotted petal pattern */
+.hairline {
+  height: 1px;
+  background-image: radial-gradient(
+    circle,
+    var(--border-strong) 1px,
+    transparent 1px
+  );
+  background-size: 12px 1px;
+  background-repeat: repeat-x;
+  background-position: center;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 9999px;
+  border: 3px solid var(--background);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--foreground-faint);
+}
+
+::selection {
+  background: var(--sage-tint);
+  color: var(--sage-deep);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
