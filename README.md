@@ -1,4 +1,4 @@
-# Ledger.
+# Budgetly.
 
 A personal budget tracker built for you and you alone. Modern, mobile-first PWA.
 

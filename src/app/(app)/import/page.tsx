@@ -19,7 +19,7 @@ export default async function ImportPage() {
         eyebrow="IMPORT"
         title="A statement,"
         italic="translated."
-        subtitle="Drop in a CSV export from your bank. Ledger will map the columns, drop duplicates, and apply any rules you've already created."
+        subtitle="Drop in a CSV export from your bank. Budgetly will map the columns, drop duplicates, and apply any rules you've already created."
       />
       <Container>
         {active.length === 0 ? (

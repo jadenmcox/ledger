@@ -15,7 +15,7 @@ export default async function AccountsPage() {
         eyebrow="ACCOUNTS"
         title="Every account,"
         italic="one place."
-        subtitle="Checking, savings, credit cards, retirement, investments. Add what's yours and Ledger will weave them into one picture."
+        subtitle="Checking, savings, credit cards, retirement, investments. Add what's yours and Budgetly will weave them into one picture."
       />
       <Container>
         <AccountsClient
