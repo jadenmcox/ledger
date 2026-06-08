@@ -97,7 +97,7 @@ export default async function DashboardPage() {
         italic="so far."
         subtitle={`${daysLeft} days remain in ${format(now, "MMMM")}. Here's where the money has gone.`}
       />
-      <Container>
+      <Container className="pb-32 md:pb-16">
         {allAccounts.length === 0 ? (
           <EmptyState
             title="No accounts yet"
@@ -114,23 +114,23 @@ export default async function DashboardPage() {
             }
           />
         ) : (
-          <div className="space-y-12">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-12">
+          <div className="space-y-10 md:space-y-12">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-12">
               <Stat
                 label="Spent this month"
                 value={formatCents(spend)}
                 hint={`${txThisMonth.length} transactions`}
-                tone="gold"
+                tone="blush"
               />
               <Stat
                 label="Income this month"
                 value={formatCents(income)}
-                tone="sage"
+                tone="blue"
               />
               <Stat
                 label="Net"
                 value={formatCents(net, { signed: true })}
-                tone={net >= 0 ? "sage" : "clay"}
+                tone={net >= 0 ? "blue" : "blush"}
               />
               <Stat
                 label="Days remaining"
@@ -143,42 +143,42 @@ export default async function DashboardPage() {
               <div className="flex items-baseline justify-between mb-6">
                 <h2 className="serif text-2xl">
                   Need <span className="text-foreground-faint">·</span>{" "}
-                  <span className="serif-italic text-gold">want</span>{" "}
+                  <span className="serif-italic text-blush-deep">want</span>{" "}
                   <span className="text-foreground-faint">·</span> save
                 </h2>
                 <div className="text-xs text-foreground-faint tracking-tight">
                   share of monthly spend
                 </div>
               </div>
-              <div className="h-3 w-full flex rounded-full overflow-hidden bg-surface border border-border">
+              <div className="h-3 w-full flex rounded-full overflow-hidden bg-surface border border-border shadow-inner shadow-foreground/5">
                 <div
-                  className="bg-clay h-full"
+                  className="bg-blush h-full transition-all"
                   style={{ width: `${pct.need}%` }}
                 />
                 <div
-                  className="bg-gold h-full"
+                  className="bg-peach h-full transition-all"
                   style={{ width: `${pct.want}%` }}
                 />
                 <div
-                  className="bg-sage h-full"
+                  className="bg-blue h-full transition-all"
                   style={{ width: `${pct.savings}%` }}
                 />
               </div>
-              <div className="mt-4 grid grid-cols-3 gap-6 text-sm">
+              <div className="mt-5 grid grid-cols-3 gap-4 md:gap-6 text-sm">
                 <Legend
-                  swatch="bg-clay"
+                  swatch="bg-blush"
                   label="Need"
                   value={formatCents(spendByClassification.need)}
                   pct={pct.need}
                 />
                 <Legend
-                  swatch="bg-gold"
+                  swatch="bg-peach"
                   label="Want"
                   value={formatCents(spendByClassification.want)}
                   pct={pct.want}
                 />
                 <Legend
-                  swatch="bg-sage"
+                  swatch="bg-blue"
                   label="Savings"
                   value={formatCents(spendByClassification.savings)}
                   pct={pct.savings}
@@ -189,11 +189,11 @@ export default async function DashboardPage() {
             <div>
               <div className="flex items-baseline justify-between mb-6">
                 <h2 className="serif text-2xl">
-                  By <span className="serif-italic text-gold">category</span>
+                  By <span className="serif-italic text-blush-deep">category</span>
                 </h2>
                 <Link
                   href="/categories"
-                  className="text-xs text-foreground-muted hover:text-gold transition-colors tracking-tight"
+                  className="text-xs text-foreground-muted hover:text-blush-deep transition-colors tracking-tight"
                 >
                   manage →
                 </Link>
@@ -241,9 +241,9 @@ export default async function DashboardPage() {
                                 style={{
                                   width: `${Math.min(ratio * 100, 100)}%`,
                                   background: overspent
-                                    ? "var(--clay)"
+                                    ? "var(--blush)"
                                     : warning
-                                      ? "var(--gold)"
+                                      ? "var(--peach)"
                                       : category.color,
                                 }}
                               />
@@ -254,7 +254,7 @@ export default async function DashboardPage() {
                         </div>
                         <div className="text-right shrink-0">
                           <div
-                            className={`mono text-sm tabular ${overspent ? "text-clay" : ""}`}
+                            className={`mono text-sm tabular ${overspent ? "text-blush-deep" : ""}`}
                           >
                             {formatCents(spent)}
                           </div>
@@ -279,7 +279,7 @@ export default async function DashboardPage() {
               <div>
                 <div className="flex items-baseline justify-between mb-6">
                   <h2 className="serif text-2xl">
-                    <span className="serif-italic text-gold">Recurring</span>
+                    <span className="serif-italic text-blush-deep">Recurring</span>
                   </h2>
                   <div className="text-xs text-foreground-faint tracking-tight">
                     detected fixed expenses
@@ -292,7 +292,7 @@ export default async function DashboardPage() {
                       className="px-5 py-4 flex items-center gap-4"
                     >
                       <Repeat
-                        className="size-3.5 text-gold-dim shrink-0"
+                        className="size-3.5 text-blush-deep shrink-0"
                         strokeWidth={1.5}
                       />
                       <div className="flex-1 min-w-0">
