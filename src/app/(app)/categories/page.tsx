@@ -18,7 +18,7 @@ export default async function CategoriesPage() {
         eyebrow="CATEGORIES"
         title="Buckets,"
         italic="limits, intent."
-        subtitle="Every transaction lands somewhere. Set a monthly limit on the ones that matter — Ledger will warn you as you approach it."
+        subtitle="Every transaction lands somewhere. Set a monthly limit on the ones that matter — Budgetly will warn you as you approach it."
       />
       <Container>
         <CategoriesClient initial={rows} />

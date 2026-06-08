@@ -168,7 +168,7 @@ export function ImportClient({ accounts }: { accounts: Account[] }) {
 
           <Label>Column mapping</Label>
           <p className="text-xs text-foreground-faint mt-1 mb-5 leading-relaxed">
-            Tell Ledger which column is which. If your bank uses separate
+            Tell Budgetly which column is which. If your bank uses separate
             debit/credit columns, leave Amount blank.
           </p>
           <div className="grid md:grid-cols-2 gap-5">

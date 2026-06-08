@@ -22,7 +22,7 @@ export default async function LoginPage({
             Private
           </div>
           <div className="serif text-5xl">
-            Ledger<span className="serif-italic text-gold">.</span>
+            Bu<span className="serif-italic text-blush-deep">d</span>getly<span className="serif-italic text-gold">.</span>
           </div>
         </div>
         <form action={googleSignIn} className="space-y-6">

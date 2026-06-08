@@ -26,7 +26,7 @@ export default async function TransactionsPage() {
         {allTx.length === 0 ? (
           <EmptyState
             title="No transactions yet"
-            body="Import a CSV from your bank to bring transactions in. Ledger will dedupe on re-import, so you can run it weekly without worry."
+            body="Import a CSV from your bank to bring transactions in. Budgetly will dedupe on re-import, so you can run it weekly without worry."
             action={
               <Link href="/import">
                 <Button variant="primary">Import a CSV</Button>

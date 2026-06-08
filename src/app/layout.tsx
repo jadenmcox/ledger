@@ -19,13 +19,13 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: "Ledger — Personal Budget",
+  title: "Budgetly — Personal Budget",
   description: "A soft place to watch your money.",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Ledger",
+    title: "Budgetly",
   },
 };
 

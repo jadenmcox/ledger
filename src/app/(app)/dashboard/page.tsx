@@ -101,7 +101,7 @@ export default async function DashboardPage() {
         {allAccounts.length === 0 ? (
           <EmptyState
             title="No accounts yet"
-            body="Add a checking account or credit card to start tracking. You can also import a CSV right away — Ledger will create transactions for you to categorize."
+            body="Add a checking account or credit card to start tracking. You can also import a CSV right away — Budgetly will create transactions for you to categorize."
             action={
               <div className="flex gap-3 justify-center">
                 <Link href="/accounts">

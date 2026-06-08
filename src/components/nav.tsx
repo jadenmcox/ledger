@@ -25,9 +25,9 @@ function Wordmark({ size = "lg" }: { size?: "lg" | "md" }) {
   const cls = size === "lg" ? "text-3xl" : "text-2xl";
   return (
     <span className={`serif ${cls} leading-none inline-flex items-baseline`}>
-      <span>Le</span>
+      <span>Bu</span>
       <span className="serif-italic text-blush-deep">d</span>
-      <span>ger</span>
+      <span>getly</span>
       <span className="inline-block size-1.5 rounded-full bg-sage-deep ml-1 translate-y-[-2px]" />
     </span>
   );

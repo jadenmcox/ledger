@@ -1,6 +1,6 @@
 {
-  "name": "Ledger",
-  "short_name": "Ledger",
+  "name": "Budgetly",
+  "short_name": "Budgetly",
   "description": "Personal budget tracker",
   "start_url": "/dashboard",
   "display": "standalone",
