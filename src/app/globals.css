@@ -1,45 +1,47 @@
 @import "tailwindcss";
 
 :root {
-  /* Warm cream paper */
-  --background: #fafaf7;
+  /* Warm pearl paper — a touch of rose in the cream */
+  --background: #fbf7f4;
   --surface: #ffffff;
-  --surface-2: #f4f3ee;
-  --foreground: #1f1d1a;
-  --foreground-muted: #6b6862;
-  --foreground-faint: #a8a49d;
-  --border: #ece9e1;
-  --border-strong: #d9d4c7;
+  --surface-2: #f4eff1;
+  --foreground: #1a1530;
+  --foreground-muted: #635c7a;
+  --foreground-faint: #a59fb8;
+  --border: #ece6ec;
+  --border-strong: #d9d0db;
 
-  /* Sage — primary, income, savings */
-  --sage: #7fa37f;
-  --sage-deep: #5c7d5c;
-  --sage-tint: #e3ecdf;
+  /* Ink — primary brand, deep midnight indigo
+     (these keep the "sage" variable names so existing classes
+     remap cleanly across the codebase) */
+  --sage: #6b63a8;
+  --sage-deep: #221c4a;
+  --sage-tint: #ebe7f5;
 
-  /* Peach — wants, warm accent */
-  --peach: #f0a987;
-  --peach-deep: #d18260;
-  --peach-tint: #fbe8db;
+  /* Peach — wants, warm accent (kept, slightly saturated) */
+  --peach: #f29070;
+  --peach-deep: #c96545;
+  --peach-tint: #fde2d4;
 
-  /* Blush — needs, important */
-  --blush: #e8959a;
-  --blush-deep: #c66a72;
-  --blush-tint: #fadfe1;
+  /* Blush — the pink that runs through it all (the headline accent) */
+  --blush: #ec6385;
+  --blush-deep: #c43d62;
+  --blush-tint: #fde1ea;
 
-  /* Powder blue — secondary accent */
-  --blue: #8db3d4;
-  --blue-deep: #5a86ad;
-  --blue-tint: #dde9f4;
+  /* Powder blue — income, savings (replacing sage as the "positive" color) */
+  --blue: #6f9bd9;
+  --blue-deep: #3c6db4;
+  --blue-tint: #e0ecfa;
 
-  /* Lavender — tertiary, gentle */
+  /* Lavender — tertiary, decorative */
   --lavender: #b8a3d4;
   --lavender-tint: #ece4f5;
 
-  /* Classification colors */
+  /* Classification colors — semantic */
   --need: var(--blush);
   --want: var(--peach);
-  --savings: var(--sage);
-  --income: var(--sage-deep);
+  --savings: var(--blue);
+  --income: var(--blue-deep);
 }
 
 @theme inline {
@@ -71,10 +73,13 @@
   --color-want: var(--want);
   --color-savings: var(--savings);
 
+  /* Ink (formerly "gold") — the saturated accent for highlights */
+  --color-ink: var(--sage-deep);
+
   /* Legacy aliases so existing class names keep working */
-  --color-gold: var(--peach);
-  --color-gold-bright: var(--peach-deep);
-  --color-gold-dim: var(--peach-deep);
+  --color-gold: var(--blush);
+  --color-gold-bright: var(--blush-deep);
+  --color-gold-dim: var(--blush-deep);
   --color-clay: var(--blush);
   --color-clay-dim: var(--blush-deep);
 
@@ -96,22 +101,34 @@ body {
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
-/* Soft floral background — radial pastel blobs */
+/* Atmospheric background — soft pink/blue/lavender light leaks
+   with a faint grain to keep it from feeling flat */
 body {
   background-color: var(--background);
   background-image:
-    radial-gradient(at 12% 8%, var(--sage-tint) 0px, transparent 45%),
-    radial-gradient(at 88% 6%, var(--peach-tint) 0px, transparent 40%),
-    radial-gradient(at 4% 92%, var(--blue-tint) 0px, transparent 45%),
-    radial-gradient(at 96% 88%, var(--blush-tint) 0px, transparent 42%);
+    radial-gradient(at 8% 4%, rgba(236, 99, 133, 0.18) 0px, transparent 42%),
+    radial-gradient(at 92% 8%, rgba(184, 163, 212, 0.22) 0px, transparent 40%),
+    radial-gradient(at 4% 96%, rgba(111, 155, 217, 0.18) 0px, transparent 45%),
+    radial-gradient(at 96% 90%, rgba(242, 144, 112, 0.16) 0px, transparent 42%);
   background-attachment: fixed;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.35;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.1 0 0 0 0 0.08 0 0 0 0 0.18 0 0 0 0.05 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
 }
 
 .serif {
   font-family: var(--font-serif), ui-serif, Georgia, serif;
   font-weight: 400;
   font-variation-settings: "SOFT" 50, "opsz" 144;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
 }
 
 .serif-italic {
@@ -119,19 +136,20 @@ body {
   font-style: italic;
   font-weight: 400;
   font-variation-settings: "SOFT" 100, "opsz" 144, "WONK" 1;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
 }
 
 .mono {
   font-family: var(--font-mono), ui-monospace, "SF Mono", monospace;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
 }
 
 .tabular {
   font-variant-numeric: tabular-nums;
 }
 
-/* Soft hairline — a fading dotted petal pattern */
+/* Soft hairline — a dotted petal pattern, now slightly pink */
 .hairline {
   height: 1px;
   background-image: radial-gradient(
@@ -142,6 +160,46 @@ body {
   background-size: 12px 1px;
   background-repeat: repeat-x;
   background-position: center;
+}
+
+/* Gradient hairline — for accent dividers */
+.hairline-blush {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--blush) 30%,
+    var(--sage-deep) 70%,
+    transparent 100%
+  );
+  opacity: 0.35;
+}
+
+/* Page-load reveal — staggered with --i custom prop */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.rise {
+  animation: rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: calc(var(--i, 0) * 80ms);
+}
+
+/* Subtle floating dot for accents */
+@keyframes drift {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
+.drift {
+  animation: drift 4s ease-in-out infinite;
 }
 
 ::-webkit-scrollbar {
@@ -161,8 +219,13 @@ body {
 }
 
 ::selection {
-  background: var(--sage-tint);
-  color: var(--sage-deep);
+  background: var(--blush-tint);
+  color: var(--blush-deep);
+}
+
+/* Mobile-friendly tap highlight */
+* {
+  -webkit-tap-highlight-color: transparent;
 }
 
 @media (prefers-reduced-motion: reduce) {

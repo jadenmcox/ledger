@@ -15,33 +15,42 @@ export function PageHeader({
   right?: React.ReactNode;
 }) {
   return (
-    <div className="px-6 md:px-12 pt-10 md:pt-16 pb-8 md:pb-12">
-      <div className="flex items-end justify-between gap-6">
-        <div>
+    <div className="px-5 md:px-12 pt-6 md:pt-16 pb-6 md:pb-12 relative">
+      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-5 md:gap-6">
+        <div className="min-w-0">
           {eyebrow && (
-            <div className="inline-flex items-center gap-2 text-foreground-muted text-[10px] tracking-[0.3em] uppercase mb-5 bg-surface/70 backdrop-blur-sm border border-border px-3 py-1 rounded-full">
-              <span className="size-1 rounded-full bg-blush" />
+            <div
+              className="inline-flex items-center gap-2 text-foreground-muted text-[10px] tracking-[0.3em] uppercase mb-4 md:mb-5 bg-surface/80 backdrop-blur-sm border border-border px-3 py-1 rounded-full rise"
+              style={{ ["--i" as string]: 0 }}
+            >
+              <span className="size-1 rounded-full bg-blush drift" />
               {eyebrow}
             </div>
           )}
-          <h1 className="serif text-4xl md:text-6xl leading-[1.0] tracking-tight">
+          <h1
+            className="serif text-[2.4rem] leading-[1.02] md:text-6xl md:leading-[1.0] tracking-tight rise"
+            style={{ ["--i" as string]: 1 }}
+          >
             {title}
             {italic && (
               <>
                 {" "}
-                <span className="serif-italic text-sage-deep">{italic}</span>
+                <span className="serif-italic text-blush-deep">{italic}</span>
               </>
             )}
           </h1>
           {subtitle && (
-            <p className="mt-4 text-foreground-muted text-sm md:text-base max-w-xl leading-relaxed">
+            <p
+              className="mt-4 text-foreground-muted text-sm md:text-base max-w-xl leading-relaxed rise"
+              style={{ ["--i" as string]: 2 }}
+            >
               {subtitle}
             </p>
           )}
         </div>
         {right && <div className="shrink-0">{right}</div>}
       </div>
-      <div className="hairline mt-10 md:mt-14" />
+      <div className="hairline mt-8 md:mt-14" />
     </div>
   );
 }
@@ -54,7 +63,9 @@ export function Container({
   className?: string;
 }) {
   return (
-    <div className={cn("px-6 md:px-12 pb-16", className)}>{children}</div>
+    <div className={cn("px-5 md:px-12 pb-16 relative", className)}>
+      {children}
+    </div>
   );
 }
 
@@ -72,16 +83,16 @@ export const Button = React.forwardRef<
     <button
       ref={ref}
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-full font-medium tracking-tight transition-all disabled:opacity-50 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-        size === "sm" ? "h-8 px-3.5 text-xs" : "h-10 px-5 text-sm",
+        "inline-flex items-center justify-center gap-2 rounded-full font-medium tracking-tight transition-all duration-200 disabled:opacity-50 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blush focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.98]",
+        size === "sm" ? "h-9 px-4 text-xs" : "h-11 px-5 text-sm",
         variant === "primary" &&
-          "bg-sage-deep text-surface hover:bg-sage shadow-sm shadow-sage/30",
+          "bg-sage-deep text-surface hover:bg-sage hover:shadow-[0_8px_24px_-12px] hover:shadow-sage-deep/50 shadow-sm shadow-sage-deep/20",
         variant === "outline" &&
-          "border border-border-strong bg-surface text-foreground hover:bg-surface-2",
+          "border border-border-strong bg-surface text-foreground hover:bg-surface-2 hover:border-blush/40",
         variant === "ghost" &&
           "text-foreground-muted hover:text-foreground hover:bg-surface-2",
         variant === "danger" &&
-          "bg-blush-deep text-surface hover:bg-blush",
+          "bg-blush-deep text-surface hover:bg-blush shadow-sm shadow-blush/30",
         className,
       )}
       {...props}
@@ -97,7 +108,7 @@ export const Input = React.forwardRef<
     <input
       ref={ref}
       className={cn(
-        "h-10 w-full bg-surface border border-border rounded-xl px-3.5 text-sm placeholder:text-foreground-faint focus:border-sage focus:ring-2 focus:ring-sage-tint focus:outline-none transition-all",
+        "h-11 w-full bg-surface border border-border rounded-xl px-3.5 text-sm placeholder:text-foreground-faint focus:border-blush focus:ring-2 focus:ring-blush-tint focus:outline-none transition-all",
         className,
       )}
       {...props}
@@ -137,7 +148,7 @@ export function Card({
   return (
     <div
       className={cn(
-        "bg-surface border border-border rounded-2xl shadow-sm shadow-foreground/[0.02]",
+        "bg-surface/95 backdrop-blur-sm border border-border rounded-2xl md:rounded-3xl shadow-[0_2px_8px_-4px] shadow-foreground/[0.06]",
         className,
       )}
     >
@@ -162,9 +173,9 @@ export function Stat({
       <Label className="mb-0">{label}</Label>
       <div
         className={cn(
-          "mono text-3xl md:text-4xl tracking-tight tabular leading-none",
+          "mono text-[1.75rem] md:text-4xl tracking-tight tabular leading-none",
           tone === "sage" && "text-sage-deep",
-          tone === "gold" && "text-peach-deep",
+          tone === "gold" && "text-blush-deep",
           tone === "peach" && "text-peach-deep",
           tone === "clay" && "text-blush-deep",
           tone === "blush" && "text-blush-deep",
@@ -192,21 +203,27 @@ export function EmptyState({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="bg-surface/60 border border-dashed border-border-strong rounded-3xl p-12 md:p-20 text-center relative overflow-hidden">
-      <div className="absolute top-6 left-1/2 -translate-x-1/2 flex gap-1.5">
-        <span className="size-2 rounded-full bg-sage" />
-        <span className="size-2 rounded-full bg-peach" />
-        <span className="size-2 rounded-full bg-blush" />
-        <span className="size-2 rounded-full bg-blue" />
+    <div className="bg-surface/70 backdrop-blur-sm border border-dashed border-border-strong rounded-3xl p-10 md:p-20 text-center relative overflow-hidden">
+      {/* corner light leak */}
+      <div className="pointer-events-none absolute -top-24 -right-24 size-64 rounded-full bg-blush-tint blur-3xl opacity-60" />
+      <div className="pointer-events-none absolute -bottom-24 -left-24 size-64 rounded-full bg-blue-tint blur-3xl opacity-60" />
+
+      <div className="relative">
+        <div className="flex justify-center gap-1.5 mb-4">
+          <span className="size-1.5 rounded-full bg-blush" />
+          <span className="size-1.5 rounded-full bg-peach" />
+          <span className="size-1.5 rounded-full bg-blue" />
+          <span className="size-1.5 rounded-full bg-sage-deep" />
+        </div>
+        <div className="serif-italic text-blush-deep text-sm mb-3">
+          nothing yet
+        </div>
+        <h3 className="serif text-2xl md:text-3xl mb-3">{title}</h3>
+        <p className="text-foreground-muted text-sm max-w-md mx-auto mb-6 leading-relaxed">
+          {body}
+        </p>
+        {action}
       </div>
-      <div className="serif-italic text-sage-deep text-sm mb-3 mt-3">
-        nothing yet
-      </div>
-      <h3 className="serif text-2xl md:text-3xl mb-3">{title}</h3>
-      <p className="text-foreground-muted text-sm max-w-md mx-auto mb-6 leading-relaxed">
-        {body}
-      </p>
-      {action}
     </div>
   );
 }
@@ -228,8 +245,8 @@ export function Pill({
           "border-border text-foreground-muted bg-surface-2",
         tone === "need" && "border-blush/40 text-blush-deep bg-blush-tint",
         tone === "want" && "border-peach/40 text-peach-deep bg-peach-tint",
-        tone === "savings" && "border-sage/40 text-sage-deep bg-sage-tint",
-        tone === "income" && "border-sage/40 text-sage-deep bg-sage-tint",
+        tone === "savings" && "border-blue/40 text-blue-deep bg-blue-tint",
+        tone === "income" && "border-blue/40 text-blue-deep bg-blue-tint",
         className,
       )}
     >
