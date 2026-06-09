@@ -208,7 +208,7 @@ function CategoryRow({
               ? formatCents(cat.monthlyLimitCents)
               : "—"}
             <span className="block text-[10px] text-foreground-faint tracking-tight font-sans">
-              monthly limit
+              monthly amount
             </span>
           </button>
         )}
@@ -301,7 +301,7 @@ function CategoryForm({
             </select>
           </div>
           <div>
-            <Label htmlFor="limit">Monthly limit (optional)</Label>
+            <Label htmlFor="limit">Monthly amount (optional)</Label>
             <Input
               id="limit"
               name="limit"

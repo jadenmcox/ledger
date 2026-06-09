@@ -42,7 +42,7 @@ export default async function CategoriesPage() {
       <PageHeader
         eyebrow="CATEGORIES"
         title="Categories"
-        subtitle="Where every transaction lands. Set a monthly limit on the ones that matter."
+        subtitle="Where every transaction lands. Set a monthly amount on the ones that matter."
       />
       <Container>
         <CategoriesClient initial={rows} spendByCategory={spendByCategory} />
