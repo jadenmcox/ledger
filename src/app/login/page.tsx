@@ -18,42 +18,38 @@ export default async function LoginPage({
     <div className="min-h-screen flex items-center justify-center px-6 relative overflow-hidden">
       <div
         aria-hidden
-        className="pointer-events-none absolute -top-32 -left-24 size-[36rem] rounded-full blur-3xl opacity-70"
+        className="pointer-events-none absolute -top-40 -left-32 size-[40rem] rounded-full blur-3xl opacity-50"
         style={{ background: "var(--blush-soft)" }}
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute -bottom-40 -right-32 size-[40rem] rounded-full blur-3xl opacity-60"
+        className="pointer-events-none absolute -bottom-40 -right-32 size-[40rem] rounded-full blur-3xl opacity-40"
         style={{ background: "var(--blue-tint)" }}
       />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute top-1/3 right-1/4 size-[18rem] rounded-full blur-3xl opacity-40"
-        style={{ background: "var(--lavender-tint)" }}
-      />
 
-      <div className="relative w-full max-w-md">
-        <div className="text-center mb-14">
-          <div className="inline-flex items-center gap-2 text-foreground-muted text-[10px] tracking-[0.3em] uppercase mb-8 bg-surface/80 backdrop-blur-sm border border-border px-3 py-1 rounded-full">
-            <span className="size-1 rounded-full bg-blush drift" />
-            Personal · Private
+      <div className="relative w-full max-w-sm">
+        {/* Logo mark */}
+        <div className="flex justify-center mb-8">
+          <div className="size-12 rounded-2xl bg-sage-deep flex items-center justify-center shadow-[0_8px_24px_-12px] shadow-sage-deep/40">
+            <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M8 7h5.5a3 3 0 0 1 0 6H8V7Zm0 6h6a3 3 0 0 1 0 6H8v-6Z"
+                fill="var(--blush)"
+              />
+            </svg>
           </div>
-          <h1 className="serif text-[3.75rem] md:text-7xl leading-[0.95] tracking-tight">
-            A soft place
-          </h1>
-          <h1 className="serif text-[3.75rem] md:text-7xl leading-[0.95] tracking-tight mt-1">
-            to watch{" "}
-            <span className="serif-italic text-blush-deep">your money</span>.
-          </h1>
-          <p className="mt-6 text-foreground-muted text-sm md:text-base leading-relaxed max-w-sm mx-auto">
-            One quiet view of every account, every category, every month — yours
-            alone, kept on your own machine.
-          </p>
         </div>
 
-        <form action={googleSignIn} className="space-y-5">
+        <h1 className="text-3xl md:text-4xl font-semibold tracking-[-0.035em] text-center leading-[1.1]">
+          Welcome to Budgetly
+        </h1>
+        <p className="text-foreground-muted text-[15px] text-center mt-3 leading-relaxed">
+          Sign in to see every account, every category, every month.
+        </p>
+
+        <form action={googleSignIn} className="mt-10 space-y-4">
           <Button type="submit" variant="primary" className="w-full">
-            Sign in with Google
+            Continue with Google
           </Button>
           {sp.error && (
             <div className="text-blush-deep text-xs tracking-tight text-center">
@@ -64,11 +60,8 @@ export default async function LoginPage({
           )}
         </form>
 
-        <div className="mt-14 flex items-center justify-center gap-2 text-foreground-faint text-[10px] tracking-[0.3em] uppercase">
-          <span className="size-1 rounded-full bg-blush" />
-          <span className="size-1 rounded-full bg-peach" />
-          <span className="size-1 rounded-full bg-blue" />
-          <span className="size-1 rounded-full bg-lavender" />
+        <div className="mt-12 text-center text-[11px] tracking-[0.18em] uppercase text-foreground-faint">
+          Private · local-first · yours
         </div>
       </div>
     </div>

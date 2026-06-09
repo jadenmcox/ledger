@@ -35,14 +35,41 @@ function titleFor(pathname: string): string {
 }
 
 function Wordmark({ size = "lg" }: { size?: "lg" | "md" }) {
-  const cls = size === "lg" ? "text-3xl" : "text-2xl";
+  const cls = size === "lg" ? "text-2xl" : "text-xl";
   return (
-    <span className={`serif ${cls} leading-none inline-flex items-baseline`}>
-      <span>Bu</span>
-      <span className="serif-italic text-blush-deep">d</span>
-      <span>getly</span>
-      <span className="inline-block size-1.5 rounded-full bg-sage-deep ml-1 translate-y-[-2px]" />
+    <span
+      className={`${cls} leading-none inline-flex items-center gap-1.5 font-semibold tracking-[-0.04em]`}
+    >
+      <LogoMark size={size === "lg" ? 22 : 18} />
+      Budgetly
     </span>
+  );
+}
+
+function LogoMark({ size = 22 }: { size?: number }) {
+  // Abstract mark: a "B" suggestion built from two soft arcs in the
+  // brand blush. Replaces the italic-d + dot wordmark.
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className="shrink-0"
+    >
+      <rect
+        x="2"
+        y="2"
+        width="20"
+        height="20"
+        rx="6"
+        fill="var(--sage-deep)"
+      />
+      <path
+        d="M8 7h5.5a3 3 0 0 1 0 6H8V7Zm0 6h6a3 3 0 0 1 0 6H8v-6Z"
+        fill="var(--blush)"
+      />
+    </svg>
   );
 }
 

@@ -103,9 +103,12 @@
   --color-clay: var(--blush);
   --color-clay-dim: var(--blush-deep);
 
+  /* Single-typeface system — Inter handles all roles.
+     We keep these tokens so legacy class hooks resolve, but they all
+     point at the same family. */
   --font-sans: var(--font-sans);
-  --font-mono: var(--font-mono);
-  --font-serif: var(--font-serif);
+  --font-mono: var(--font-sans);
+  --font-serif: var(--font-sans);
 }
 
 * {
@@ -144,25 +147,32 @@ body::before {
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.1 0 0 0 0 0.08 0 0 0 0 0.18 0 0 0 0.05 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
 }
 
+/* Display headings — Inter, tightened tracking, semibold.
+   No serif anywhere. Class name kept for compatibility. */
 .serif {
-  font-family: var(--font-serif), ui-serif, Georgia, serif;
-  font-weight: 400;
-  font-variation-settings: "SOFT" 50, "opsz" 144;
-  letter-spacing: -0.025em;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  font-feature-settings: "ss01" on, "cv11" on;
 }
 
+/* Was an italic serif accent; now an emphasized inline span — same blush
+   hierarchy without the editorial look. */
 .serif-italic {
-  font-family: var(--font-serif), ui-serif, Georgia, serif;
-  font-style: italic;
-  font-weight: 400;
-  font-variation-settings: "SOFT" 100, "opsz" 144, "WONK" 1;
-  letter-spacing: -0.015em;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  color: var(--blush-deep);
 }
 
+/* Numbers — Inter with tabular figures. Inter's default zero is unslashed,
+   which is exactly what we want. */
 .mono {
-  font-family: var(--font-mono), ui-monospace, "SF Mono", monospace;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
+  font-feature-settings: "tnum" on, "zero" 0, "ss01" off;
+  letter-spacing: -0.02em;
 }
 
 .tabular {

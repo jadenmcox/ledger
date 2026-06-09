@@ -1,26 +1,19 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono, Fraunces } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 
-const geist = Geist({
+// Single typeface system — Inter handles display, body, and numbers (via
+// font-variant-numeric: tabular-nums). No slashed zeros.
+const inter = Inter({
   variable: "--font-sans",
   subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-mono",
-  subsets: ["latin"],
-});
-
-const fraunces = Fraunces({
-  variable: "--font-serif",
-  subsets: ["latin"],
-  axes: ["SOFT", "WONK", "opsz"],
+  // We still expose mono + serif vars to keep existing class hooks working,
+  // but they all resolve to Inter in globals.css.
 });
 
 export const metadata: Metadata = {
   title: "Budgetly — Personal Budget",
-  description: "A soft place to watch your money.",
+  description: "A clean place to watch your money.",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
@@ -45,7 +38,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geist.variable} ${geistMono.variable} ${fraunces.variable} h-full antialiased`}
+      className={`${inter.variable} h-full antialiased`}
     >
       <body className="min-h-full bg-background text-foreground">
         {children}

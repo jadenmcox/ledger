@@ -75,9 +75,8 @@ export default async function AccountsPage() {
     <>
       <PageHeader
         eyebrow="ACCOUNTS"
-        title="Every account,"
-        italic="one place."
-        subtitle="Checking, savings, credit cards, retirement, investments. Add what's yours and Budgetly will weave them into one picture."
+        title="Accounts"
+        subtitle="Checking, savings, credit cards, retirement, investments — every balance in one place."
       />
       <Container>
         <AccountsClient

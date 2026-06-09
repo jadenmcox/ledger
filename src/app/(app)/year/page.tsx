@@ -113,9 +113,8 @@ export default async function YearPage() {
     <>
       <PageHeader
         eyebrow={String(now.getFullYear())}
-        title="The year,"
-        italic="at a glance."
-        subtitle="A wider lens — every month side by side, and a category-by-category audit underneath."
+        title="Year overview"
+        subtitle="Every month side by side, with a category-by-category breakdown."
       />
       <Container>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-12 mb-12">

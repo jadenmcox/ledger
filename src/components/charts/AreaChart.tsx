@@ -118,6 +118,7 @@ export function AreaChart({
               fill={`url(#${id}-${s.key})`}
               stackId={stacked ? "1" : undefined}
               activeDot={{ r: 4, strokeWidth: 0 }}
+              isAnimationActive={false}
             />
           ))}
         </RAreaChart>

@@ -15,33 +15,33 @@ export function PageHeader({
   right?: React.ReactNode;
 }) {
   return (
-    <div className="px-5 md:px-12 pt-6 md:pt-16 pb-6 md:pb-12 relative">
+    <div className="px-5 md:px-12 pt-6 md:pt-10 pb-6 md:pb-8 relative">
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-5 md:gap-6">
         <div className="min-w-0">
           {eyebrow && (
             <div
-              className="inline-flex items-center gap-2 text-foreground-muted text-[10px] tracking-[0.3em] uppercase mb-4 md:mb-5 bg-surface/80 backdrop-blur-sm border border-border px-3 py-1 rounded-full rise"
+              className="inline-flex items-center gap-2 text-foreground-muted text-[10px] tracking-[0.2em] uppercase mb-4 rise"
               style={{ ["--i" as string]: 0 }}
             >
-              <span className="size-1 rounded-full bg-blush drift" />
+              <span className="size-1 rounded-full bg-blush" />
               {eyebrow}
             </div>
           )}
           <h1
-            className="serif text-[2.4rem] leading-[1.02] md:text-6xl md:leading-[1.0] tracking-tight rise"
+            className="text-3xl md:text-[2.75rem] leading-[1.05] font-semibold tracking-[-0.035em] rise"
             style={{ ["--i" as string]: 1 }}
           >
             {title}
             {italic && (
               <>
                 {" "}
-                <span className="serif-italic text-blush-deep">{italic}</span>
+                <span className="text-blush-deep">{italic}</span>
               </>
             )}
           </h1>
           {subtitle && (
             <p
-              className="mt-4 text-foreground-muted text-sm md:text-base max-w-xl leading-relaxed rise"
+              className="mt-3 text-foreground-muted text-sm md:text-[15px] max-w-xl leading-relaxed rise"
               style={{ ["--i" as string]: 2 }}
             >
               {subtitle}
@@ -50,7 +50,6 @@ export function PageHeader({
         </div>
         {right && <div className="shrink-0">{right}</div>}
       </div>
-      <div className="hairline mt-8 md:mt-14" />
     </div>
   );
 }
@@ -209,16 +208,13 @@ export function EmptyState({
       <div className="pointer-events-none absolute -bottom-24 -left-24 size-64 rounded-full bg-blue-tint blur-3xl opacity-60" />
 
       <div className="relative">
-        <div className="flex justify-center gap-1.5 mb-4">
-          <span className="size-1.5 rounded-full bg-blush" />
-          <span className="size-1.5 rounded-full bg-peach" />
-          <span className="size-1.5 rounded-full bg-blue" />
-          <span className="size-1.5 rounded-full bg-sage-deep" />
+        <div className="inline-flex items-center gap-2 text-foreground-muted text-[10px] tracking-[0.25em] uppercase mb-5 bg-surface border border-border px-2.5 py-1 rounded-full">
+          <span className="size-1 rounded-full bg-blush" />
+          Empty
         </div>
-        <div className="serif-italic text-blush-deep text-sm mb-3">
-          nothing yet
-        </div>
-        <h3 className="serif text-2xl md:text-3xl mb-3">{title}</h3>
+        <h3 className="text-2xl md:text-3xl font-semibold tracking-[-0.035em] mb-3">
+          {title}
+        </h3>
         <p className="text-foreground-muted text-sm max-w-md mx-auto mb-6 leading-relaxed">
           {body}
         </p>
@@ -246,7 +242,7 @@ export function HeroStat({
       <Label className="mb-0">{label}</Label>
       <div
         className={cn(
-          "serif text-[2.75rem] md:text-7xl leading-[0.95] tracking-tight",
+          "mono tabular text-[3rem] md:text-[5rem] leading-[0.95] tracking-[-0.045em] font-semibold",
           tone === "blush" && "text-blush-deep",
           tone === "blue" && "text-blue-deep",
           tone === "peach" && "text-peach-deep",
