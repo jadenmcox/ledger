@@ -18,8 +18,7 @@ export default async function TransactionsPage() {
     <>
       <PageHeader
         eyebrow="TRANSACTIONS"
-        title="Every dollar"
-        italic="accounted for."
+        title="Transactions"
         subtitle={`${allTx.length} most recent. Click any merchant to recategorize, or create a rule that catches it forever.`}
       />
       <Container>

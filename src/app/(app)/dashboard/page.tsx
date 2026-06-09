@@ -174,9 +174,9 @@ export default async function DashboardPage() {
     <>
       <PageHeader
         eyebrow={format(now, "EEEE · MMMM d, yyyy").toUpperCase()}
-        title="A quiet month"
-        italic="so far."
-        subtitle={`${daysLeft} days remain in ${format(now, "MMMM")}. Here's where the money has gone.`}
+        title={format(now, "MMMM")}
+        italic={String(now.getFullYear())}
+        subtitle={`${daysLeft} days left this month.`}
       />
       <Container className="pb-32 md:pb-16">
         {allAccounts.length === 0 ? (

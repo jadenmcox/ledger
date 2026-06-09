@@ -41,9 +41,8 @@ export default async function CategoriesPage() {
     <>
       <PageHeader
         eyebrow="CATEGORIES"
-        title="Buckets,"
-        italic="limits, intent."
-        subtitle="Every transaction lands somewhere. Set a monthly limit on the ones that matter — Budgetly will warn you as you approach it."
+        title="Categories"
+        subtitle="Where every transaction lands. Set a monthly limit on the ones that matter."
       />
       <Container>
         <CategoriesClient initial={rows} spendByCategory={spendByCategory} />

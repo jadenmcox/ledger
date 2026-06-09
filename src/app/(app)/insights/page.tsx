@@ -121,9 +121,8 @@ export default async function InsightsPage() {
     <>
       <PageHeader
         eyebrow={format(now, "MMMM yyyy").toUpperCase()}
-        title="Reading the"
-        italic="signals."
-        subtitle="A short read on this month — where things shifted, what's coming, and how the rate of savings is holding up."
+        title="Insights"
+        subtitle="Where the month shifted, what's coming, and how your savings rate is holding up."
       />
       <Container className="pb-32 md:pb-16">
         {!hasData ? (

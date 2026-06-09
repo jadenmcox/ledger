@@ -32,21 +32,26 @@ export function DonutChart({
 }) {
   const filtered = data.filter((d) => d.value > 0);
   const hasData = filtered.length > 0;
+  const outer = Math.floor(size / 2) - 6;
+  const inner = Math.max(8, outer - thickness);
 
   return (
-    <div className="relative w-full" style={{ height: size }}>
+    <div className="relative w-full flex items-center justify-center" style={{ height: size }}>
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie
             data={hasData ? filtered : [{ name: "—", value: 1, color: "var(--surface-2)" }]}
             dataKey="value"
-            innerRadius={`${100 - (thickness / size) * 100 * 2}%`}
-            outerRadius="92%"
+            cx="50%"
+            cy="50%"
+            innerRadius={inner}
+            outerRadius={outer}
             stroke="var(--surface)"
             strokeWidth={2}
             startAngle={90}
             endAngle={-270}
             paddingAngle={hasData ? 1.5 : 0}
+            isAnimationActive={false}
           >
             {(hasData ? filtered : [{ color: "var(--surface-2)" }]).map(
               (d, i) => (
@@ -81,7 +86,7 @@ export function DonutChart({
             </div>
           )}
           {centerValue && (
-            <div className="serif text-3xl md:text-4xl tracking-tight leading-none">
+            <div className="mono tabular text-3xl md:text-4xl tracking-[-0.04em] font-semibold leading-none">
               {centerValue}
             </div>
           )}
