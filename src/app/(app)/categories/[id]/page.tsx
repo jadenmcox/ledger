@@ -148,7 +148,7 @@ export default async function CategoryDetailPage({
               hint={`${thisMonthTx.length} tx`}
             />
             <Stat
-              label="Monthly limit"
+              label="Monthly amount"
               value={
                 cat.monthlyLimitCents ? formatCents(cat.monthlyLimitCents) : "—"
               }
