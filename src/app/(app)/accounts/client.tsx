@@ -19,7 +19,9 @@ import {
 } from "./actions";
 import type { Account } from "@/db/schema";
 import { accountTypes } from "@/db/schema";
-import { Plus, Pencil, Trash2, Archive, ArchiveRestore } from "lucide-react";
+import { Plus, Pencil, Trash2, Archive, ArchiveRestore, ArrowUpRight } from "lucide-react";
+import Link from "next/link";
+import { Sparkline } from "@/components/charts/Sparkline";
 
 const typeLabel: Record<string, string> = {
   checking: "Checking",
@@ -51,9 +53,11 @@ const typeGroup: Record<string, "asset" | "debt" | "tax"> = {
 
 export function AccountsClient({
   initial,
+  trends = {},
 }: {
   initial: Account[];
   today: string;
+  trends?: Record<number, number[]>;
 }) {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Account | null>(null);
@@ -97,6 +101,7 @@ export function AccountsClient({
         accounts={active}
         onEdit={setEditing}
         onArchive={(id) => archiveAccount(id)}
+        trends={trends}
       />
 
       {archived.length > 0 && (
@@ -134,6 +139,7 @@ function AccountList({
   onUnarchive,
   onDelete,
   faded,
+  trends = {},
 }: {
   accounts: Account[];
   onEdit: (a: Account) => void;
@@ -141,6 +147,7 @@ function AccountList({
   onUnarchive?: (id: number) => void;
   onDelete?: (id: number) => void;
   faded?: boolean;
+  trends?: Record<number, number[]>;
 }) {
   if (accounts.length === 0) return null;
 
@@ -174,14 +181,29 @@ function AccountList({
               </div>
             </div>
             <Card className="divide-y divide-border">
-              {list.map((a) => (
+              {list.map((a) => {
+                const series = trends[a.id] ?? [];
+                const isDebt = g === "debt";
+                const trendColor = isDebt
+                  ? "var(--blush)"
+                  : "var(--blue)";
+                return (
                 <div
                   key={a.id}
                   className="px-5 py-4 flex items-center gap-4 group"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-baseline gap-3 mb-1">
-                      <span className="tracking-tight">{a.name}</span>
+                      <Link
+                        href={`/accounts/${a.id}`}
+                        className="tracking-tight hover:text-blush-deep transition-colors inline-flex items-center gap-1.5"
+                      >
+                        {a.name}
+                        <ArrowUpRight
+                          className="size-3 opacity-0 group-hover:opacity-100 transition-opacity"
+                          strokeWidth={1.5}
+                        />
+                      </Link>
                       <Pill>{typeLabel[a.type] || a.type}</Pill>
                     </div>
                     {a.institution && (
@@ -190,6 +212,16 @@ function AccountList({
                       </div>
                     )}
                   </div>
+                  {series.length > 1 && (
+                    <div className="hidden sm:block shrink-0">
+                      <Sparkline
+                        values={series}
+                        color={trendColor}
+                        width={88}
+                        height={28}
+                      />
+                    </div>
+                  )}
                   <div className="mono tabular text-base shrink-0">
                     {formatCents(a.currentBalanceCents)}
                   </div>
@@ -225,7 +257,7 @@ function AccountList({
                     {onDelete && (
                       <button
                         onClick={() => onDelete(a.id)}
-                        className="size-8 inline-flex items-center justify-center text-foreground-faint hover:text-clay rounded-md hover:bg-surface-2"
+                        className="size-8 inline-flex items-center justify-center text-foreground-faint hover:text-blush-deep rounded-md hover:bg-surface-2"
                         title="Delete permanently"
                       >
                         <Trash2 className="size-3.5" strokeWidth={1.5} />
@@ -233,7 +265,8 @@ function AccountList({
                     )}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </Card>
           </div>
         );

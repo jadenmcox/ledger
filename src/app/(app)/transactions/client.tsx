@@ -56,7 +56,7 @@ export function TransactionsClient({
 
   return (
     <div className="space-y-6">
-      <Card className="p-4 md:p-5">
+      <Card className="p-4 md:p-5 sticky top-0 md:top-3 z-10">
         <div className="flex flex-col md:flex-row gap-4 md:items-center">
           <div className="flex items-center gap-3 flex-1">
             <Search
@@ -162,33 +162,35 @@ function Row({
   const [picking, setPicking] = useState(false);
   const [, startTransition] = useTransition();
 
+  const color = cat?.color ?? "var(--foreground-faint)";
   return (
     <div
       className={cn(
-        "px-5 py-3 flex items-center gap-4 group",
+        "relative px-4 md:px-5 py-3.5 flex items-center gap-3 md:gap-4 group",
         tx.isTransfer && "opacity-50",
       )}
     >
-      <div
-        className="size-2 rounded-full shrink-0"
-        style={{ background: cat?.color ?? "var(--foreground-faint)" }}
+      <span
+        aria-hidden
+        className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full"
+        style={{ background: color }}
       />
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 pl-1">
         <div className="flex items-baseline gap-2">
-          <span className="text-sm tracking-tight truncate">
+          <span className="text-[15px] md:text-sm tracking-tight truncate font-medium md:font-normal">
             {tx.merchantClean || tx.merchantRaw}
           </span>
           {tx.isTransfer && <Pill>transfer</Pill>}
         </div>
-        <div className="flex items-baseline gap-2 mt-0.5">
+        <div className="flex items-baseline gap-2 mt-1 md:mt-0.5">
           <button
             onClick={() => setPicking(true)}
-            className="text-[11px] text-foreground-faint hover:text-gold transition-colors tracking-tight"
+            className="text-[11px] text-foreground-faint hover:text-blush-deep transition-colors tracking-tight"
           >
             {cat?.name ?? "— uncategorized —"}
           </button>
           {acct && (
-            <span className="text-[10px] text-foreground-faint">
+            <span className="text-[10px] text-foreground-faint truncate">
               · {acct.name}
             </span>
           )}
@@ -196,14 +198,14 @@ function Row({
       </div>
       <div
         className={cn(
-          "mono tabular text-sm shrink-0",
-          tx.amountCents > 0 && "text-sage",
+          "mono tabular text-sm shrink-0 text-right",
+          tx.amountCents > 0 && "text-blue-deep",
           tx.amountCents < 0 && "text-foreground",
         )}
       >
         {formatCents(tx.amountCents, { signed: tx.amountCents > 0 })}
       </div>
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="hidden md:flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
         <button
           onClick={() =>
             startTransition(() => setIsTransfer(tx.id, !tx.isTransfer))
@@ -211,7 +213,7 @@ function Row({
           className={cn(
             "size-7 inline-flex items-center justify-center rounded-md hover:bg-surface-2",
             tx.isTransfer
-              ? "text-gold"
+              ? "text-blush-deep"
               : "text-foreground-faint hover:text-foreground",
           )}
           title="Mark as transfer"
@@ -223,7 +225,7 @@ function Row({
             if (confirm("Delete this transaction?"))
               startTransition(() => deleteTransaction(tx.id));
           }}
-          className="size-7 inline-flex items-center justify-center text-foreground-faint hover:text-clay rounded-md hover:bg-surface-2"
+          className="size-7 inline-flex items-center justify-center text-foreground-faint hover:text-blush-deep rounded-md hover:bg-surface-2"
           title="Delete"
         >
           <Trash2 className="size-3.5" strokeWidth={1.5} />
@@ -315,9 +317,9 @@ function CategoryPicker({
             type="checkbox"
             checked={makingRule}
             onChange={(e) => setMakingRule(e.target.checked)}
-            className="accent-gold"
+            className="accent-blush-deep"
           />
-          <Zap className="size-3.5 text-gold" strokeWidth={1.5} />
+          <Zap className="size-3.5 text-blush-deep" strokeWidth={1.5} />
           <span>
             Always categorize{" "}
             <span className="mono text-foreground">
