@@ -5,8 +5,14 @@ import type { Account, Category, Transaction } from "@/db/schema";
 import { Card, Input, Label, Pill, Button } from "@/components/ui";
 import { cn, formatCents } from "@/lib/utils";
 import { format } from "date-fns";
-import { setCategory, makeRule, setIsTransfer, deleteTransaction } from "./actions";
-import { Search, Zap, ArrowRightLeft, Trash2 } from "lucide-react";
+import {
+  setCategory,
+  makeRule,
+  setIsTransfer,
+  deleteTransaction,
+  updateTransaction,
+} from "./actions";
+import { Search, Zap, ArrowRightLeft, Trash2, Pencil } from "lucide-react";
 
 export function TransactionsClient({
   initial,
@@ -160,6 +166,7 @@ function Row({
   categories: Category[];
 }) {
   const [picking, setPicking] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [, startTransition] = useTransition();
 
   const color = cat?.color ?? "var(--foreground-faint)";
@@ -207,6 +214,13 @@ function Row({
       </div>
       <div className="hidden md:flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
         <button
+          onClick={() => setEditing(true)}
+          className="size-7 inline-flex items-center justify-center rounded-md hover:bg-surface-2 text-foreground-faint hover:text-foreground"
+          title="Edit"
+        >
+          <Pencil className="size-3.5" strokeWidth={1.5} />
+        </button>
+        <button
           onClick={() =>
             startTransition(() => setIsTransfer(tx.id, !tx.isTransfer))
           }
@@ -239,6 +253,79 @@ function Row({
           onClose={() => setPicking(false)}
         />
       )}
+
+      {editing && <EditTxModal tx={tx} onClose={() => setEditing(false)} />}
+    </div>
+  );
+}
+
+function EditTxModal({ tx, onClose }: { tx: Transaction; onClose: () => void }) {
+  const [pending, startTransition] = useTransition();
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md">
+        <Card className="w-full p-6">
+          <Label>Edit transaction</Label>
+          <form
+            action={(fd) =>
+              startTransition(async () => {
+                await updateTransaction(fd);
+                onClose();
+              })
+            }
+            className="space-y-4 mt-3"
+          >
+            <input type="hidden" name="id" value={tx.id} />
+            <div>
+              <Label>Merchant</Label>
+              <Input
+                name="merchant"
+                defaultValue={tx.merchantClean || tx.merchantRaw}
+                autoFocus
+              />
+              <div className="text-[10px] text-foreground-faint mt-1 mono">
+                raw: {tx.merchantRaw}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Amount</Label>
+                <Input
+                  name="amount"
+                  defaultValue={(tx.amountCents / 100).toFixed(2)}
+                  inputMode="decimal"
+                />
+                <div className="text-[10px] text-foreground-faint mt-1">
+                  negative = expense
+                </div>
+              </div>
+              <div>
+                <Label>Date</Label>
+                <Input
+                  name="date"
+                  type="date"
+                  defaultValue={format(new Date(tx.date), "yyyy-MM-dd")}
+                />
+              </div>
+            </div>
+            <div>
+              <Label>Notes</Label>
+              <Input name="notes" defaultValue={tx.notes || ""} />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="ghost" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" disabled={pending}>
+                {pending ? "Saving…" : "Save"}
+              </Button>
+            </div>
+          </form>
+        </Card>
+      </div>
     </div>
   );
 }
