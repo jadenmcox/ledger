@@ -8,7 +8,7 @@ export function PageHeader({
   subtitle,
   right,
 }: {
-  eyebrow?: string;
+  eyebrow?: React.ReactNode;
   title: string;
   italic?: string;
   subtitle?: string;
@@ -224,6 +224,134 @@ export function EmptyState({
         </p>
         {action}
       </div>
+    </div>
+  );
+}
+
+export function HeroStat({
+  label,
+  value,
+  delta,
+  hint,
+  tone = "default",
+}: {
+  label: string;
+  value: string;
+  delta?: { value: string; direction: "up" | "down" | "flat" };
+  hint?: string;
+  tone?: "default" | "blush" | "blue" | "peach" | "sage";
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      <Label className="mb-0">{label}</Label>
+      <div
+        className={cn(
+          "serif text-[2.75rem] md:text-7xl leading-[0.95] tracking-tight",
+          tone === "blush" && "text-blush-deep",
+          tone === "blue" && "text-blue-deep",
+          tone === "peach" && "text-peach-deep",
+          tone === "sage" && "text-sage-deep",
+        )}
+      >
+        {value}
+      </div>
+      <div className="flex items-baseline gap-3 flex-wrap">
+        {delta && (
+          <span
+            className={cn(
+              "inline-flex items-center gap-1 text-xs mono tabular",
+              delta.direction === "up" && "text-blush-deep",
+              delta.direction === "down" && "text-blue-deep",
+              delta.direction === "flat" && "text-foreground-faint",
+            )}
+          >
+            <span aria-hidden>
+              {delta.direction === "up"
+                ? "↑"
+                : delta.direction === "down"
+                  ? "↓"
+                  : "→"}
+            </span>
+            {delta.value}
+          </span>
+        )}
+        {hint && (
+          <span className="text-xs text-foreground-faint tracking-tight">
+            {hint}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function ProgressBar({
+  value,
+  max,
+  color = "var(--blush)",
+  warnAt = 0.8,
+  warnColor = "var(--peach)",
+  overColor = "var(--blush-deep)",
+  height = 6,
+}: {
+  value: number;
+  max: number;
+  color?: string;
+  warnAt?: number;
+  warnColor?: string;
+  overColor?: string;
+  height?: number;
+}) {
+  const ratio = max > 0 ? value / max : 0;
+  const clamped = Math.min(ratio, 1);
+  const fill =
+    ratio > 1 ? overColor : ratio >= warnAt ? warnColor : color;
+  return (
+    <div
+      className="w-full bg-surface-2 rounded-full overflow-hidden"
+      style={{ height }}
+    >
+      <div
+        className="h-full rounded-full transition-all duration-500"
+        style={{
+          width: `${clamped * 100}%`,
+          background: fill,
+        }}
+      />
+    </div>
+  );
+}
+
+export function SectionHeader({
+  title,
+  italic,
+  hint,
+  right,
+}: {
+  title: string;
+  italic?: string;
+  hint?: string;
+  right?: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 mb-5">
+      <div className="min-w-0">
+        <h2 className="serif text-xl md:text-2xl leading-tight tracking-tight truncate">
+          {title}
+          {italic && (
+            <>
+              {" "}
+              <span className="serif-italic text-blush-deep">{italic}</span>
+            </>
+          )}
+        </h2>
+        {hint && (
+          <div className="text-[11px] text-foreground-faint tracking-tight mt-1">
+            {hint}
+          </div>
+        )}
+      </div>
+      {right && <div className="shrink-0">{right}</div>}
     </div>
   );
 }

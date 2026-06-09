@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Card, Label, Input, Button, Pill } from "@/components/ui";
-import { formatCents, parseDollarsToCents } from "@/lib/utils";
+import { Card, Label, Input, Button, Pill, ProgressBar } from "@/components/ui";
+import { formatCents } from "@/lib/utils";
+import Link from "next/link";
+import { ArrowUpRight } from "lucide-react";
 import {
   createCategory,
   updateCategory,
@@ -22,7 +24,13 @@ const classificationLabel: Record<string, string> = {
 
 const classificationOrder = ["income", "need", "want", "savings"] as const;
 
-export function CategoriesClient({ initial }: { initial: Category[] }) {
+export function CategoriesClient({
+  initial,
+  spendByCategory = {},
+}: {
+  initial: Category[];
+  spendByCategory?: Record<number, number>;
+}) {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Category | null>(null);
 
@@ -80,6 +88,7 @@ export function CategoriesClient({ initial }: { initial: Category[] }) {
                 <CategoryRow
                   key={cat.id}
                   cat={cat}
+                  spent={spendByCategory[cat.id] ?? 0}
                   onEdit={() => setEditing(cat)}
                 />
               ))}
@@ -93,9 +102,11 @@ export function CategoriesClient({ initial }: { initial: Category[] }) {
 
 function CategoryRow({
   cat,
+  spent,
   onEdit,
 }: {
   cat: Category;
+  spent: number;
   onEdit: () => void;
 }) {
   const [editLimit, setEditLimit] = useState(false);
@@ -118,10 +129,48 @@ function CategoryRow({
         style={{ background: cat.color }}
       />
       <div className="flex-1 min-w-0">
-        <div className="flex items-baseline gap-2">
-          <span className="tracking-tight">{cat.name}</span>
+        <div className="flex items-baseline gap-2 mb-1.5">
+          <Link
+            href={`/categories/${cat.id}`}
+            className="tracking-tight hover:text-blush-deep transition-colors inline-flex items-center gap-1.5"
+          >
+            {cat.name}
+            <ArrowUpRight
+              className="size-3 opacity-0 group-hover:opacity-100 transition-opacity"
+              strokeWidth={1.5}
+            />
+          </Link>
           {cat.isSystem && <Pill>system</Pill>}
         </div>
+        {cat.classification !== "income" && (
+          <div className="flex items-center gap-3">
+            <div className="flex-1 max-w-xs">
+              {cat.monthlyLimitCents ? (
+                <ProgressBar
+                  value={spent}
+                  max={cat.monthlyLimitCents}
+                  color={cat.color}
+                  height={5}
+                />
+              ) : (
+                <div className="h-[5px] rounded-full bg-surface-2 overflow-hidden">
+                  {spent > 0 && (
+                    <div
+                      className="h-full rounded-full opacity-60"
+                      style={{
+                        width: "100%",
+                        background: cat.color,
+                      }}
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="text-[10px] text-foreground-faint mono tabular shrink-0">
+              {spent > 0 ? formatCents(spent) : "—"} this mo
+            </div>
+          </div>
+        )}
       </div>
       <div className="text-right shrink-0">
         {editLimit ? (
@@ -139,7 +188,7 @@ function CategoryRow({
             />
             <button
               onClick={saveLimit}
-              className="size-7 inline-flex items-center justify-center text-sage rounded-md hover:bg-surface-2"
+              className="size-7 inline-flex items-center justify-center text-blue-deep rounded-md hover:bg-surface-2"
             >
               <Check className="size-4" strokeWidth={1.5} />
             </button>
@@ -153,7 +202,7 @@ function CategoryRow({
         ) : (
           <button
             onClick={() => setEditLimit(true)}
-            className="mono tabular text-sm text-foreground-muted hover:text-gold transition-colors"
+            className="mono tabular text-sm text-foreground-muted hover:text-blush-deep transition-colors"
           >
             {cat.monthlyLimitCents
               ? formatCents(cat.monthlyLimitCents)
@@ -182,7 +231,7 @@ function CategoryRow({
               )
                 deleteCategory(cat.id);
             }}
-            className="size-8 inline-flex items-center justify-center text-foreground-faint hover:text-clay rounded-md hover:bg-surface-2"
+            className="size-8 inline-flex items-center justify-center text-foreground-faint hover:text-blush-deep rounded-md hover:bg-surface-2"
             title="Delete"
           >
             <Trash2 className="size-3.5" strokeWidth={1.5} />
@@ -242,7 +291,7 @@ function CategoryForm({
               id="classification"
               name="classification"
               defaultValue={initial?.classification ?? "want"}
-              className="h-10 w-full bg-surface border border-border rounded-xl px-3.5 text-sm focus:border-sage focus:ring-2 focus:ring-sage-tint focus:outline-none transition-all"
+              className="h-10 w-full bg-surface border border-border rounded-xl px-3.5 text-sm focus:border-blush focus:ring-2 focus:ring-blush-tint focus:outline-none transition-all"
             >
               {classifications.map((c) => (
                 <option key={c} value={c} className="bg-surface">

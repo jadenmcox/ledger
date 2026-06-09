@@ -1,16 +1,41 @@
 import { db } from "@/db";
-import { categories } from "@/db/schema";
-import { asc } from "drizzle-orm";
+import { categories, transactions } from "@/db/schema";
+import { asc, and, gte, lte, eq } from "drizzle-orm";
 import { Container, PageHeader } from "@/components/ui";
 import { CategoriesClient } from "./client";
+import { startOfMonth, endOfMonth } from "date-fns";
 
 export const dynamic = "force-dynamic";
 
 export default async function CategoriesPage() {
-  const rows = await db
-    .select()
-    .from(categories)
-    .orderBy(asc(categories.classification), asc(categories.sortOrder));
+  const now = new Date();
+  const [rows, txThisMonth] = await Promise.all([
+    db
+      .select()
+      .from(categories)
+      .orderBy(asc(categories.classification), asc(categories.sortOrder)),
+    db
+      .select()
+      .from(transactions)
+      .where(
+        and(
+          gte(transactions.date, startOfMonth(now)),
+          lte(transactions.date, endOfMonth(now)),
+          eq(transactions.isTransfer, false),
+        ),
+      ),
+  ]);
+
+  const spendByCategory: Record<number, number> = {};
+  const catById = new Map(rows.map((c) => [c.id, c]));
+  for (const t of txThisMonth) {
+    if (!t.categoryId) continue;
+    const c = catById.get(t.categoryId);
+    if (!c || c.classification === "income") continue;
+    if (t.amountCents > 0) continue;
+    spendByCategory[t.categoryId] =
+      (spendByCategory[t.categoryId] ?? 0) + Math.abs(t.amountCents);
+  }
 
   return (
     <>
@@ -21,7 +46,7 @@ export default async function CategoriesPage() {
         subtitle="Every transaction lands somewhere. Set a monthly limit on the ones that matter — Budgetly will warn you as you approach it."
       />
       <Container>
-        <CategoriesClient initial={rows} />
+        <CategoriesClient initial={rows} spendByCategory={spendByCategory} />
       </Container>
     </>
   );

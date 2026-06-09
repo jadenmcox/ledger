@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { motion } from "framer-motion";
 import {
   LayoutDashboard,
   ListOrdered,
@@ -9,6 +10,7 @@ import {
   Tag,
   Upload,
   CalendarRange,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -17,9 +19,20 @@ const items = [
   { href: "/transactions", label: "Transactions", icon: ListOrdered },
   { href: "/accounts", label: "Accounts", icon: Wallet },
   { href: "/categories", label: "Categories", icon: Tag },
+  { href: "/insights", label: "Insights", icon: Sparkles },
   { href: "/year", label: "Year", icon: CalendarRange },
   { href: "/import", label: "Import", icon: Upload },
 ];
+
+// First 5 items shown in mobile bottom nav
+const mobileItems = items.slice(0, 5);
+
+function titleFor(pathname: string): string {
+  const match = items.find(
+    (i) => pathname === i.href || pathname.startsWith(i.href + "/"),
+  );
+  return match?.label ?? "Budgetly";
+}
 
 function Wordmark({ size = "lg" }: { size?: "lg" | "md" }) {
   const cls = size === "lg" ? "text-3xl" : "text-2xl";
@@ -55,25 +68,32 @@ export function DesktopNav() {
               key={item.href}
               href={item.href}
               className={cn(
-                "group relative flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm transition-all overflow-hidden",
+                "group relative flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm transition-colors overflow-hidden",
                 active
-                  ? "bg-gradient-to-r from-blush-tint via-blush-tint/70 to-transparent text-sage-deep"
+                  ? "text-sage-deep"
                   : "text-foreground-muted hover:text-foreground hover:bg-surface-2",
               )}
             >
               {active && (
-                <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-blush" />
+                <motion.span
+                  layoutId="desktop-nav-pill"
+                  className="absolute inset-0 rounded-xl bg-gradient-to-r from-blush-tint via-blush-tint/70 to-transparent"
+                  transition={{ type: "spring", stiffness: 400, damping: 32 }}
+                />
+              )}
+              {active && (
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-blush z-10" />
               )}
               <Icon
                 className={cn(
-                  "size-4 shrink-0 transition-colors",
+                  "size-4 shrink-0 transition-colors relative z-10",
                   active ? "text-blush-deep" : "text-foreground-faint",
                 )}
                 strokeWidth={1.75}
               />
-              <span className="tracking-tight">{item.label}</span>
+              <span className="tracking-tight relative z-10">{item.label}</span>
               {active && (
-                <span className="ml-auto size-1.5 rounded-full bg-sage-deep" />
+                <span className="ml-auto size-1.5 rounded-full bg-sage-deep relative z-10" />
               )}
             </Link>
           );
@@ -89,14 +109,12 @@ export function DesktopNav() {
 
 export function MobileNav() {
   const pathname = usePathname();
-  const phoneItems = items.slice(0, 5);
   return (
     <nav className="md:hidden fixed bottom-3 inset-x-3 z-30">
       <div className="relative bg-surface/95 backdrop-blur-2xl rounded-full border border-border shadow-[0_12px_36px_-12px] shadow-foreground/20">
-        {/* subtle outer glow */}
         <div className="pointer-events-none absolute inset-0 rounded-full ring-1 ring-inset ring-white/40" />
         <div className="grid grid-cols-5 px-1 pb-[env(safe-area-inset-bottom)]">
-          {phoneItems.map((item) => {
+          {mobileItems.map((item) => {
             const active =
               pathname === item.href || pathname.startsWith(item.href + "/");
             const Icon = item.icon;
@@ -110,13 +128,18 @@ export function MobileNav() {
                   active ? "text-blush-deep" : "text-foreground-faint",
                 )}
               >
-                <span
-                  className={cn(
-                    "flex items-center justify-center size-9 rounded-full transition-all",
-                    active && "bg-blush-tint",
+                <span className="relative flex items-center justify-center size-9 rounded-full">
+                  {active && (
+                    <motion.span
+                      layoutId="mobile-nav-pill"
+                      className="absolute inset-0 bg-blush-tint rounded-full"
+                      transition={{ type: "spring", stiffness: 400, damping: 32 }}
+                    />
                   )}
-                >
-                  <Icon className="size-5" strokeWidth={1.75} />
+                  <Icon
+                    className="size-5 relative z-10"
+                    strokeWidth={1.75}
+                  />
                 </span>
                 <span
                   className={cn(
@@ -136,6 +159,8 @@ export function MobileNav() {
 }
 
 export function MobileHeader() {
+  const pathname = usePathname();
+  const title = titleFor(pathname);
   return (
     <header className="md:hidden sticky top-0 z-20 bg-background/85 backdrop-blur-xl px-5 py-4 flex items-baseline justify-between">
       <Link href="/dashboard" className="block">
@@ -143,7 +168,7 @@ export function MobileHeader() {
       </Link>
       <div className="text-[10px] tracking-[0.25em] uppercase text-foreground-faint inline-flex items-center gap-1.5">
         <span className="size-1 rounded-full bg-blush" />
-        Private
+        {title}
       </div>
     </header>
   );

@@ -42,6 +42,17 @@
   --want: var(--peach);
   --savings: var(--blue);
   --income: var(--blue-deep);
+
+  /* Soft blush wash — for hero gradients, full-bleed backgrounds */
+  --blush-soft: #fde8ee;
+  --ink: #0f0b1f;
+
+  /* 5-stop chart palette — semantic order for visualizations */
+  --chart-1: var(--blush);
+  --chart-2: var(--peach);
+  --chart-3: var(--blue);
+  --chart-4: var(--sage);
+  --chart-5: var(--lavender);
 }
 
 @theme inline {
@@ -72,6 +83,15 @@
   --color-need: var(--need);
   --color-want: var(--want);
   --color-savings: var(--savings);
+
+  --color-blush-soft: var(--blush-soft);
+  --color-ink: var(--ink);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
 
   /* Ink (formerly "gold") — the saturated accent for highlights */
   --color-ink: var(--sage-deep);
