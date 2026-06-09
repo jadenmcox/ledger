@@ -94,13 +94,12 @@ export function dedupeHash(
   accountId: number,
   date: Date,
   amountCents: number,
-  merchantRaw: string,
+  _merchantRaw: string,
 ): string {
   const dateStr = date.toISOString().slice(0, 10);
-  const merchant = merchantRaw.toLowerCase().replace(/\s+/g, " ").trim();
   return crypto
     .createHash("sha1")
-    .update(`${accountId}|${dateStr}|${amountCents}|${merchant}`)
+    .update(`${accountId}|${dateStr}|${amountCents}`)
     .digest("hex");
 }
 

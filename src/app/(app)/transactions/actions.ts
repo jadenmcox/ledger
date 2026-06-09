@@ -8,6 +8,7 @@ import {
   applyRulesToHistory,
   createRuleFromTransaction,
 } from "@/lib/categorize";
+import { parseDollarsToCents } from "@/lib/utils";
 
 export async function setCategory(txId: number, categoryId: number | null) {
   await db
@@ -54,6 +55,31 @@ export async function makeRule(
 
 export async function deleteTransaction(id: number) {
   await db.delete(transactions).where(eq(transactions.id, id));
+  revalidatePath("/transactions");
+  revalidatePath("/dashboard");
+}
+
+export async function updateTransaction(form: FormData) {
+  const id = Number(form.get("id"));
+  if (!id) throw new Error("id required");
+  const merchant = String(form.get("merchant") || "").trim();
+  const amount = String(form.get("amount") || "");
+  const date = String(form.get("date") || "");
+  const notes = String(form.get("notes") || "").trim() || null;
+  if (!merchant) throw new Error("Merchant required");
+  if (!date) throw new Error("Date required");
+  const amountCents = parseDollarsToCents(amount);
+  const parsedDate = new Date(date + "T12:00:00");
+  if (Number.isNaN(parsedDate.getTime())) throw new Error("Invalid date");
+  await db
+    .update(transactions)
+    .set({
+      merchantClean: merchant,
+      amountCents,
+      date: parsedDate,
+      notes,
+    })
+    .where(eq(transactions.id, id));
   revalidatePath("/transactions");
   revalidatePath("/dashboard");
 }
