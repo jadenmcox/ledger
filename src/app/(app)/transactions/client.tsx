@@ -1,18 +1,21 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { useSearchParams } from "next/navigation";
 import type { Account, Category, Transaction } from "@/db/schema";
 import { Card, Input, Label, Pill, Button } from "@/components/ui";
 import { cn, formatCents } from "@/lib/utils";
 import { format } from "date-fns";
+import Link from "next/link";
 import {
   setCategory,
   makeRule,
   setIsTransfer,
   deleteTransaction,
   updateTransaction,
+  createManualTransaction,
 } from "./actions";
-import { Search, Zap, ArrowRightLeft, Trash2, Pencil } from "lucide-react";
+import { Search, Zap, ArrowRightLeft, Trash2, Pencil, Plus, Upload } from "lucide-react";
 
 export function TransactionsClient({
   initial,
@@ -28,6 +31,13 @@ export function TransactionsClient({
   const [catFilter, setCatFilter] = useState<number | "all" | "uncategorized">(
     "all",
   );
+  const [adding, setAdding] = useState(false);
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    if (searchParams?.get("add") === "1") setAdding(true);
+    const q = searchParams?.get("q");
+    if (q) setSearch(q);
+  }, [searchParams]);
 
   const catById = useMemo(
     () => new Map(categories.map((c) => [c.id, c])),
@@ -62,6 +72,18 @@ export function TransactionsClient({
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center justify-end gap-2">
+        <Button variant="primary" onClick={() => setAdding(true)}>
+          <Plus className="size-4" strokeWidth={1.75} />
+          Add transaction
+        </Button>
+        <Link href="/import">
+          <Button variant="outline">
+            <Upload className="size-4" strokeWidth={1.75} />
+            Import CSV
+          </Button>
+        </Link>
+      </div>
       <Card className="p-4 md:p-5 sticky top-0 md:top-3 z-10">
         <div className="flex flex-col md:flex-row gap-4 md:items-center">
           <div className="flex items-center gap-3 flex-1">
@@ -150,6 +172,148 @@ export function TransactionsClient({
           No transactions match these filters.
         </div>
       )}
+
+      {adding && (
+        <AddTransactionModal
+          accounts={accounts}
+          categories={categories}
+          onClose={() => setAdding(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function AddTransactionModal({
+  accounts,
+  categories,
+  onClose,
+}: {
+  accounts: Account[];
+  categories: Category[];
+  onClose: () => void;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [direction, setDirection] = useState<"out" | "in">("out");
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md">
+        <Card className="p-6">
+          <Label>New transaction</Label>
+          <h3 className="serif text-xl mt-1 mb-5">Add by hand</h3>
+          <form
+            action={(fd) => {
+              fd.set("direction", direction);
+              startTransition(async () => {
+                await createManualTransaction(fd);
+                onClose();
+              });
+            }}
+            className="space-y-4"
+          >
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="date">Date</Label>
+                <Input
+                  id="date"
+                  name="date"
+                  type="date"
+                  defaultValue={format(new Date(), "yyyy-MM-dd")}
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="accountId">Account</Label>
+                <select
+                  id="accountId"
+                  name="accountId"
+                  required
+                  className="h-10 w-full bg-surface border border-border rounded-xl px-3 text-sm"
+                >
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="merchant">Merchant</Label>
+              <Input id="merchant" name="merchant" placeholder="Trader Joe's" required />
+            </div>
+            <div className="grid grid-cols-[1fr_auto] gap-3 items-end">
+              <div>
+                <Label htmlFor="amount">Amount</Label>
+                <Input
+                  id="amount"
+                  name="amount"
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  required
+                />
+              </div>
+              <div className="flex rounded-xl border border-border overflow-hidden h-10">
+                <button
+                  type="button"
+                  onClick={() => setDirection("out")}
+                  className={cn(
+                    "px-3 text-xs tracking-tight transition-colors",
+                    direction === "out"
+                      ? "bg-blush-tint text-blush-deep font-medium"
+                      : "text-foreground-faint hover:text-foreground",
+                  )}
+                >
+                  Spent
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDirection("in")}
+                  className={cn(
+                    "px-3 text-xs tracking-tight transition-colors border-l border-border",
+                    direction === "in"
+                      ? "bg-sage-tint text-sage-deep font-medium"
+                      : "text-foreground-faint hover:text-foreground",
+                  )}
+                >
+                  Received
+                </button>
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="categoryId">Category (optional)</Label>
+              <select
+                id="categoryId"
+                name="categoryId"
+                className="h-10 w-full bg-surface border border-border rounded-xl px-3 text-sm"
+                defaultValue=""
+              >
+                <option value="">— Uncategorized —</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label htmlFor="notes">Notes (optional)</Label>
+              <Input id="notes" name="notes" placeholder="Anything to remember" />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="ghost" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" disabled={pending}>
+                {pending ? "Adding…" : "Add"}
+              </Button>
+            </div>
+          </form>
+        </Card>
+      </div>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { accounts, categories, transactions } from "@/db/schema";
-import { and, eq, gte, lte } from "drizzle-orm";
+import { and, desc, eq, gte, lte } from "drizzle-orm";
 import {
   Container,
   PageHeader,
@@ -12,6 +12,7 @@ import {
   ProgressBar,
   SectionHeader,
   Button,
+  Label,
 } from "@/components/ui";
 import { formatCents, formatCentsCompact } from "@/lib/utils";
 import {
@@ -143,6 +144,59 @@ export default async function DashboardPage() {
       ? ((spend - paceLastMonthSpend) / paceLastMonthSpend) * 100
       : 0;
 
+  // Forecast: project month-end spend from current pace
+  const dailyAvg = spend / Math.max(1, dayOfMonth);
+  const forecastSpend = Math.round(dailyAvg * daysInMonth);
+
+  // Combined "need" monthly amount targets — what they should not exceed
+  const needBudget = allCategories
+    .filter((c) => c.classification === "need" && c.monthlyLimitCents)
+    .reduce((s, c) => s + (c.monthlyLimitCents ?? 0), 0);
+  const wantBudget = allCategories
+    .filter((c) => c.classification === "want" && c.monthlyLimitCents)
+    .reduce((s, c) => s + (c.monthlyLimitCents ?? 0), 0);
+  const totalBudget = needBudget + wantBudget;
+
+  // Paycheck cycle: derive from most recent Paycheck-classified transaction
+  const paycheckCat = allCategories.find((c) => c.name === "Paycheck");
+  const paycheckTxs = paycheckCat
+    ? await db
+        .select()
+        .from(transactions)
+        .where(eq(transactions.categoryId, paycheckCat.id))
+        .orderBy(desc(transactions.date))
+        .limit(4)
+    : [];
+  const lastPaycheck = paycheckTxs[0];
+  const cycleStart = lastPaycheck ? new Date(lastPaycheck.date) : null;
+  const cycleEnd = cycleStart ? addDays(cycleStart, 14) : null;
+  const daysIntoCycle = cycleStart
+    ? Math.max(0, Math.min(14, Math.floor((now.getTime() - cycleStart.getTime()) / 86400000)))
+    : 0;
+  const daysLeftInCycle = cycleEnd
+    ? Math.max(0, Math.ceil((cycleEnd.getTime() - now.getTime()) / 86400000))
+    : 0;
+  const cycleSpend = cycleStart
+    ? txLast30
+        .filter((t) => {
+          if (t.isTransfer || t.amountCents > 0) return false;
+          const cat = t.categoryId ? catById.get(t.categoryId) : null;
+          if (cat?.classification === "income") return false;
+          const d = new Date(t.date);
+          return d >= cycleStart && d <= now;
+        })
+        .reduce((s, t) => s + Math.abs(t.amountCents), 0)
+    : 0;
+  const paycheckAmt = lastPaycheck?.amountCents ?? 0;
+  const cycleSpendPct =
+    paycheckAmt > 0 ? Math.min(100, (cycleSpend / paycheckAmt) * 100) : 0;
+
+  // Empty-state nudges: which accounts have zero transactions in the last 30 days?
+  const acctsWithRecentActivity = new Set(txLast30.map((t) => t.accountId));
+  const quietAccounts = allAccounts.filter(
+    (a) => a.isActive && !acctsWithRecentActivity.has(a.id),
+  );
+
   const donutData = [
     { name: "Need", value: spendByClassification.need, color: "var(--blush)" },
     { name: "Want", value: spendByClassification.want, color: "var(--peach)" },
@@ -255,9 +309,18 @@ export default async function DashboardPage() {
                 tone={net >= 0 ? "blue" : "blush"}
               />
               <Stat
-                label="Daily avg"
-                value={formatCents(Math.round(spend / Math.max(1, dayOfMonth)))}
-                hint="month-to-date"
+                label="Projected total"
+                value={formatCents(forecastSpend)}
+                tone={
+                  totalBudget > 0 && forecastSpend > totalBudget
+                    ? "blush"
+                    : undefined
+                }
+                hint={
+                  totalBudget > 0
+                    ? `${forecastSpend > totalBudget ? "over" : "under"} ${formatCentsCompact(totalBudget)} budget`
+                    : "at current pace"
+                }
               />
               <Stat
                 label="Last month"
@@ -265,6 +328,73 @@ export default async function DashboardPage() {
                 hint="full month spend"
               />
             </div>
+
+            {/* PAYCHECK CYCLE */}
+            {lastPaycheck && cycleStart && cycleEnd && (
+              <Card className="p-6 md:p-8">
+                <div className="flex items-baseline justify-between mb-4">
+                  <div>
+                    <Label>Paycheck cycle</Label>
+                    <h3 className="serif text-2xl mt-1">
+                      Day {daysIntoCycle + 1}{" "}
+                      <span className="italic text-foreground-muted">
+                        of 14
+                      </span>
+                    </h3>
+                    <div className="text-xs text-foreground-faint mt-1 mono tabular">
+                      {format(cycleStart, "MMM d")} → {format(cycleEnd, "MMM d")}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="mono tabular text-2xl">
+                      {formatCents(cycleSpend)}
+                    </div>
+                    <div className="text-[11px] text-foreground-faint tracking-tight mt-0.5">
+                      of {formatCents(paycheckAmt)} earned · {daysLeftInCycle}{" "}
+                      days left
+                    </div>
+                  </div>
+                </div>
+                <ProgressBar
+                  value={cycleSpend}
+                  max={Math.max(paycheckAmt, 1)}
+                  color={
+                    cycleSpendPct > 100 ? "var(--blush-deep)" : "var(--blue)"
+                  }
+                />
+                <div className="text-[11px] text-foreground-faint mt-2 mono tabular">
+                  {cycleSpendPct.toFixed(0)}% of paycheck spent
+                </div>
+              </Card>
+            )}
+
+            {/* QUIET ACCOUNT NUDGES */}
+            {quietAccounts.length > 0 && (
+              <Card className="p-5 md:p-6 border-dashed">
+                <div className="flex items-start gap-4">
+                  <div className="size-8 rounded-full bg-blush-tint inline-flex items-center justify-center shrink-0">
+                    <ArrowRight
+                      className="size-4 text-blush-deep"
+                      strokeWidth={2}
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium tracking-tight">
+                      {quietAccounts.length === 1
+                        ? `No recent activity in ${quietAccounts[0].name}`
+                        : `${quietAccounts.length} accounts have no recent activity`}
+                    </div>
+                    <div className="text-xs text-foreground-faint mt-1">
+                      Import a CSV or add a transaction so this dashboard
+                      reflects your full picture.
+                    </div>
+                  </div>
+                  <Link href="/import">
+                    <Button variant="outline">Import</Button>
+                  </Link>
+                </div>
+              </Card>
+            )}
 
             {/* CHARTS ROW */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">

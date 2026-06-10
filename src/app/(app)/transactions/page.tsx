@@ -22,13 +22,13 @@ export default async function TransactionsPage() {
         subtitle={`${allTx.length} most recent. Click any merchant to recategorize, or create a rule that catches it forever.`}
       />
       <Container>
-        {allTx.length === 0 ? (
+        {allTx.length === 0 && allAccts.length === 0 ? (
           <EmptyState
-            title="No transactions yet"
-            body="Import a CSV from your bank to bring transactions in. Budgetly will dedupe on re-import, so you can run it weekly without worry."
+            title="Add an account first"
+            body="Imports and manual entries land in an account. Add one — even just the name — and come back."
             action={
-              <Link href="/import">
-                <Button variant="primary">Import a CSV</Button>
+              <Link href="/accounts">
+                <Button variant="primary">Add an account</Button>
               </Link>
             }
           />
