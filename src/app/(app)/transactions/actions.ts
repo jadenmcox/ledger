@@ -8,7 +8,42 @@ import {
   applyRulesToHistory,
   createRuleFromTransaction,
 } from "@/lib/categorize";
+import { dedupeHash } from "@/lib/csv-import";
 import { parseDollarsToCents } from "@/lib/utils";
+
+export async function createManualTransaction(form: FormData) {
+  const accountId = Number(form.get("accountId"));
+  const dateStr = String(form.get("date") || "");
+  const merchantRaw = String(form.get("merchant") || "").trim();
+  const amountStr = String(form.get("amount") || "0");
+  const direction = String(form.get("direction") || "out"); // "in" | "out"
+  const categoryId = form.get("categoryId")
+    ? Number(form.get("categoryId"))
+    : null;
+  const notes = String(form.get("notes") || "").trim() || null;
+
+  if (!accountId) throw new Error("Account required");
+  if (!dateStr) throw new Error("Date required");
+  if (!merchantRaw) throw new Error("Merchant required");
+
+  const cents = parseDollarsToCents(amountStr);
+  const signed = direction === "in" ? Math.abs(cents) : -Math.abs(cents);
+  const date = new Date(dateStr + "T12:00:00");
+
+  await db.insert(transactions).values({
+    accountId,
+    date,
+    amountCents: signed,
+    merchantRaw,
+    merchantClean: merchantRaw,
+    categoryId,
+    notes,
+    source: "manual",
+    dedupeHash: dedupeHash(accountId, date, signed, merchantRaw),
+  });
+  revalidatePath("/transactions");
+  revalidatePath("/dashboard");
+}
 
 export async function setCategory(txId: number, categoryId: number | null) {
   await db

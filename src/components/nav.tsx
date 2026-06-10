@@ -1,5 +1,6 @@
 "use client";
 
+import { Fragment } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
@@ -8,23 +9,26 @@ import {
   ListOrdered,
   Wallet,
   Tag,
-  Upload,
   CalendarRange,
-  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const items = [
-  { href: "/dashboard", label: "Today", icon: LayoutDashboard },
-  { href: "/transactions", label: "Transactions", icon: ListOrdered },
-  { href: "/accounts", label: "Accounts", icon: Wallet },
-  { href: "/categories", label: "Categories", icon: Tag },
-  { href: "/insights", label: "Insights", icon: Sparkles },
-  { href: "/year", label: "Year", icon: CalendarRange },
-  { href: "/import", label: "Import", icon: Upload },
+type NavItem = {
+  href: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  group: "primary" | "setup";
+};
+
+const items: NavItem[] = [
+  { href: "/dashboard", label: "Home", icon: LayoutDashboard, group: "primary" },
+  { href: "/transactions", label: "Transactions", icon: ListOrdered, group: "primary" },
+  { href: "/year", label: "Year", icon: CalendarRange, group: "primary" },
+  { href: "/accounts", label: "Accounts", icon: Wallet, group: "setup" },
+  { href: "/categories", label: "Categories", icon: Tag, group: "setup" },
 ];
 
-// First 5 items shown in mobile bottom nav
+// First 5 items shown in mobile bottom nav (all of them, conveniently)
 const mobileItems = items.slice(0, 5);
 
 function titleFor(pathname: string): string {
@@ -86,13 +90,20 @@ export function DesktopNav() {
         </Link>
       </div>
       <nav className="flex-1 px-4 space-y-1">
-        {items.map((item) => {
+        {items.map((item, idx) => {
+          const prev = items[idx - 1];
+          const showDivider = prev && prev.group !== item.group;
           const active =
             pathname === item.href || pathname.startsWith(item.href + "/");
           const Icon = item.icon;
           return (
+            <Fragment key={item.href}>
+              {showDivider && (
+                <div className="px-4 pt-5 pb-1 text-[10px] tracking-[0.3em] uppercase text-foreground-faint">
+                  Setup
+                </div>
+              )}
             <Link
-              key={item.href}
               href={item.href}
               className={cn(
                 "group relative flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm transition-colors overflow-hidden",
@@ -123,6 +134,7 @@ export function DesktopNav() {
                 <span className="ml-auto size-1.5 rounded-full bg-sage-deep relative z-10" />
               )}
             </Link>
+            </Fragment>
           );
         })}
       </nav>
