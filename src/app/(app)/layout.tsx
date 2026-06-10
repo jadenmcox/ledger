@@ -3,6 +3,7 @@ import { CommandPalette } from "@/components/command-palette";
 import { db } from "@/db";
 import { accounts, categories, transactions } from "@/db/schema";
 import { desc, eq } from "drizzle-orm";
+import { backfillRecurring } from "@/lib/recurring-schedules";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,11 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // Idempotent — creates any due recurring transactions since last run.
+  // Strict dedupe hash protects against double-creation if CSV import lands
+  // the same dates+amounts later.
+  await backfillRecurring().catch(() => undefined);
+
   const [cats, accts, recentTx] = await Promise.all([
     db.select({ id: categories.id, name: categories.name }).from(categories),
     db

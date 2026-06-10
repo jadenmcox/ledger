@@ -157,37 +157,54 @@ export default async function DashboardPage() {
     .reduce((s, c) => s + (c.monthlyLimitCents ?? 0), 0);
   const totalBudget = needBudget + wantBudget;
 
-  // Paycheck cycle: derive from most recent Paycheck-classified transaction
+  // Paycheck cycle: semi-monthly. 1st–15th is the first half, 16th–EoM is the second.
+  const isFirstHalf = dayOfMonth <= 15;
+  const cycleStart = new Date(now.getFullYear(), now.getMonth(), isFirstHalf ? 1 : 16);
+  const cycleEnd = isFirstHalf
+    ? new Date(now.getFullYear(), now.getMonth(), 15)
+    : endOfMonth(now);
+  const cycleLengthDays =
+    Math.floor((cycleEnd.getTime() - cycleStart.getTime()) / 86400000) + 1;
+  const daysIntoCycle = Math.floor(
+    (now.getTime() - cycleStart.getTime()) / 86400000,
+  );
+  const daysLeftInCycle = Math.max(
+    0,
+    Math.ceil((cycleEnd.getTime() - now.getTime()) / 86400000),
+  );
+
+  // Paycheck income that landed inside this cycle (any income-classified tx)
+  const incomeCats = new Set(
+    allCategories.filter((c) => c.classification === "income").map((c) => c.id),
+  );
+  const cycleIncome = txThisMonth
+    .filter((t) => {
+      const d = new Date(t.date);
+      if (d < cycleStart || d > cycleEnd) return false;
+      if (!t.categoryId || !incomeCats.has(t.categoryId)) return false;
+      return t.amountCents > 0;
+    })
+    .reduce((s, t) => s + t.amountCents, 0);
+
+  // Spend inside the cycle (excludes income & transfers, including positives that aren't income)
+  const cycleSpend = txThisMonth
+    .filter((t) => {
+      if (t.isTransfer) return false;
+      const d = new Date(t.date);
+      if (d < cycleStart || d > cycleEnd) return false;
+      const cat = t.categoryId ? catById.get(t.categoryId) : null;
+      if (cat?.classification === "income") return false;
+      return t.amountCents < 0;
+    })
+    .reduce((s, t) => s + Math.abs(t.amountCents), 0);
+
+  // Use actual cycle income if present, otherwise fall back to Paycheck category's
+  // monthly amount halved (since the user's monthly amount represents 2 paychecks).
   const paycheckCat = allCategories.find((c) => c.name === "Paycheck");
-  const paycheckTxs = paycheckCat
-    ? await db
-        .select()
-        .from(transactions)
-        .where(eq(transactions.categoryId, paycheckCat.id))
-        .orderBy(desc(transactions.date))
-        .limit(4)
-    : [];
-  const lastPaycheck = paycheckTxs[0];
-  const cycleStart = lastPaycheck ? new Date(lastPaycheck.date) : null;
-  const cycleEnd = cycleStart ? addDays(cycleStart, 14) : null;
-  const daysIntoCycle = cycleStart
-    ? Math.max(0, Math.min(14, Math.floor((now.getTime() - cycleStart.getTime()) / 86400000)))
+  const expectedPerCycle = paycheckCat?.monthlyLimitCents
+    ? Math.round(paycheckCat.monthlyLimitCents / 2)
     : 0;
-  const daysLeftInCycle = cycleEnd
-    ? Math.max(0, Math.ceil((cycleEnd.getTime() - now.getTime()) / 86400000))
-    : 0;
-  const cycleSpend = cycleStart
-    ? txLast30
-        .filter((t) => {
-          if (t.isTransfer || t.amountCents > 0) return false;
-          const cat = t.categoryId ? catById.get(t.categoryId) : null;
-          if (cat?.classification === "income") return false;
-          const d = new Date(t.date);
-          return d >= cycleStart && d <= now;
-        })
-        .reduce((s, t) => s + Math.abs(t.amountCents), 0)
-    : 0;
-  const paycheckAmt = lastPaycheck?.amountCents ?? 0;
+  const paycheckAmt = cycleIncome || expectedPerCycle;
   const cycleSpendPct =
     paycheckAmt > 0 ? Math.min(100, (cycleSpend / paycheckAmt) * 100) : 0;
 
@@ -330,43 +347,51 @@ export default async function DashboardPage() {
             </div>
 
             {/* PAYCHECK CYCLE */}
-            {lastPaycheck && cycleStart && cycleEnd && (
-              <Card className="p-6 md:p-8">
-                <div className="flex items-baseline justify-between mb-4">
-                  <div>
-                    <Label>Paycheck cycle</Label>
-                    <h3 className="serif text-2xl mt-1">
-                      Day {daysIntoCycle + 1}{" "}
-                      <span className="italic text-foreground-muted">
-                        of 14
-                      </span>
-                    </h3>
-                    <div className="text-xs text-foreground-faint mt-1 mono tabular">
-                      {format(cycleStart, "MMM d")} → {format(cycleEnd, "MMM d")}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="mono tabular text-2xl">
-                      {formatCents(cycleSpend)}
-                    </div>
-                    <div className="text-[11px] text-foreground-faint tracking-tight mt-0.5">
-                      of {formatCents(paycheckAmt)} earned · {daysLeftInCycle}{" "}
-                      days left
-                    </div>
+            <Card className="p-6 md:p-8">
+              <div className="flex items-baseline justify-between mb-4">
+                <div>
+                  <Label>Pay period</Label>
+                  <h3 className="serif text-2xl mt-1">
+                    Day {daysIntoCycle + 1}{" "}
+                    <span className="italic text-foreground-muted">
+                      of {cycleLengthDays}
+                    </span>
+                  </h3>
+                  <div className="text-xs text-foreground-faint mt-1 mono tabular">
+                    {format(cycleStart, "MMM d")} → {format(cycleEnd, "MMM d")}
                   </div>
                 </div>
-                <ProgressBar
-                  value={cycleSpend}
-                  max={Math.max(paycheckAmt, 1)}
-                  color={
-                    cycleSpendPct > 100 ? "var(--blush-deep)" : "var(--blue)"
-                  }
-                />
-                <div className="text-[11px] text-foreground-faint mt-2 mono tabular">
-                  {cycleSpendPct.toFixed(0)}% of paycheck spent
+                <div className="text-right">
+                  <div className="mono tabular text-2xl">
+                    {formatCents(cycleSpend)}
+                  </div>
+                  <div className="text-[11px] text-foreground-faint tracking-tight mt-0.5">
+                    {paycheckAmt > 0
+                      ? `of ${formatCents(paycheckAmt)} ${cycleIncome > 0 ? "earned" : "expected"} · ${daysLeftInCycle} days left`
+                      : `${daysLeftInCycle} days left in period`}
+                  </div>
                 </div>
-              </Card>
-            )}
+              </div>
+              {paycheckAmt > 0 ? (
+                <>
+                  <ProgressBar
+                    value={cycleSpend}
+                    max={Math.max(paycheckAmt, 1)}
+                    color={
+                      cycleSpendPct > 100 ? "var(--blush-deep)" : "var(--blue)"
+                    }
+                  />
+                  <div className="text-[11px] text-foreground-faint mt-2 mono tabular">
+                    {cycleSpendPct.toFixed(0)}% of paycheck spent
+                  </div>
+                </>
+              ) : (
+                <div className="text-[11px] text-foreground-faint mt-1">
+                  Set a monthly amount on the Paycheck category to see this
+                  period's burn rate.
+                </div>
+              )}
+            </Card>
 
             {/* QUIET ACCOUNT NUDGES */}
             {quietAccounts.length > 0 && (
