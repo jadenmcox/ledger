@@ -10,6 +10,7 @@ import {
   Wallet,
   Tag,
   CalendarRange,
+  Repeat,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +27,7 @@ const items: NavItem[] = [
   { href: "/year", label: "Year", icon: CalendarRange, group: "primary" },
   { href: "/accounts", label: "Accounts", icon: Wallet, group: "setup" },
   { href: "/categories", label: "Categories", icon: Tag, group: "setup" },
+  { href: "/recurring", label: "Recurring", icon: Repeat, group: "setup" },
 ];
 
 // First 5 items shown in mobile bottom nav (all of them, conveniently)

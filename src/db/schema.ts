@@ -152,6 +152,40 @@ export const balanceSnapshots = sqliteTable(
   (t) => [primaryKey({ columns: [t.accountId, t.date] })],
 );
 
+// User-defined recurring transaction schedules (vs. recurringGroups which
+// represents auto-DETECTED patterns from transaction history).
+export const recurringCadences = [
+  "monthly",
+  "semi_monthly", // 1st & 16th, or any two days
+  "weekly",
+  "biweekly",
+] as const;
+export type RecurringCadence = (typeof recurringCadences)[number];
+
+export const recurringSchedules = sqliteTable("recurring_schedules", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  accountId: integer("account_id")
+    .notNull()
+    .references(() => accounts.id, { onDelete: "cascade" }),
+  amountCents: integer("amount_cents").notNull(), // signed: + income, - expense
+  merchantRaw: text("merchant_raw").notNull(),
+  categoryId: integer("category_id").references(() => categories.id, {
+    onDelete: "set null",
+  }),
+  cadence: text("cadence", { enum: recurringCadences }).notNull(),
+  // For monthly/semi_monthly: JSON array of day-of-month, e.g. "[1, 16]"
+  // For weekly/biweekly: ignored (uses startDate as anchor)
+  daysOfMonth: text("days_of_month"),
+  startDate: text("start_date").notNull(), // YYYY-MM-DD
+  endDate: text("end_date"), // YYYY-MM-DD, optional
+  lastCreatedDate: text("last_created_date"), // YYYY-MM-DD, set as backfill runs
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  notes: text("notes"),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});
+
 export type Account = typeof accounts.$inferSelect;
 export type NewAccount = typeof accounts.$inferInsert;
 export type Category = typeof categories.$inferSelect;
@@ -160,3 +194,5 @@ export type Transaction = typeof transactions.$inferSelect;
 export type NewTransaction = typeof transactions.$inferInsert;
 export type CategoryRule = typeof categoryRules.$inferSelect;
 export type NewCategoryRule = typeof categoryRules.$inferInsert;
+export type RecurringSchedule = typeof recurringSchedules.$inferSelect;
+export type NewRecurringSchedule = typeof recurringSchedules.$inferInsert;

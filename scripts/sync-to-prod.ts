@@ -9,6 +9,7 @@ import {
   imports,
   categoryRules,
   recurringGroups,
+  recurringSchedules,
 } from "../src/db/schema";
 
 async function check() {
@@ -33,6 +34,7 @@ async function wipe() {
   await db.delete(imports);
   await db.delete(categoryRules);
   await db.delete(recurringGroups);
+  await db.delete(recurringSchedules).catch(() => undefined);
   await db.delete(accounts);
   await db.delete(categories);
   console.log("WIPED");
@@ -91,12 +93,30 @@ async function sync() {
   const locAccts = local.prepare("SELECT * FROM accounts").all() as LocalAccount[];
   const locTxs = local.prepare("SELECT * FROM transactions").all() as LocalTx[];
   const locSnaps = local.prepare("SELECT * FROM balance_snapshots").all() as LocalSnap[];
+  const locSchedules = local
+    .prepare("SELECT * FROM recurring_schedules")
+    .all() as Array<{
+    id: number;
+    account_id: number;
+    amount_cents: number;
+    merchant_raw: string;
+    category_id: number | null;
+    cadence: "monthly" | "semi_monthly" | "weekly" | "biweekly";
+    days_of_month: string | null;
+    start_date: string;
+    end_date: string | null;
+    last_created_date: string | null;
+    is_active: number;
+    notes: string | null;
+    created_at: number;
+  }>;
 
   console.log("LOCAL STATE:", {
     accounts: locAccts.length,
     categories: locCats.length,
     transactions: locTxs.length,
     snapshots: locSnaps.length,
+    recurringSchedules: locSchedules.length,
   });
 
   await wipe();
@@ -164,6 +184,26 @@ async function sync() {
         isTransfer: Boolean(t.is_transfer),
         importId: t.import_id,
         createdAt: new Date(t.created_at * 1000),
+      })),
+    );
+  }
+
+  if (locSchedules.length) {
+    await db.insert(recurringSchedules).values(
+      locSchedules.map((s) => ({
+        id: s.id,
+        accountId: s.account_id,
+        amountCents: s.amount_cents,
+        merchantRaw: s.merchant_raw,
+        categoryId: s.category_id,
+        cadence: s.cadence,
+        daysOfMonth: s.days_of_month,
+        startDate: s.start_date,
+        endDate: s.end_date,
+        lastCreatedDate: s.last_created_date,
+        isActive: Boolean(s.is_active),
+        notes: s.notes,
+        createdAt: new Date(s.created_at * 1000),
       })),
     );
   }
