@@ -1,14 +1,36 @@
 import { db } from "@/db";
-import { accounts, balanceSnapshots, transactions } from "@/db/schema";
-import { and, gte } from "drizzle-orm";
+import { accounts, balanceSnapshots, transactions, plaidItems } from "@/db/schema";
+import { and, eq, gte, sql } from "drizzle-orm";
 import { Container, PageHeader } from "@/components/ui";
 import { AccountsClient } from "./client";
+import { PlaidConnect } from "./PlaidConnect";
 import { format, subDays, startOfDay } from "date-fns";
 
 export const dynamic = "force-dynamic";
 
 export default async function AccountsPage() {
   const rows = await db.select().from(accounts).orderBy(accounts.id);
+
+  const items = await db.select().from(plaidItems).orderBy(plaidItems.id);
+  const accountCounts = await db
+    .select({
+      plaidItemId: accounts.plaidItemId,
+      count: sql<number>`count(*)`.as("count"),
+    })
+    .from(accounts)
+    .groupBy(accounts.plaidItemId);
+  const countByItem = new Map<number, number>();
+  for (const r of accountCounts) {
+    if (r.plaidItemId != null) countByItem.set(r.plaidItemId, Number(r.count));
+  }
+  const plaidItemRows = items.map((it) => ({
+    id: it.id,
+    institutionName: it.institutionName,
+    lastSyncedAt: it.lastSyncedAt,
+    lastError: it.lastError,
+    accountCount: countByItem.get(it.id) ?? 0,
+  }));
+  void eq;
 
   const since = startOfDay(subDays(new Date(), 30));
   const [snaps, recentTx] = await Promise.all([
@@ -79,11 +101,14 @@ export default async function AccountsPage() {
         subtitle="Checking, savings, credit cards, retirement, investments — every balance in one place."
       />
       <Container>
-        <AccountsClient
-          initial={rows}
-          today={format(new Date(), "yyyy-MM-dd")}
-          trends={trendByAccount}
-        />
+        <div className="space-y-12">
+          <PlaidConnect items={plaidItemRows} />
+          <AccountsClient
+            initial={rows}
+            today={format(new Date(), "yyyy-MM-dd")}
+            trends={trendByAccount}
+          />
+        </div>
       </Container>
     </>
   );
