@@ -2,7 +2,7 @@ import { db } from "@/db";
 import { accounts, categories, transactions } from "@/db/schema";
 import { desc } from "drizzle-orm";
 import { Container, PageHeader, EmptyState, Button } from "@/components/ui";
-import { TransactionsClient } from "./client";
+import { TransactionsClient, TransactionsHeaderActions } from "./client";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -14,21 +14,27 @@ export default async function TransactionsPage() {
     db.select().from(accounts),
   ]);
 
+  const hasAccounts = allAccts.length > 0;
+
   return (
     <>
       <PageHeader
-        eyebrow="TRANSACTIONS"
         title="Transactions"
-        subtitle={`${allTx.length} most recent. Click any merchant to recategorize, or create a rule that catches it forever.`}
+        subtitle={
+          hasAccounts
+            ? `${allTx.length} most recent from your connected accounts. Tap a merchant to recategorize — or make it a rule that catches every future one.`
+            : "Connect a bank and the last few months of activity will land here automatically."
+        }
+        right={hasAccounts ? <TransactionsHeaderActions /> : undefined}
       />
       <Container>
-        {allTx.length === 0 && allAccts.length === 0 ? (
+        {!hasAccounts ? (
           <EmptyState
-            title="Add an account first"
-            body="Imports and manual entries land in an account. Add one — even just the name — and come back."
+            title="Connect a bank first"
+            body="Budgetly pulls transactions straight from your accounts. Link one and we'll fill this in for you."
             action={
               <Link href="/accounts">
-                <Button variant="primary">Add an account</Button>
+                <Button variant="primary">Connect a bank</Button>
               </Link>
             }
           />

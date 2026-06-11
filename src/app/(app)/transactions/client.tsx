@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { Account, Category, Transaction } from "@/db/schema";
 import { Card, Input, Label, Pill, Button } from "@/components/ui";
 import { Sheet } from "@/components/sheet";
@@ -15,8 +15,71 @@ import {
   deleteTransaction,
   updateTransaction,
   createManualTransaction,
+  recategorizeAll,
 } from "./actions";
-import { Search, Zap, ArrowRightLeft, Trash2, Pencil, Plus, Upload } from "lucide-react";
+import { Search, Zap, ArrowRightLeft, Trash2, Pencil, Plus, Upload, Sparkles } from "lucide-react";
+
+export function TransactionsHeaderActions() {
+  const router = useRouter();
+  return (
+    <div className="flex items-center gap-2">
+      <Button
+        size="sm"
+        variant="primary"
+        onClick={() => router.push("/transactions?add=1")}
+        aria-label="Add transaction"
+      >
+        <Plus className="size-4" strokeWidth={1.75} />
+        <span className="hidden sm:inline">Add</span>
+      </Button>
+      <Link href="/import" aria-label="Import CSV">
+        <Button size="sm" variant="outline">
+          <Upload className="size-4" strokeWidth={1.75} />
+          <span className="hidden sm:inline">Import</span>
+        </Button>
+      </Link>
+    </div>
+  );
+}
+
+function RecategorizeBanner({ count }: { count: number }) {
+  const [pending, startTransition] = useTransition();
+  const [done, setDone] = useState<number | null>(null);
+  return (
+    <Card className="p-3 md:p-4 flex items-center gap-3">
+      <Sparkles
+        className="size-4 text-blush-deep shrink-0"
+        strokeWidth={1.75}
+      />
+      <div className="flex-1 min-w-0 text-xs md:text-sm">
+        {done !== null ? (
+          <span>
+            Categorized <span className="font-medium">{done}</span> from your
+            rules and Plaid&apos;s hints.
+          </span>
+        ) : (
+          <span>
+            <span className="font-medium">{count}</span> uncategorized — run
+            your rules and Plaid&apos;s category hints across them.
+          </span>
+        )}
+      </div>
+      <Button
+        size="sm"
+        variant="primary"
+        disabled={pending}
+        onClick={() =>
+          startTransition(async () => {
+            const touched = await recategorizeAll();
+            setDone(touched);
+          })
+        }
+      >
+        {pending ? "Working…" : done !== null ? "Run again" : "Recategorize"}
+      </Button>
+    </Card>
+  );
+}
 
 export function TransactionsClient({
   initial,
@@ -49,6 +112,11 @@ export function TransactionsClient({
     [accounts],
   );
 
+  const uncategorizedCount = useMemo(
+    () => initial.filter((t) => !t.categoryId && !t.isTransfer).length,
+    [initial],
+  );
+
   const filtered = initial.filter((t) => {
     if (accountFilter !== "all" && t.accountId !== accountFilter) return false;
     if (catFilter === "uncategorized" && t.categoryId) return false;
@@ -73,21 +141,12 @@ export function TransactionsClient({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-end gap-2">
-        <Button variant="primary" onClick={() => setAdding(true)}>
-          <Plus className="size-4" strokeWidth={1.75} />
-          Add transaction
-        </Button>
-        <Link href="/import">
-          <Button variant="outline">
-            <Upload className="size-4" strokeWidth={1.75} />
-            Import CSV
-          </Button>
-        </Link>
-      </div>
-      <Card className="p-4 md:p-5 sticky top-0 md:top-3 z-10">
-        <div className="flex flex-col md:flex-row gap-4 md:items-center">
-          <div className="flex items-center gap-3 flex-1">
+      {uncategorizedCount > 0 && (
+        <RecategorizeBanner count={uncategorizedCount} />
+      )}
+      <Card className="p-3 md:p-5 sticky top-0 md:top-3 z-10">
+        <div className="flex flex-col md:flex-row gap-3 md:gap-4 md:items-center">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
             <Search
               className="size-4 text-foreground-faint shrink-0"
               strokeWidth={1.5}
@@ -96,10 +155,10 @@ export function TransactionsClient({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search merchant..."
-              className="bg-transparent border-none outline-none text-sm flex-1 placeholder:text-foreground-faint"
+              className="bg-transparent border-none outline-none text-sm flex-1 min-w-0 placeholder:text-foreground-faint"
             />
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-2 md:gap-3 min-w-0">
             <select
               value={accountFilter}
               onChange={(e) =>
@@ -107,7 +166,7 @@ export function TransactionsClient({
                   e.target.value === "all" ? "all" : Number(e.target.value),
                 )
               }
-              className="h-9 bg-surface-2 border border-border-strong rounded-md px-3 text-xs"
+              className="h-9 flex-1 min-w-0 md:flex-initial bg-surface-2 border border-border-strong rounded-md px-2 md:px-3 text-xs"
             >
               <option value="all">All accounts</option>
               {accounts.map((a) => (
@@ -124,7 +183,7 @@ export function TransactionsClient({
                 else if (v === "uncategorized") setCatFilter("uncategorized");
                 else setCatFilter(Number(v));
               }}
-              className="h-9 bg-surface-2 border border-border-strong rounded-md px-3 text-xs"
+              className="h-9 flex-1 min-w-0 md:flex-initial bg-surface-2 border border-border-strong rounded-md px-2 md:px-3 text-xs"
             >
               <option value="all">All categories</option>
               <option value="uncategorized">— Uncategorized —</option>

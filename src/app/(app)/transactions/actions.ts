@@ -10,6 +10,7 @@ import {
 } from "@/lib/categorize";
 import { dedupeHash } from "@/lib/csv-import";
 import { parseDollarsToCents } from "@/lib/utils";
+import { recategorizeAllFromPlaid } from "@/lib/plaid-sync";
 
 export async function createManualTransaction(form: FormData) {
   const accountId = Number(form.get("accountId"));
@@ -83,6 +84,19 @@ export async function makeRule(
   if (applyToHistory) {
     touched = await applyRulesToHistory({ onlyUncategorized: false });
   }
+  revalidatePath("/transactions");
+  revalidatePath("/dashboard");
+  return touched;
+}
+
+/**
+ * Re-runs categorization across everything: forces a full Plaid re-sync
+ * (which backfills categoryId via rules → Plaid PFC on existing rows that
+ * are still uncategorized), then applies rules to any non-Plaid rows.
+ */
+export async function recategorizeAll() {
+  await recategorizeAllFromPlaid().catch(() => undefined);
+  const touched = await applyRulesToHistory({ onlyUncategorized: true });
   revalidatePath("/transactions");
   revalidatePath("/dashboard");
   return touched;
