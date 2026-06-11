@@ -80,13 +80,7 @@ export function AccountsClient({
   const archived = initial.filter((a) => !a.isActive);
 
   return (
-    <div className="space-y-12">
-      <div className="flex justify-end">
-        <Button variant="primary" onClick={() => setAdding(true)}>
-          <Plus className="size-4" strokeWidth={1.5} /> New account
-        </Button>
-      </div>
-
+    <div className="space-y-8">
       {(adding || editing) && (
         <AccountForm
           initial={editing}
@@ -103,6 +97,12 @@ export function AccountsClient({
         onArchive={(id) => archiveAccount(id)}
         trends={trends}
       />
+
+      <div className="flex justify-end">
+        <Button variant="primary" onClick={() => setAdding(true)}>
+          <Plus className="size-4" strokeWidth={1.5} /> New account
+        </Button>
+      </div>
 
       {archived.length > 0 && (
         <div>
