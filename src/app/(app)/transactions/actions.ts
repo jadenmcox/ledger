@@ -101,6 +101,9 @@ export async function updateTransaction(form: FormData) {
   const amount = String(form.get("amount") || "");
   const date = String(form.get("date") || "");
   const notes = String(form.get("notes") || "").trim() || null;
+  const categoryRaw = form.get("categoryId");
+  const categoryId =
+    categoryRaw === null || categoryRaw === "" ? null : Number(categoryRaw);
   if (!merchant) throw new Error("Merchant required");
   if (!date) throw new Error("Date required");
   const amountCents = parseDollarsToCents(amount);
@@ -113,6 +116,7 @@ export async function updateTransaction(form: FormData) {
       amountCents,
       date: parsedDate,
       notes,
+      categoryId,
     })
     .where(eq(transactions.id, id));
   revalidatePath("/transactions");

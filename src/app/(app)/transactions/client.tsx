@@ -418,12 +418,26 @@ function Row({
         />
       )}
 
-      {editing && <EditTxModal tx={tx} onClose={() => setEditing(false)} />}
+      {editing && (
+        <EditTxModal
+          tx={tx}
+          categories={categories}
+          onClose={() => setEditing(false)}
+        />
+      )}
     </div>
   );
 }
 
-function EditTxModal({ tx, onClose }: { tx: Transaction; onClose: () => void }) {
+function EditTxModal({
+  tx,
+  categories,
+  onClose,
+}: {
+  tx: Transaction;
+  categories: Category[];
+  onClose: () => void;
+}) {
   const [pending, startTransition] = useTransition();
   return (
     <div
@@ -476,6 +490,21 @@ function EditTxModal({ tx, onClose }: { tx: Transaction; onClose: () => void }) 
               </div>
             </div>
             <div>
+              <Label>Category</Label>
+              <select
+                name="categoryId"
+                defaultValue={tx.categoryId ?? ""}
+                className="h-10 w-full bg-surface border border-border rounded-xl px-3.5 text-sm focus:border-sage focus:ring-2 focus:ring-sage-tint focus:outline-none transition-all"
+              >
+                <option value="">— Uncategorized —</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
               <Label>Notes</Label>
               <Input name="notes" defaultValue={tx.notes || ""} />
             </div>
@@ -504,7 +533,10 @@ function CategoryPicker({
   onClose: () => void;
 }) {
   const [q, setQ] = useState("");
-  const [makingRule, setMakingRule] = useState(false);
+  // Default ON: most spending repeats, so the first time you categorize a
+  // merchant you almost always want every future transaction from them to
+  // land in the same bucket. Uncheck for one-offs.
+  const [makingRule, setMakingRule] = useState(true);
   const [pending, startTransition] = useTransition();
 
   const results = categories.filter((c) =>

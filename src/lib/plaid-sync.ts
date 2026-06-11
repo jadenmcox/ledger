@@ -2,10 +2,12 @@ import "server-only";
 import { db } from "@/db";
 import {
   accounts,
+  categories,
   plaidItems,
   transactions,
   balanceSnapshots,
   type AccountType,
+  type Category,
 } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { plaid } from "./plaid";
@@ -18,6 +20,53 @@ import type {
   Transaction as PlaidTransaction,
   RemovedTransaction,
 } from "plaid";
+
+// Plaid's `personal_finance_category.primary` enum → keywords we look for in
+// the user's own category names. First hit wins. Keeps the mapping decoupled
+// from any specific user setup — if you renamed "Groceries" to "Food" both
+// still match.
+const PLAID_CATEGORY_HINTS: Record<string, string[]> = {
+  INCOME: ["income", "salary", "paycheck", "wage"],
+  TRANSFER_IN: ["transfer"],
+  TRANSFER_OUT: ["transfer"],
+  LOAN_PAYMENTS: ["loan", "mortgage", "debt", "student"],
+  BANK_FEES: ["fee", "bank"],
+  ENTERTAINMENT: ["entertainment", "fun", "subscription", "streaming"],
+  FOOD_AND_DRINK: ["grocer", "food", "dining", "restaurant", "drink", "coffee"],
+  GENERAL_MERCHANDISE: ["shop", "merchandise", "amazon"],
+  HOME_IMPROVEMENT: ["home", "improvement", "furniture"],
+  MEDICAL: ["medical", "health", "doctor", "pharmacy"],
+  PERSONAL_CARE: ["personal", "care", "beauty", "hair"],
+  GENERAL_SERVICES: ["service"],
+  GOVERNMENT_AND_NON_PROFIT: ["tax", "government", "donation", "charity"],
+  TRANSPORTATION: ["transport", "gas", "fuel", "uber", "lyft", "car", "parking"],
+  TRAVEL: ["travel", "flight", "hotel", "airbnb", "rental"],
+  RENT_AND_UTILITIES: [
+    "rent",
+    "utilit",
+    "internet",
+    "phone",
+    "electric",
+    "water",
+    "gas bill",
+  ],
+};
+
+function mapPlaidCategory(
+  plaidPrimary: string | null | undefined,
+  userCategories: Category[],
+): number | null {
+  if (!plaidPrimary) return null;
+  const hints = PLAID_CATEGORY_HINTS[plaidPrimary];
+  if (!hints) return null;
+  for (const hint of hints) {
+    const match = userCategories.find((c) =>
+      c.name.toLowerCase().includes(hint),
+    );
+    if (match) return match.id;
+  }
+  return null;
+}
 
 function mapAccountType(
   type: string | null | undefined,
@@ -153,6 +202,7 @@ export async function applyTransactionsDelta(
   removed: RemovedTransaction[],
 ) {
   const rules = await getRules();
+  const userCategories = await db.select().from(categories);
 
   for (const t of added) {
     const accountId = accountMap.get(t.account_id);
@@ -186,7 +236,12 @@ export async function applyTransactionsDelta(
 
     const hash = dedupeHash(accountId, date, cents, merchant);
     const existingByHash = await findExistingByHash(hash);
-    const categoryId = applyRules(merchant, rules);
+    const categoryId =
+      applyRules(merchant, rules) ??
+      mapPlaidCategory(
+        t.personal_finance_category?.primary,
+        userCategories,
+      );
 
     if (existingByHash) {
       await db
