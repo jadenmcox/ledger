@@ -26,7 +26,7 @@ export type AccountType = (typeof accountTypes)[number];
 export const classifications = ["need", "want", "savings", "income"] as const;
 export type Classification = (typeof classifications)[number];
 
-export const txSources = ["csv", "teller", "manual"] as const;
+export const txSources = ["csv", "teller", "manual", "plaid"] as const;
 export type TxSource = (typeof txSources)[number];
 
 export const accounts = sqliteTable("accounts", {
@@ -37,6 +37,8 @@ export const accounts = sqliteTable("accounts", {
   currency: text("currency").notNull().default("USD"),
   currentBalanceCents: integer("current_balance_cents").notNull().default(0),
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  plaidItemId: integer("plaid_item_id"),
+  plaidAccountId: text("plaid_account_id"),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(unixepoch())`),
@@ -196,3 +198,20 @@ export type CategoryRule = typeof categoryRules.$inferSelect;
 export type NewCategoryRule = typeof categoryRules.$inferInsert;
 export type RecurringSchedule = typeof recurringSchedules.$inferSelect;
 export type NewRecurringSchedule = typeof recurringSchedules.$inferInsert;
+
+export const plaidItems = sqliteTable("plaid_items", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  itemId: text("item_id").notNull().unique(),
+  accessToken: text("access_token").notNull(),
+  institutionId: text("institution_id"),
+  institutionName: text("institution_name"),
+  cursor: text("cursor"),
+  lastSyncedAt: integer("last_synced_at", { mode: "timestamp" }),
+  lastError: text("last_error"),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});
+
+export type PlaidItem = typeof plaidItems.$inferSelect;
+export type NewPlaidItem = typeof plaidItems.$inferInsert;
