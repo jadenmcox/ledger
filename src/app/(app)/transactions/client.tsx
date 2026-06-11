@@ -152,7 +152,7 @@ export function TransactionsClient({
                 {formatCents(total, { signed: true })}
               </div>
             </div>
-            <Card className="divide-y divide-border">
+            <Card className="divide-y divide-border overflow-hidden">
               {txs.map((t) => (
                 <Row
                   key={t.id}
@@ -337,16 +337,16 @@ function Row({
   return (
     <div
       className={cn(
-        "relative px-4 md:px-5 py-3.5 flex items-center gap-3 md:gap-4 group",
+        "relative pl-5 md:pl-6 pr-4 md:pr-5 py-3.5 flex items-center gap-3 md:gap-4 group",
         tx.isTransfer && "opacity-50",
       )}
     >
       <span
         aria-hidden
-        className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full"
+        className="absolute left-0 top-0 bottom-0 w-1"
         style={{ background: color }}
       />
-      <div className="flex-1 min-w-0 pl-1">
+      <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2">
           <span className="text-[15px] md:text-sm tracking-tight truncate font-medium md:font-normal">
             {tx.merchantClean || tx.merchantRaw}

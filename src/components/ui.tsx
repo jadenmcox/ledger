@@ -15,35 +15,26 @@ export function PageHeader({
   right?: React.ReactNode;
 }) {
   return (
-    <div className="px-5 md:px-12 pt-6 md:pt-10 pb-6 md:pb-8 relative">
+    <div className="px-5 md:px-12 pt-8 md:pt-14 pb-6 md:pb-10 relative">
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-5 md:gap-6">
         <div className="min-w-0">
           {eyebrow && (
-            <div
-              className="inline-flex items-center gap-2 text-foreground-muted text-[10px] tracking-[0.2em] uppercase mb-4 rise"
-              style={{ ["--i" as string]: 0 }}
-            >
+            <div className="inline-flex items-center gap-2 text-foreground-faint text-[10px] tracking-[0.25em] uppercase mb-3">
               <span className="size-1 rounded-full bg-blush" />
               {eyebrow}
             </div>
           )}
-          <h1
-            className="text-3xl md:text-[2.75rem] leading-[1.05] font-semibold tracking-[-0.035em] rise"
-            style={{ ["--i" as string]: 1 }}
-          >
+          <h1 className="text-3xl md:text-[2.5rem] leading-[1.1] font-semibold tracking-[-0.03em]">
             {title}
             {italic && (
               <>
                 {" "}
-                <span className="text-blush-deep">{italic}</span>
+                <span className="text-foreground-faint font-normal">{italic}</span>
               </>
             )}
           </h1>
           {subtitle && (
-            <p
-              className="mt-3 text-foreground-muted text-sm md:text-[15px] max-w-xl leading-relaxed rise"
-              style={{ ["--i" as string]: 2 }}
-            >
+            <p className="mt-2.5 text-foreground-muted text-sm max-w-xl">
               {subtitle}
             </p>
           )}
@@ -147,7 +138,7 @@ export function Card({
   return (
     <div
       className={cn(
-        "bg-surface/95 backdrop-blur-sm border border-border rounded-2xl md:rounded-3xl shadow-[0_2px_8px_-4px] shadow-foreground/[0.06]",
+        "bg-surface border border-border rounded-2xl",
         className,
       )}
     >
@@ -168,23 +159,23 @@ export function Stat({
   tone?: "default" | "gold" | "sage" | "clay" | "peach" | "blush" | "blue";
 }) {
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-1.5">
       <Label className="mb-0">{label}</Label>
       <div
         className={cn(
-          "mono text-[1.75rem] md:text-4xl tracking-tight tabular leading-none",
-          tone === "sage" && "text-sage-deep",
-          tone === "gold" && "text-blush-deep",
-          tone === "peach" && "text-peach-deep",
-          tone === "clay" && "text-blush-deep",
+          "mono text-2xl md:text-[1.75rem] tracking-[-0.02em] tabular leading-none font-medium",
           tone === "blush" && "text-blush-deep",
-          tone === "blue" && "text-blue-deep",
+          tone === "blue" && "text-foreground",
+          tone === "peach" && "text-foreground",
+          tone === "sage" && "text-foreground",
+          tone === "gold" && "text-foreground",
+          tone === "clay" && "text-foreground",
         )}
       >
         {value}
       </div>
       {hint && (
-        <div className="text-xs text-foreground-faint tracking-tight">
+        <div className="text-[11px] text-foreground-faint tracking-tight">
           {hint}
         </div>
       )}
@@ -242,11 +233,12 @@ export function HeroStat({
       <Label className="mb-0">{label}</Label>
       <div
         className={cn(
-          "mono tabular text-[3rem] md:text-[5rem] leading-[0.95] tracking-[-0.045em] font-semibold",
+          "mono tabular text-[2.5rem] md:text-[3.5rem] leading-[1] tracking-[-0.035em] font-semibold",
           tone === "blush" && "text-blush-deep",
           tone === "blue" && "text-blue-deep",
           tone === "peach" && "text-peach-deep",
           tone === "sage" && "text-sage-deep",
+          tone === "default" && "text-foreground",
         )}
       >
         {value}
@@ -255,9 +247,9 @@ export function HeroStat({
         {delta && (
           <span
             className={cn(
-              "inline-flex items-center gap-1 text-xs mono tabular",
+              "inline-flex items-center gap-1 text-[11px] mono tabular",
               delta.direction === "up" && "text-blush-deep",
-              delta.direction === "down" && "text-blue-deep",
+              delta.direction === "down" && "text-foreground-muted",
               delta.direction === "flat" && "text-foreground-faint",
             )}
           >
@@ -272,7 +264,7 @@ export function HeroStat({
           </span>
         )}
         {hint && (
-          <span className="text-xs text-foreground-faint tracking-tight">
+          <span className="text-[11px] text-foreground-faint tracking-tight">
             {hint}
           </span>
         )}
@@ -330,19 +322,14 @@ export function SectionHeader({
   right?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-baseline justify-between gap-4 mb-5">
+    <div className="flex items-baseline justify-between gap-4 mb-4">
       <div className="min-w-0">
-        <h2 className="serif text-xl md:text-2xl leading-tight tracking-tight truncate">
+        <h2 className="text-sm font-medium tracking-tight truncate text-foreground">
           {title}
-          {italic && (
-            <>
-              {" "}
-              <span className="serif-italic text-blush-deep">{italic}</span>
-            </>
-          )}
+          {italic && <span className="text-foreground-faint font-normal">{italic}</span>}
         </h2>
         {hint && (
-          <div className="text-[11px] text-foreground-faint tracking-tight mt-1">
+          <div className="text-[11px] text-foreground-faint tracking-tight mt-0.5">
             {hint}
           </div>
         )}

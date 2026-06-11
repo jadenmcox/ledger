@@ -82,16 +82,16 @@ function LogoMark({ size = 22 }: { size?: number }) {
 export function DesktopNav() {
   const pathname = usePathname();
   return (
-    <aside className="hidden md:flex md:w-64 lg:w-72 shrink-0 flex-col bg-surface/55 backdrop-blur-md border-r border-border relative z-10">
-      <div className="px-8 pt-10 pb-8">
+    <aside className="hidden md:flex md:w-60 lg:w-64 shrink-0 flex-col bg-transparent border-r border-border relative z-10">
+      <div className="px-7 pt-10 pb-10">
         <Link href="/dashboard" className="block">
-          <div className="text-foreground-faint text-[10px] tracking-[0.3em] uppercase mb-2">
+          <Wordmark />
+          <div className="text-foreground-faint text-[10px] tracking-[0.3em] uppercase mt-2.5">
             Personal
           </div>
-          <Wordmark />
         </Link>
       </div>
-      <nav className="flex-1 px-4 space-y-1">
+      <nav className="flex-1 px-3 space-y-0.5">
         {items.map((item, idx) => {
           const prev = items[idx - 1];
           const showDivider = prev && prev.group !== item.group;
@@ -101,28 +101,25 @@ export function DesktopNav() {
           return (
             <Fragment key={item.href}>
               {showDivider && (
-                <div className="px-4 pt-5 pb-1 text-[10px] tracking-[0.3em] uppercase text-foreground-faint">
+                <div className="px-4 pt-6 pb-2 text-[10px] tracking-[0.3em] uppercase text-foreground-faint">
                   Setup
                 </div>
               )}
             <Link
               href={item.href}
               className={cn(
-                "group relative flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm transition-colors overflow-hidden",
+                "group relative flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition-colors",
                 active
-                  ? "text-sage-deep"
-                  : "text-foreground-muted hover:text-foreground hover:bg-surface-2",
+                  ? "text-blush-deep"
+                  : "text-foreground-muted hover:text-foreground hover:bg-surface-2/60",
               )}
             >
               {active && (
                 <motion.span
                   layoutId="desktop-nav-pill"
-                  className="absolute inset-0 rounded-xl bg-gradient-to-r from-blush-tint via-blush-tint/70 to-transparent"
+                  className="absolute inset-0 rounded-lg bg-blush-tint"
                   transition={{ type: "spring", stiffness: 400, damping: 32 }}
                 />
-              )}
-              {active && (
-                <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-blush z-10" />
               )}
               <Icon
                 className={cn(
@@ -131,17 +128,13 @@ export function DesktopNav() {
                 )}
                 strokeWidth={1.75}
               />
-              <span className="tracking-tight relative z-10">{item.label}</span>
-              {active && (
-                <span className="ml-auto size-1.5 rounded-full bg-sage-deep relative z-10" />
-              )}
+              <span className="tracking-tight relative z-10 font-medium">{item.label}</span>
             </Link>
             </Fragment>
           );
         })}
       </nav>
-      <div className="p-6 text-[10px] tracking-[0.2em] uppercase text-foreground-faint flex items-center gap-2">
-        <span className="size-1.5 rounded-full bg-blush drift" />
+      <div className="p-7 text-[10px] tracking-[0.25em] uppercase text-foreground-faint">
         v0.1 — local
       </div>
     </aside>
@@ -207,8 +200,7 @@ export function MobileHeader() {
       <Link href="/dashboard" className="block">
         <Wordmark size="md" />
       </Link>
-      <div className="text-[10px] tracking-[0.25em] uppercase text-foreground-faint inline-flex items-center gap-1.5">
-        <span className="size-1 rounded-full bg-blush" />
+      <div className="text-[10px] tracking-[0.25em] uppercase text-foreground-faint">
         {title}
       </div>
     </header>
