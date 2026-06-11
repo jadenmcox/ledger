@@ -3,7 +3,7 @@ import { accounts, balanceSnapshots, transactions, plaidItems } from "@/db/schem
 import { and, eq, gte, sql } from "drizzle-orm";
 import { Container, PageHeader } from "@/components/ui";
 import { AccountsClient } from "./client";
-import { PlaidConnect } from "./PlaidConnect";
+import { PlaidConnectButton, PlaidItemsList } from "./PlaidConnect";
 import { format, subDays, startOfDay } from "date-fns";
 
 export const dynamic = "force-dynamic";
@@ -101,13 +101,14 @@ export default async function AccountsPage() {
         subtitle="Checking, savings, credit cards, retirement, investments — every balance in one place."
       />
       <Container>
-        <div className="space-y-10">
+        <div className="space-y-8">
+          <PlaidConnectButton />
           <AccountsClient
             initial={rows}
             today={format(new Date(), "yyyy-MM-dd")}
             trends={trendByAccount}
+            linkedBanksSlot={<PlaidItemsList items={plaidItemRows} />}
           />
-          <PlaidConnect items={plaidItemRows} />
         </div>
       </Container>
     </>

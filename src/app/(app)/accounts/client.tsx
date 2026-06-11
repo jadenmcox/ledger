@@ -37,27 +37,29 @@ const typeLabel: Record<string, string> = {
   other: "Other",
 };
 
-const typeGroup: Record<string, "asset" | "debt" | "tax"> = {
-  checking: "asset",
-  savings: "asset",
-  hys: "asset",
-  cash: "asset",
-  brokerage: "asset",
+const typeGroup: Record<string, "debt" | "cash" | "investments"> = {
+  checking: "cash",
+  savings: "cash",
+  hys: "cash",
+  cash: "cash",
   credit: "debt",
   loan: "debt",
-  roth_ira: "tax",
-  traditional_401k: "tax",
-  hsa: "tax",
-  other: "asset",
+  brokerage: "investments",
+  roth_ira: "investments",
+  traditional_401k: "investments",
+  hsa: "investments",
+  other: "cash",
 };
 
 export function AccountsClient({
   initial,
   trends = {},
+  linkedBanksSlot,
 }: {
   initial: Account[];
   today: string;
   trends?: Record<number, number[]>;
+  linkedBanksSlot?: React.ReactNode;
 }) {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Account | null>(null);
@@ -98,12 +100,6 @@ export function AccountsClient({
         trends={trends}
       />
 
-      <div className="flex justify-end">
-        <Button variant="primary" onClick={() => setAdding(true)}>
-          <Plus className="size-4" strokeWidth={1.5} /> New account
-        </Button>
-      </div>
-
       {archived.length > 0 && (
         <div>
           <div className="flex items-baseline gap-3 mb-4">
@@ -128,6 +124,14 @@ export function AccountsClient({
           />
         </div>
       )}
+
+      {linkedBanksSlot}
+
+      <div className="flex justify-end">
+        <Button variant="primary" onClick={() => setAdding(true)}>
+          <Plus className="size-4" strokeWidth={1.5} /> New account
+        </Button>
+      </div>
     </div>
   );
 }
@@ -153,24 +157,24 @@ function AccountList({
 
   // Group by category
   const groups = {
-    asset: [] as Account[],
-    tax: [] as Account[],
     debt: [] as Account[],
+    cash: [] as Account[],
+    investments: [] as Account[],
   };
   for (const a of accounts) {
-    groups[typeGroup[a.type] || "asset"].push(a);
+    groups[typeGroup[a.type] || "cash"].push(a);
   }
 
   return (
     <div className={`space-y-8 ${faded ? "opacity-60" : ""}`}>
-      {(["asset", "tax", "debt"] as const).map((g) => {
+      {(["debt", "cash", "investments"] as const).map((g) => {
         const list = groups[g];
         if (list.length === 0) return null;
         const total = list.reduce((s, a) => s + a.currentBalanceCents, 0);
         const groupName = {
-          asset: "Cash & investments",
-          tax: "Tax-advantaged",
           debt: "Debt",
+          cash: "Cash",
+          investments: "Investments",
         }[g];
         return (
           <div key={g}>
