@@ -101,13 +101,13 @@ export default async function AccountsPage() {
         subtitle="Checking, savings, credit cards, retirement, investments — every balance in one place."
       />
       <Container>
-        <div className="space-y-12">
-          <PlaidConnect items={plaidItemRows} />
+        <div className="space-y-10">
           <AccountsClient
             initial={rows}
             today={format(new Date(), "yyyy-MM-dd")}
             trends={trendByAccount}
           />
+          <PlaidConnect items={plaidItemRows} />
         </div>
       </Container>
     </>
