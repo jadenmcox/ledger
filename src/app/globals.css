@@ -1,15 +1,15 @@
 @import "tailwindcss";
 
 :root {
-  /* Warm pearl paper — a touch of rose in the cream */
-  --background: #fbf7f4;
+  /* Modern white with a whisper of pink */
+  --background: #fdfafb;
   --surface: #ffffff;
-  --surface-2: #f4eff1;
-  --foreground: #1a1530;
-  --foreground-muted: #635c7a;
-  --foreground-faint: #a59fb8;
-  --border: #ece6ec;
-  --border-strong: #d9d0db;
+  --surface-2: #fdeef3;
+  --foreground: #1a1325;
+  --foreground-muted: #6b5e75;
+  --foreground-faint: #b8acbb;
+  --border: #f1e6eb;
+  --border-strong: #e3d2da;
 
   /* Ink — primary brand, deep midnight indigo
      (these keep the "sage" variable names so existing classes
@@ -124,27 +124,8 @@ body {
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
-/* Atmospheric background — soft pink/blue/lavender light leaks
-   with a faint grain to keep it from feeling flat */
 body {
   background-color: var(--background);
-  background-image:
-    radial-gradient(at 8% 4%, rgba(236, 99, 133, 0.18) 0px, transparent 42%),
-    radial-gradient(at 92% 8%, rgba(184, 163, 212, 0.22) 0px, transparent 40%),
-    radial-gradient(at 4% 96%, rgba(111, 155, 217, 0.18) 0px, transparent 45%),
-    radial-gradient(at 96% 90%, rgba(242, 144, 112, 0.16) 0px, transparent 42%);
-  background-attachment: fixed;
-}
-
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  opacity: 0.35;
-  mix-blend-mode: multiply;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.1 0 0 0 0 0.08 0 0 0 0 0.18 0 0 0 0.05 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
 }
 
 /* Display headings — Inter, tightened tracking, semibold.

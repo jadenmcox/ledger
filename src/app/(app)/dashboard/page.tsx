@@ -244,9 +244,8 @@ export default async function DashboardPage() {
   return (
     <>
       <PageHeader
-        eyebrow={format(now, "EEEE · MMMM d, yyyy").toUpperCase()}
-        title={format(now, "MMMM")}
-        italic={String(now.getFullYear())}
+        eyebrow={format(now, "EEEE · MMMM d, yyyy")}
+        title={format(now, "MMMM yyyy")}
         subtitle={`${daysLeft} days left this month.`}
       />
       <Container className="pb-32 md:pb-16">
@@ -266,109 +265,97 @@ export default async function DashboardPage() {
             }
           />
         ) : (
-          <div className="space-y-12 md:space-y-16">
-            {/* HERO BAND */}
-            <div className="relative overflow-hidden rounded-3xl border border-border bg-surface/80 backdrop-blur-sm">
-              <div
-                aria-hidden
-                className="absolute -top-32 -right-24 size-[28rem] rounded-full blur-3xl opacity-60"
-                style={{ background: "var(--blush-soft)" }}
+          <div className="space-y-10 md:space-y-14">
+            {/* HERO */}
+            <div className="grid grid-cols-1 md:grid-cols-[1.5fr_auto] gap-8 md:gap-12 items-start">
+              <HeroStat
+                label="Spent this month"
+                value={formatCents(spend)}
+                tone="blush"
+                delta={
+                  lastMonthSpend > 0
+                    ? {
+                        value: `${paceDelta > 0 ? "+" : ""}${paceDelta.toFixed(0)}% vs. last month pace`,
+                        direction:
+                          paceDelta > 3
+                            ? "up"
+                            : paceDelta < -3
+                              ? "down"
+                              : "flat",
+                      }
+                    : undefined
+                }
+                hint={`${txThisMonth.length} transactions · ${daysLeft} days left`}
               />
-              <div
-                aria-hidden
-                className="absolute -bottom-32 -left-24 size-[24rem] rounded-full blur-3xl opacity-50"
-                style={{ background: "var(--blue-tint)" }}
+              <Gauge
+                value={savingsRate}
+                max={100}
+                label="Saved"
+                valueDisplay={`${savingsRate.toFixed(0)}%`}
+                hint={income > 0 ? `of ${formatCentsCompact(income)}` : "no income yet"}
+                color="var(--blush-deep)"
+                size={132}
               />
-              <div className="relative grid grid-cols-1 md:grid-cols-[1.4fr_1fr] gap-8 md:gap-10 p-6 md:p-10">
-                <HeroStat
-                  label="Spent this month"
-                  value={formatCents(spend)}
-                  tone="blush"
-                  delta={
-                    lastMonthSpend > 0
-                      ? {
-                          value: `${paceDelta > 0 ? "+" : ""}${paceDelta.toFixed(0)}% vs. last month pace`,
-                          direction:
-                            paceDelta > 3
-                              ? "up"
-                              : paceDelta < -3
-                                ? "down"
-                                : "flat",
-                        }
-                      : undefined
-                  }
-                  hint={`${txThisMonth.length} transactions · ${daysLeft} days left`}
-                />
-                <div className="flex flex-col items-start md:items-end gap-6 md:gap-4">
-                  <Gauge
-                    value={savingsRate}
-                    max={100}
-                    label="Savings rate"
-                    valueDisplay={`${savingsRate.toFixed(0)}%`}
-                    hint={income > 0 ? `of ${formatCentsCompact(income)} earned` : "no income yet"}
-                    color="var(--blue)"
-                    size={170}
-                  />
-                </div>
-              </div>
             </div>
 
             {/* QUICK STATS */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-10">
-              <Stat
-                label="Income this month"
-                value={formatCents(income)}
-                tone="blue"
-              />
-              <Stat
-                label="Net"
-                value={formatCents(net, { signed: true })}
-                tone={net >= 0 ? "blue" : "blush"}
-              />
-              <Stat
-                label="Projected total"
-                value={formatCents(forecastSpend)}
-                tone={
-                  totalBudget > 0 && forecastSpend > totalBudget
-                    ? "blush"
-                    : undefined
-                }
-                hint={
-                  totalBudget > 0
-                    ? `${forecastSpend > totalBudget ? "over" : "under"} ${formatCentsCompact(totalBudget)} budget`
-                    : "at current pace"
-                }
-              />
-              <Stat
-                label="Last month"
-                value={formatCents(lastMonthSpend)}
-                hint="full month spend"
-              />
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border rounded-2xl overflow-hidden border border-border">
+              <div className="bg-surface p-5 md:p-6">
+                <Stat label="Income" value={formatCents(income)} />
+              </div>
+              <div className="bg-surface p-5 md:p-6">
+                <Stat
+                  label="Net"
+                  value={formatCents(net, { signed: true })}
+                  tone={net < 0 ? "blush" : "default"}
+                />
+              </div>
+              <div className="bg-surface p-5 md:p-6">
+                <Stat
+                  label="Projected"
+                  value={formatCents(forecastSpend)}
+                  tone={totalBudget > 0 && forecastSpend > totalBudget ? "blush" : "default"}
+                  hint={
+                    totalBudget > 0
+                      ? `${forecastSpend > totalBudget ? "over" : "under"} ${formatCentsCompact(totalBudget)} budget`
+                      : "at current pace"
+                  }
+                />
+              </div>
+              <div className="bg-surface p-5 md:p-6">
+                <Stat
+                  label="Last month"
+                  value={formatCents(lastMonthSpend)}
+                  hint="full month"
+                />
+              </div>
             </div>
 
             {/* PAYCHECK CYCLE */}
-            <Card className="p-6 md:p-8">
-              <div className="flex items-baseline justify-between mb-4">
-                <div>
+            <Card className="p-6 md:p-7">
+              <div className="flex items-baseline justify-between mb-4 gap-4">
+                <div className="min-w-0">
                   <Label>Pay period</Label>
-                  <h3 className="serif text-2xl mt-1">
-                    Day {daysIntoCycle + 1}{" "}
-                    <span className="italic text-foreground-muted">
+                  <div className="flex items-baseline gap-2 mt-1">
+                    <span className="text-xl font-semibold tracking-tight">
+                      Day {daysIntoCycle + 1}
+                    </span>
+                    <span className="text-sm text-foreground-faint">
                       of {cycleLengthDays}
                     </span>
-                  </h3>
-                  <div className="text-xs text-foreground-faint mt-1 mono tabular">
-                    {format(cycleStart, "MMM d")} → {format(cycleEnd, "MMM d")}
+                  </div>
+                  <div className="text-[11px] text-foreground-faint mt-1 mono tabular">
+                    {format(cycleStart, "MMM d")} – {format(cycleEnd, "MMM d")}
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="mono tabular text-2xl">
+                  <div className="mono tabular text-xl font-medium">
                     {formatCents(cycleSpend)}
                   </div>
-                  <div className="text-[11px] text-foreground-faint tracking-tight mt-0.5">
+                  <div className="text-[11px] text-foreground-faint tracking-tight mt-1">
                     {paycheckAmt > 0
-                      ? `of ${formatCents(paycheckAmt)} ${cycleIncome > 0 ? "earned" : "expected"} · ${daysLeftInCycle} days left`
-                      : `${daysLeftInCycle} days left in period`}
+                      ? `of ${formatCents(paycheckAmt)} ${cycleIncome > 0 ? "earned" : "expected"}`
+                      : `${daysLeftInCycle} days left`}
                   </div>
                 </div>
               </div>
@@ -377,12 +364,11 @@ export default async function DashboardPage() {
                   <ProgressBar
                     value={cycleSpend}
                     max={Math.max(paycheckAmt, 1)}
-                    color={
-                      cycleSpendPct > 100 ? "var(--blush-deep)" : "var(--blue)"
-                    }
+                    color={cycleSpendPct > 100 ? "var(--blush-deep)" : "var(--blush)"}
                   />
-                  <div className="text-[11px] text-foreground-faint mt-2 mono tabular">
-                    {cycleSpendPct.toFixed(0)}% of paycheck spent
+                  <div className="flex items-center justify-between text-[11px] text-foreground-faint mt-2 mono tabular">
+                    <span>{cycleSpendPct.toFixed(0)}% spent</span>
+                    <span>{daysLeftInCycle} days left</span>
                   </div>
                 </>
               ) : (
@@ -397,9 +383,9 @@ export default async function DashboardPage() {
             {quietAccounts.length > 0 && (
               <Card className="p-5 md:p-6 border-dashed">
                 <div className="flex items-start gap-4">
-                  <div className="size-8 rounded-full bg-blush-tint inline-flex items-center justify-center shrink-0">
+                  <div className="size-8 rounded-full bg-surface-2 inline-flex items-center justify-center shrink-0">
                     <ArrowRight
-                      className="size-4 text-blush-deep"
+                      className="size-4 text-foreground-muted"
                       strokeWidth={2}
                     />
                   </div>
@@ -422,11 +408,10 @@ export default async function DashboardPage() {
             )}
 
             {/* CHARTS ROW */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
-              <Card className="p-6 md:p-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
+              <Card className="p-6 md:p-7">
                 <SectionHeader
-                  title="Need · "
-                  italic="want · save"
+                  title="Need, want, save"
                   hint="share of monthly spend"
                 />
                 <ClassificationDonut data={donutData} total={spend} />
@@ -458,26 +443,21 @@ export default async function DashboardPage() {
                 </div>
               </Card>
 
-              <Card className="p-6 md:p-8">
-                <SectionHeader
-                  title="Last "
-                  italic="30 days"
-                  hint="daily spend"
-                />
+              <Card className="p-6 md:p-7">
+                <SectionHeader title="Last 30 days" hint="daily spend" />
                 <ThirtyDayArea data={dailyData} />
               </Card>
             </div>
 
             {/* TOP CATEGORIES + MERCHANTS */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
               <div>
                 <SectionHeader
-                  title="Top "
-                  italic="categories"
+                  title="Top categories"
                   right={
                     <Link
                       href="/categories"
-                      className="text-xs text-foreground-muted hover:text-blush-deep transition-colors tracking-tight inline-flex items-center gap-1"
+                      className="text-xs text-foreground-muted hover:text-foreground transition-colors tracking-tight inline-flex items-center gap-1"
                     >
                       manage <ArrowRight className="size-3" strokeWidth={1.5} />
                     </Link>
@@ -554,11 +534,7 @@ export default async function DashboardPage() {
               </div>
 
               <div>
-                <SectionHeader
-                  title="Top "
-                  italic="merchants"
-                  hint="this month"
-                />
+                <SectionHeader title="Top merchants" hint="this month" />
                 {topMerchants.length === 0 ? (
                   <div className="text-foreground-faint text-sm py-8">
                     Nothing yet.
@@ -578,7 +554,7 @@ export default async function DashboardPage() {
                               className="h-1.5 rounded-full bg-surface-2 overflow-hidden"
                             >
                               <div
-                                className="h-full bg-blush/60 rounded-full"
+                                className="h-full bg-blush rounded-full"
                                 style={{ width: `${ratio * 100}%` }}
                               />
                             </div>
@@ -597,8 +573,7 @@ export default async function DashboardPage() {
             {recurring.length > 0 && (
               <div>
                 <SectionHeader
-                  title="Coming "
-                  italic="up"
+                  title="Coming up"
                   hint="detected recurring expenses"
                 />
                 <Card className="divide-y divide-border">
@@ -608,7 +583,7 @@ export default async function DashboardPage() {
                       className="px-5 py-4 flex items-center gap-4"
                     >
                       <Repeat
-                        className="size-3.5 text-blush-deep shrink-0"
+                        className="size-3.5 text-foreground-faint shrink-0"
                         strokeWidth={1.5}
                       />
                       <div className="flex-1 min-w-0">
