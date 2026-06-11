@@ -128,24 +128,25 @@ export function PlaidItemsList({ items }: { items: PlaidItemRow[] }) {
         {items.map((it) => (
           <div
             key={it.id}
-            className="px-5 py-4 flex items-center gap-4 group"
+            className="px-4 md:px-5 py-3.5 md:py-4 flex items-center gap-3 md:gap-4 group"
           >
             <div className="flex-1 min-w-0">
-              <div className="flex items-baseline gap-3 mb-1">
-                <span className="tracking-tight">
+              <div className="flex items-baseline gap-2 mb-0.5">
+                <span className="tracking-tight truncate">
                   {it.institutionName ?? "Unknown institution"}
                 </span>
+              </div>
+              <div className="flex items-baseline gap-2 text-xs text-foreground-faint">
                 <Pill>{it.accountCount} accounts</Pill>
                 {it.lastError && <Pill>error</Pill>}
-              </div>
-              <div className="text-xs text-foreground-faint">
-                {it.lastSyncedAt
-                  ? `Last sync ${format(new Date(it.lastSyncedAt), "MMM d, h:mm a")}`
-                  : "Not synced yet"}
-                {it.lastError ? ` — ${it.lastError}` : ""}
+                <span className="truncate">
+                  {it.lastSyncedAt
+                    ? `Synced ${format(new Date(it.lastSyncedAt), "MMM d, h:mm a")}`
+                    : "Not synced yet"}
+                </span>
               </div>
             </div>
-            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="hidden md:flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
               <button
                 onClick={() => sync(it.id)}
                 className="size-8 inline-flex items-center justify-center text-foreground-faint hover:text-foreground rounded-md hover:bg-surface-2"

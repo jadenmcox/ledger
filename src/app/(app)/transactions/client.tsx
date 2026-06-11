@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useSearchParams } from "next/navigation";
 import type { Account, Category, Transaction } from "@/db/schema";
 import { Card, Input, Label, Pill, Button } from "@/components/ui";
+import { Sheet } from "@/components/sheet";
 import { cn, formatCents } from "@/lib/utils";
 import { format } from "date-fns";
 import Link from "next/link";
@@ -440,13 +441,8 @@ function EditTxModal({
 }) {
   const [pending, startTransition] = useTransition();
   return (
-    <div
-      className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4"
-      onClick={onClose}
-    >
-      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md">
-        <Card className="w-full p-6">
-          <Label>Edit transaction</Label>
+    <Sheet open onClose={onClose}>
+      <Label>Edit transaction</Label>
           <form
             action={(fd) =>
               startTransition(async () => {
@@ -517,9 +513,7 @@ function EditTxModal({
               </Button>
             </div>
           </form>
-        </Card>
-      </div>
-    </div>
+    </Sheet>
   );
 }
 
@@ -544,12 +538,7 @@ function CategoryPicker({
   );
 
   return (
-    <div
-      className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4"
-      onClick={onClose}
-    >
-      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md">
-      <Card className="w-full p-6">
+    <Sheet open onClose={onClose}>
         <Label>Categorize</Label>
         <h3 className="serif text-xl mt-1 mb-1 truncate">
           {tx.merchantClean || tx.merchantRaw}
@@ -630,8 +619,6 @@ function CategoryPicker({
             </Button>
           )}
         </div>
-      </Card>
-      </div>
-    </div>
+    </Sheet>
   );
 }
