@@ -16,8 +16,8 @@ export function PageHeader({
 }) {
   return (
     <div className="px-5 md:px-12 pt-6 md:pt-14 pb-4 md:pb-10 relative">
-      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 md:gap-6">
-        <div className="min-w-0">
+      <div className="flex items-start md:items-end justify-between gap-3 md:gap-6">
+        <div className="min-w-0 flex-1">
           {eyebrow && (
             <div className="inline-flex items-center gap-2 text-foreground-faint text-[10px] tracking-[0.25em] uppercase mb-2 md:mb-3">
               <span className="size-1 rounded-full bg-blush" />
@@ -40,7 +40,7 @@ export function PageHeader({
           )}
         </div>
         {right && (
-          <div className="shrink-0 flex justify-end md:justify-start">
+          <div className="shrink-0 flex justify-end pt-1 md:pt-0">
             {right}
           </div>
         )}

@@ -12,6 +12,19 @@ import {
 import { eq, and } from "drizzle-orm";
 import { plaid } from "./plaid";
 import { applyRules, getRules } from "./categorize";
+import type { CategoryRule } from "@/db/schema";
+
+function pickCategory(
+  merchant: string,
+  plaidPfcPrimary: string | null | undefined,
+  rules: CategoryRule[],
+  userCategories: Category[],
+): number | null {
+  return (
+    applyRules(merchant, rules) ??
+    mapPlaidCategory(plaidPfcPrimary, userCategories)
+  );
+}
 import { dedupeHash } from "./csv-import";
 import { format } from "date-fns";
 import crypto from "node:crypto";
@@ -222,6 +235,16 @@ export async function applyTransactionsDelta(
     // same hash the CSV importer uses — and upgrade it to plaid source.
     const existingByExt = await findExistingByExternalId(t.transaction_id);
     if (existingByExt) {
+      // Backfill the category if the existing row is still uncategorized —
+      // a rule or Plaid PFC hint may now resolve to something.
+      const backfilledCategoryId =
+        existingByExt.categoryId ??
+        pickCategory(
+          merchant,
+          t.personal_finance_category?.primary,
+          rules,
+          userCategories,
+        );
       await db
         .update(transactions)
         .set({
@@ -229,6 +252,7 @@ export async function applyTransactionsDelta(
           merchantRaw: merchant,
           date,
           isPending: !!t.pending,
+          categoryId: backfilledCategoryId,
         })
         .where(eq(transactions.id, existingByExt.id));
       continue;
@@ -236,12 +260,12 @@ export async function applyTransactionsDelta(
 
     const hash = dedupeHash(accountId, date, cents, merchant);
     const existingByHash = await findExistingByHash(hash);
-    const categoryId =
-      applyRules(merchant, rules) ??
-      mapPlaidCategory(
-        t.personal_finance_category?.primary,
-        userCategories,
-      );
+    const categoryId = pickCategory(
+      merchant,
+      t.personal_finance_category?.primary,
+      rules,
+      userCategories,
+    );
 
     if (existingByHash) {
       await db
@@ -251,6 +275,7 @@ export async function applyTransactionsDelta(
           source: "plaid",
           merchantRaw: merchant,
           isPending: !!t.pending,
+          categoryId: existingByHash.categoryId ?? categoryId,
         })
         .where(eq(transactions.id, existingByHash.id));
       continue;
@@ -359,6 +384,18 @@ export async function syncItem(itemRowId: number) {
     .where(eq(plaidItems.id, itemRowId));
 
   return { added: totalAdded, modified: totalModified, removed: totalRemoved };
+}
+
+/**
+ * Forces a full re-sync of every Plaid item by resetting their cursors.
+ * applyTransactionsDelta backfills categoryId on already-imported rows that
+ * are still uncategorized, so this is the path that "fixes" a batch of
+ * uncategorized transactions after a user has added rules or after the
+ * Plaid PFC → user-category mapping changes.
+ */
+export async function recategorizeAllFromPlaid() {
+  await db.update(plaidItems).set({ cursor: null });
+  return syncAllItems();
 }
 
 export async function syncAllItems() {
