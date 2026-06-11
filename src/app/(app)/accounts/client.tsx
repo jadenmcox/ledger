@@ -127,8 +127,12 @@ export function AccountsClient({
 
       {linkedBanksSlot}
 
-      <div className="flex justify-end">
-        <Button variant="primary" onClick={() => setAdding(true)}>
+      <div className="flex md:justify-end">
+        <Button
+          variant="primary"
+          onClick={() => setAdding(true)}
+          className="w-full md:w-auto justify-center"
+        >
           <Plus className="size-4" strokeWidth={1.5} /> New account
         </Button>
       </div>
@@ -194,27 +198,27 @@ function AccountList({
                 return (
                 <div
                   key={a.id}
-                  className="px-5 py-4 flex items-center gap-4 group"
+                  className="px-4 md:px-5 py-3.5 md:py-4 flex items-center gap-3 md:gap-4 group"
                 >
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-baseline gap-3 mb-1">
+                    <div className="flex items-baseline gap-2 mb-0.5">
                       <Link
                         href={`/accounts/${a.id}`}
-                        className="tracking-tight hover:text-blush-deep transition-colors inline-flex items-center gap-1.5"
+                        className="tracking-tight hover:text-blush-deep transition-colors truncate inline-flex items-center gap-1.5 min-w-0"
                       >
-                        {a.name}
+                        <span className="truncate">{a.name}</span>
                         <ArrowUpRight
-                          className="size-3 opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="size-3 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
                           strokeWidth={1.5}
                         />
                       </Link>
-                      <Pill>{typeLabel[a.type] || a.type}</Pill>
                     </div>
-                    {a.institution && (
-                      <div className="text-xs text-foreground-faint">
-                        {a.institution}
-                      </div>
-                    )}
+                    <div className="flex items-baseline gap-2 text-xs text-foreground-faint">
+                      <Pill>{typeLabel[a.type] || a.type}</Pill>
+                      {a.institution && (
+                        <span className="truncate">{a.institution}</span>
+                      )}
+                    </div>
                   </div>
                   {series.length > 1 && (
                     <div className="hidden sm:block shrink-0">
@@ -226,10 +230,10 @@ function AccountList({
                       />
                     </div>
                   )}
-                  <div className="mono tabular text-base shrink-0">
+                  <div className="mono tabular text-sm md:text-base shrink-0 text-right">
                     {formatCents(a.currentBalanceCents)}
                   </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="hidden md:flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
                       onClick={() => onEdit(a)}
                       className="size-8 inline-flex items-center justify-center text-foreground-faint hover:text-foreground rounded-md hover:bg-surface-2"

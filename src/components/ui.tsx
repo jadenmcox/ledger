@@ -15,16 +15,16 @@ export function PageHeader({
   right?: React.ReactNode;
 }) {
   return (
-    <div className="px-5 md:px-12 pt-8 md:pt-14 pb-6 md:pb-10 relative">
-      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-5 md:gap-6">
+    <div className="px-5 md:px-12 pt-6 md:pt-14 pb-4 md:pb-10 relative">
+      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 md:gap-6">
         <div className="min-w-0">
           {eyebrow && (
-            <div className="inline-flex items-center gap-2 text-foreground-faint text-[10px] tracking-[0.25em] uppercase mb-3">
+            <div className="inline-flex items-center gap-2 text-foreground-faint text-[10px] tracking-[0.25em] uppercase mb-2 md:mb-3">
               <span className="size-1 rounded-full bg-blush" />
               {eyebrow}
             </div>
           )}
-          <h1 className="text-3xl md:text-[2.5rem] leading-[1.1] font-semibold tracking-[-0.03em]">
+          <h1 className="text-[2rem] md:text-[2.5rem] leading-[1.05] font-semibold tracking-[-0.03em]">
             {title}
             {italic && (
               <>
@@ -34,12 +34,16 @@ export function PageHeader({
             )}
           </h1>
           {subtitle && (
-            <p className="mt-2.5 text-foreground-muted text-sm max-w-xl">
+            <p className="mt-2 md:mt-2.5 text-foreground-muted text-sm max-w-xl">
               {subtitle}
             </p>
           )}
         </div>
-        {right && <div className="shrink-0">{right}</div>}
+        {right && (
+          <div className="shrink-0 flex justify-end md:justify-start">
+            {right}
+          </div>
+        )}
       </div>
     </div>
   );
