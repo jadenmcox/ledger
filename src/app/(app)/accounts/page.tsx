@@ -99,17 +99,15 @@ export default async function AccountsPage() {
         eyebrow="ACCOUNTS"
         title="Accounts"
         subtitle="Checking, savings, credit cards, retirement, investments — every balance in one place."
+        right={<PlaidConnectButton />}
       />
       <Container>
-        <div className="space-y-8">
-          <PlaidConnectButton />
-          <AccountsClient
-            initial={rows}
-            today={format(new Date(), "yyyy-MM-dd")}
-            trends={trendByAccount}
-            linkedBanksSlot={<PlaidItemsList items={plaidItemRows} />}
-          />
-        </div>
+        <AccountsClient
+          initial={rows}
+          today={format(new Date(), "yyyy-MM-dd")}
+          trends={trendByAccount}
+          linkedBanksSlot={<PlaidItemsList items={plaidItemRows} />}
+        />
       </Container>
     </>
   );
