@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Card, Label, Input, Button, Pill, ProgressBar } from "@/components/ui";
 import { formatCents } from "@/lib/utils";
-import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
+import { format } from "date-fns";
 import {
   createCategory,
   updateCategory,
@@ -13,7 +12,21 @@ import {
 } from "./actions";
 import type { Category } from "@/db/schema";
 import { classifications } from "@/db/schema";
-import { Plus, Trash2, Pencil, Check, X } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  Pencil,
+  Check,
+  X,
+  ChevronRight,
+} from "lucide-react";
+
+export type CategoryTx = {
+  id: number;
+  date: string;
+  merchant: string;
+  amountCents: number;
+};
 
 const classificationLabel: Record<string, string> = {
   income: "Income",
@@ -27,12 +40,22 @@ const classificationOrder = ["income", "need", "want", "savings"] as const;
 export function CategoriesClient({
   initial,
   spendByCategory = {},
+  txByCategory = {},
 }: {
   initial: Category[];
   spendByCategory?: Record<number, number>;
+  txByCategory?: Record<number, CategoryTx[]>;
 }) {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Category | null>(null);
+  const [expanded, setExpanded] = useState<number | null>(null);
+  const formRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (adding || editing) {
+      formRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [adding, editing]);
 
   const grouped = classificationOrder.map((c) => ({
     classification: c,
@@ -48,13 +71,15 @@ export function CategoriesClient({
       </div>
 
       {(adding || editing) && (
-        <CategoryForm
-          initial={editing}
-          onClose={() => {
-            setAdding(false);
-            setEditing(null);
-          }}
-        />
+        <div ref={formRef}>
+          <CategoryForm
+            initial={editing}
+            onClose={() => {
+              setAdding(false);
+              setEditing(null);
+            }}
+          />
+        </div>
       )}
 
       {grouped.map(({ classification, items }) => {
@@ -89,6 +114,11 @@ export function CategoriesClient({
                   key={cat.id}
                   cat={cat}
                   spent={spendByCategory[cat.id] ?? 0}
+                  txs={txByCategory[cat.id] ?? []}
+                  isExpanded={expanded === cat.id}
+                  onToggle={() =>
+                    setExpanded((prev) => (prev === cat.id ? null : cat.id))
+                  }
                   onEdit={() => setEditing(cat)}
                 />
               ))}
@@ -103,10 +133,16 @@ export function CategoriesClient({
 function CategoryRow({
   cat,
   spent,
+  txs,
+  isExpanded,
+  onToggle,
   onEdit,
 }: {
   cat: Category;
   spent: number;
+  txs: CategoryTx[];
+  isExpanded: boolean;
+  onToggle: () => void;
   onEdit: () => void;
 }) {
   const [editLimit, setEditLimit] = useState(false);
@@ -123,23 +159,31 @@ function CategoryRow({
   };
 
   return (
-    <div className="px-5 py-4 flex items-center gap-4 group">
+    <div className="group">
+    <div className="px-5 py-4 flex items-center gap-4">
+      <button
+        onClick={onToggle}
+        className="size-5 inline-flex items-center justify-center text-foreground-faint hover:text-foreground shrink-0"
+        aria-label={isExpanded ? "Collapse" : "Expand"}
+        aria-expanded={isExpanded}
+      >
+        <ChevronRight
+          className={`size-3.5 transition-transform ${isExpanded ? "rotate-90" : ""}`}
+          strokeWidth={2}
+        />
+      </button>
       <div
         className="size-2.5 rounded-full shrink-0"
         style={{ background: cat.color }}
       />
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2 mb-1.5">
-          <Link
-            href={`/categories/${cat.id}`}
-            className="tracking-tight hover:text-blush-deep transition-colors inline-flex items-center gap-1.5"
+          <button
+            onClick={onToggle}
+            className="tracking-tight hover:text-blush-deep transition-colors text-left"
           >
             {cat.name}
-            <ArrowUpRight
-              className="size-3 opacity-0 group-hover:opacity-100 transition-opacity"
-              strokeWidth={1.5}
-            />
-          </Link>
+          </button>
           {cat.isSystem && <Pill>system</Pill>}
         </div>
         {cat.classification !== "income" && (
@@ -238,6 +282,35 @@ function CategoryRow({
           </button>
         )}
       </div>
+    </div>
+      {isExpanded && (
+        <div className="px-5 pb-4 pl-[3.25rem] bg-surface-2/40">
+          {txs.length === 0 ? (
+            <div className="text-xs text-foreground-faint py-3">
+              No transactions this month.
+            </div>
+          ) : (
+            <ul className="divide-y divide-border/70">
+              {txs.map((t) => (
+                <li
+                  key={t.id}
+                  className="flex items-center gap-3 py-2.5 text-sm"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="tracking-tight truncate">{t.merchant}</div>
+                    <div className="text-[11px] text-foreground-faint mt-0.5">
+                      {format(new Date(t.date), "EEE, MMM d")}
+                    </div>
+                  </div>
+                  <div className="mono tabular text-sm shrink-0">
+                    {formatCents(t.amountCents, { signed: t.amountCents > 0 })}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   );
 }

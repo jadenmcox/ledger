@@ -202,10 +202,9 @@ export default async function InsightsPage() {
                   {movers.slice(0, 8).map((m) => {
                     const up = m.delta > 0;
                     return (
-                      <Link
+                      <div
                         key={m.catId}
-                        href={`/categories/${m.catId}`}
-                        className="block px-5 py-4 hover:bg-surface-2 transition-colors"
+                        className="block px-5 py-4"
                       >
                         <div className="flex items-center gap-4">
                           <span
@@ -237,7 +236,7 @@ export default async function InsightsPage() {
                             </span>
                           </div>
                         </div>
-                      </Link>
+                      </div>
                     );
                   })}
                 </Card>

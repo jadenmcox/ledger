@@ -43,8 +43,10 @@ export function TransactionsHeaderActions() {
 }
 
 function RecategorizeBanner({ count }: { count: number }) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [done, setDone] = useState<number | null>(null);
+  const [errors, setErrors] = useState<string[]>([]);
   return (
     <Card className="p-3 md:p-4 flex items-center gap-3">
       <Sparkles
@@ -52,11 +54,22 @@ function RecategorizeBanner({ count }: { count: number }) {
         strokeWidth={1.75}
       />
       <div className="flex-1 min-w-0 text-xs md:text-sm">
-        {done !== null ? (
-          <span>
-            Categorized <span className="font-medium">{done}</span> from your
-            rules and Plaid&apos;s hints.
+        {errors.length > 0 ? (
+          <span className="text-blush-deep">
+            Plaid sync failed: {errors[0]}
           </span>
+        ) : done !== null ? (
+          done === 0 ? (
+            <span>
+              No new matches. Add a rule by tapping a merchant — it&apos;ll
+              catch every future one.
+            </span>
+          ) : (
+            <span>
+              Categorized <span className="font-medium">{done}</span> from your
+              rules and Plaid&apos;s hints.
+            </span>
+          )
         ) : (
           <span>
             <span className="font-medium">{count}</span> uncategorized — run
@@ -70,8 +83,14 @@ function RecategorizeBanner({ count }: { count: number }) {
         disabled={pending}
         onClick={() =>
           startTransition(async () => {
-            const touched = await recategorizeAll();
-            setDone(touched);
+            try {
+              const res = await recategorizeAll();
+              setDone(res.touched);
+              setErrors(res.errors);
+              router.refresh();
+            } catch (e) {
+              setErrors([e instanceof Error ? e.message : String(e)]);
+            }
           })
         }
       >

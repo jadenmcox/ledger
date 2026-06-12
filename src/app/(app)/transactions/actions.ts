@@ -94,12 +94,17 @@ export async function makeRule(
  * (which backfills categoryId via rules → Plaid PFC on existing rows that
  * are still uncategorized), then applies rules to any non-Plaid rows.
  */
-export async function recategorizeAll() {
-  await recategorizeAllFromPlaid().catch(() => undefined);
-  const touched = await applyRulesToHistory({ onlyUncategorized: true });
+export async function recategorizeAll(): Promise<{
+  touched: number;
+  errors: string[];
+}> {
+  const results = await recategorizeAllFromPlaid();
+  const backfilled = results.reduce((s, r) => s + (r.backfilled ?? 0), 0);
+  const errors = results.map((r) => r.error).filter((e): e is string => !!e);
+  const ruleTouched = await applyRulesToHistory({ onlyUncategorized: true });
   revalidatePath("/transactions");
   revalidatePath("/dashboard");
-  return touched;
+  return { touched: backfilled + ruleTouched, errors };
 }
 
 export async function deleteTransaction(id: number) {
