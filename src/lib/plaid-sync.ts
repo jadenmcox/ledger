@@ -16,13 +16,14 @@ import type { CategoryRule } from "@/db/schema";
 
 function pickCategory(
   merchant: string,
-  plaidPfcPrimary: string | null | undefined,
+  pfc: { primary?: string | null; detailed?: string | null } | null | undefined,
   rules: CategoryRule[],
   userCategories: Category[],
 ): number | null {
   return (
     applyRules(merchant, rules) ??
-    mapPlaidCategory(plaidPfcPrimary, userCategories)
+    mapPlaidDetailed(pfc?.detailed, userCategories) ??
+    mapPlaidCategory(pfc?.primary, userCategories)
   );
 }
 import { dedupeHash } from "./csv-import";
@@ -41,7 +42,17 @@ import type {
 const PLAID_CATEGORY_HINTS: Record<string, string[]> = {
   INCOME: ["income", "salary", "paycheck", "wage"],
   TRANSFER_IN: ["transfer"],
-  TRANSFER_OUT: ["transfer"],
+  TRANSFER_OUT: [
+    "brokerage",
+    "investment",
+    "retirement",
+    "roth",
+    "ira",
+    "401",
+    "hsa",
+    "savings",
+    "transfer",
+  ],
   LOAN_PAYMENTS: ["loan", "mortgage", "debt", "student"],
   BANK_FEES: ["fee", "bank"],
   ENTERTAINMENT: ["entertainment", "fun", "subscription", "streaming"],
@@ -71,6 +82,49 @@ function mapPlaidCategory(
 ): number | null {
   if (!plaidPrimary) return null;
   const hints = PLAID_CATEGORY_HINTS[plaidPrimary];
+  if (!hints) return null;
+  for (const hint of hints) {
+    const match = userCategories.find((c) =>
+      c.name.toLowerCase().includes(hint),
+    );
+    if (match) return match.id;
+  }
+  return null;
+}
+
+// Plaid's `personal_finance_category.detailed` is much more specific than
+// `primary` — e.g. it tells us a TRANSFER_OUT is specifically going to an
+// investment/retirement account vs. just "some transfer". When present and
+// matched, this takes precedence over the primary mapping.
+const PLAID_DETAILED_HINTS: Record<string, string[]> = {
+  TRANSFER_OUT_INVESTMENT_AND_RETIREMENT_FUNDS: [
+    "brokerage",
+    "investment",
+    "retirement",
+    "roth",
+    "ira",
+    "401",
+  ],
+  TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS: [
+    "brokerage",
+    "investment",
+    "retirement",
+    "roth",
+    "ira",
+    "401",
+  ],
+  TRANSFER_OUT_SAVINGS: ["emergency", "savings"],
+  TRANSFER_IN_SAVINGS: ["emergency", "savings"],
+  TRANSFER_OUT_HEALTH_SAVINGS_ACCOUNT: ["hsa", "health"],
+  TRANSFER_IN_HEALTH_SAVINGS_ACCOUNT: ["hsa", "health"],
+};
+
+function mapPlaidDetailed(
+  plaidDetailed: string | null | undefined,
+  userCategories: Category[],
+): number | null {
+  if (!plaidDetailed) return null;
+  const hints = PLAID_DETAILED_HINTS[plaidDetailed];
   if (!hints) return null;
   for (const hint of hints) {
     const match = userCategories.find((c) =>
@@ -213,9 +267,10 @@ export async function applyTransactionsDelta(
   added: PlaidTransaction[],
   modified: PlaidTransaction[],
   removed: RemovedTransaction[],
-) {
+): Promise<{ backfilled: number }> {
   const rules = await getRules();
   const userCategories = await db.select().from(categories);
+  let backfilled = 0;
 
   for (const t of added) {
     const accountId = accountMap.get(t.account_id);
@@ -241,10 +296,11 @@ export async function applyTransactionsDelta(
         existingByExt.categoryId ??
         pickCategory(
           merchant,
-          t.personal_finance_category?.primary,
+          t.personal_finance_category,
           rules,
           userCategories,
         );
+      if (!existingByExt.categoryId && backfilledCategoryId) backfilled++;
       await db
         .update(transactions)
         .set({
@@ -262,12 +318,13 @@ export async function applyTransactionsDelta(
     const existingByHash = await findExistingByHash(hash);
     const categoryId = pickCategory(
       merchant,
-      t.personal_finance_category?.primary,
+      t.personal_finance_category,
       rules,
       userCategories,
     );
 
     if (existingByHash) {
+      if (!existingByHash.categoryId && categoryId) backfilled++;
       await db
         .update(transactions)
         .set({
@@ -328,6 +385,8 @@ export async function applyTransactionsDelta(
       await db.delete(transactions).where(eq(transactions.id, existing.id));
     }
   }
+
+  return { backfilled };
 }
 
 export async function syncItem(itemRowId: number) {
@@ -352,6 +411,7 @@ export async function syncItem(itemRowId: number) {
   let totalAdded = 0;
   let totalModified = 0;
   let totalRemoved = 0;
+  let totalBackfilled = 0;
 
   while (hasMore) {
     const res = await plaid.transactionsSync({
@@ -360,7 +420,7 @@ export async function syncItem(itemRowId: number) {
       count: 500,
     });
     const { added, modified, removed, next_cursor, has_more } = res.data;
-    await applyTransactionsDelta(
+    const { backfilled } = await applyTransactionsDelta(
       itemRowId,
       accountMap,
       added,
@@ -370,6 +430,7 @@ export async function syncItem(itemRowId: number) {
     totalAdded += added.length;
     totalModified += modified.length;
     totalRemoved += removed.length;
+    totalBackfilled += backfilled;
     cursor = next_cursor;
     hasMore = has_more;
   }
@@ -383,7 +444,12 @@ export async function syncItem(itemRowId: number) {
     })
     .where(eq(plaidItems.id, itemRowId));
 
-  return { added: totalAdded, modified: totalModified, removed: totalRemoved };
+  return {
+    added: totalAdded,
+    modified: totalModified,
+    removed: totalRemoved,
+    backfilled: totalBackfilled,
+  };
 }
 
 /**
@@ -398,15 +464,18 @@ export async function recategorizeAllFromPlaid() {
   return syncAllItems();
 }
 
-export async function syncAllItems() {
+export type SyncItemResult = {
+  itemId: number;
+  added: number;
+  modified: number;
+  removed: number;
+  backfilled: number;
+  error?: string;
+};
+
+export async function syncAllItems(): Promise<SyncItemResult[]> {
   const items = await db.select().from(plaidItems);
-  const results: Array<{
-    itemId: number;
-    added: number;
-    modified: number;
-    removed: number;
-    error?: string;
-  }> = [];
+  const results: SyncItemResult[] = [];
   for (const it of items) {
     try {
       const r = await syncItem(it.id);
@@ -422,6 +491,7 @@ export async function syncAllItems() {
         added: 0,
         modified: 0,
         removed: 0,
+        backfilled: 0,
         error: msg,
       });
     }

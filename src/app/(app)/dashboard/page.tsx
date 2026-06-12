@@ -473,10 +473,9 @@ export default async function DashboardPage() {
                       const limit = category.monthlyLimitCents;
                       const overspent = limit && spent > limit;
                       return (
-                        <Link
+                        <div
                           key={category.id}
-                          href={`/categories/${category.id}`}
-                          className="block px-5 py-4 hover:bg-surface-2 transition-colors"
+                          className="block px-5 py-4"
                         >
                           <div className="flex items-center gap-4">
                             <div
@@ -526,7 +525,7 @@ export default async function DashboardPage() {
                               )}
                             </div>
                           </div>
-                        </Link>
+                        </div>
                       );
                     })}
                   </Card>
