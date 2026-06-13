@@ -8,6 +8,10 @@ import {
   applyRulesToHistory,
   createRuleFromTransaction,
 } from "@/lib/categorize";
+import {
+  applyMerchantRulesToHistory,
+  createMerchantRule,
+} from "@/lib/merchant-rename";
 import { dedupeHash } from "@/lib/csv-import";
 import { parseDollarsToCents } from "@/lib/utils";
 import { recategorizeAllFromPlaid } from "@/lib/plaid-sync";
@@ -107,6 +111,21 @@ export async function recategorizeAll(): Promise<{
   return { touched: backfilled + ruleTouched, errors };
 }
 
+export async function makeMerchantRule(
+  pattern: string,
+  cleanName: string,
+  applyToHistory: boolean,
+) {
+  await createMerchantRule(pattern, cleanName, "merchant_contains");
+  let touched = 0;
+  if (applyToHistory) {
+    touched = await applyMerchantRulesToHistory();
+  }
+  revalidatePath("/transactions");
+  revalidatePath("/dashboard");
+  return touched;
+}
+
 export async function deleteTransaction(id: number) {
   await db.delete(transactions).where(eq(transactions.id, id));
   revalidatePath("/transactions");
@@ -138,6 +157,14 @@ export async function updateTransaction(form: FormData) {
       categoryId,
     })
     .where(eq(transactions.id, id));
+
+  const rulePattern = String(form.get("rulePattern") || "").trim();
+  const saveAsRule = form.get("saveAsRule") === "1";
+  if (saveAsRule && rulePattern) {
+    await createMerchantRule(rulePattern, merchant, "merchant_contains");
+    await applyMerchantRulesToHistory();
+  }
+
   revalidatePath("/transactions");
   revalidatePath("/dashboard");
 }

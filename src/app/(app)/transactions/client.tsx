@@ -19,6 +19,20 @@ import {
 } from "./actions";
 import { Search, Zap, ArrowRightLeft, Trash2, Pencil, Plus, Upload, Sparkles } from "lucide-react";
 
+function guessPatternFromRaw(raw: string): string {
+  const cleaned = raw
+    .replace(/\b(POS|DEBIT|CREDIT|PURCHASE|PAYMENT)\b/gi, "")
+    .replace(/\s+\d{6,}/g, "")
+    .replace(/\s+#\d+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const tokens = cleaned.split(/\s+/).filter((t) => /^[A-Za-z]{2,}$/.test(t));
+  if (tokens.length === 0) return cleaned;
+  let best = tokens[0];
+  for (const t of tokens) if (t.length > best.length) best = t;
+  return best.toUpperCase();
+}
+
 export function TransactionsHeaderActions() {
   const router = useRouter();
   return (
@@ -518,6 +532,11 @@ function EditTxModal({
   onClose: () => void;
 }) {
   const [pending, startTransition] = useTransition();
+  const initialMerchant = tx.merchantClean || tx.merchantRaw;
+  const [merchantInput, setMerchantInput] = useState(initialMerchant);
+  const [saveAsRule, setSaveAsRule] = useState(true);
+  const [pattern, setPattern] = useState(() => guessPatternFromRaw(tx.merchantRaw));
+  const merchantChanged = merchantInput.trim() !== initialMerchant.trim();
   return (
     <Sheet open onClose={onClose}>
       <Label>Edit transaction</Label>
@@ -531,16 +550,59 @@ function EditTxModal({
             className="space-y-4 mt-3"
           >
             <input type="hidden" name="id" value={tx.id} />
+            <input
+              type="hidden"
+              name="saveAsRule"
+              value={merchantChanged && saveAsRule ? "1" : "0"}
+            />
+            <input type="hidden" name="rulePattern" value={pattern} />
             <div>
               <Label>Merchant</Label>
               <Input
                 name="merchant"
-                defaultValue={tx.merchantClean || tx.merchantRaw}
+                value={merchantInput}
+                onChange={(e) => setMerchantInput(e.target.value)}
                 autoFocus
               />
               <div className="text-[10px] text-foreground-faint mt-1 mono">
                 raw: {tx.merchantRaw}
               </div>
+              {merchantChanged && (
+                <div className="mt-3 space-y-2">
+                  <label className="flex items-center gap-2 text-xs text-foreground-muted cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={saveAsRule}
+                      onChange={(e) => setSaveAsRule(e.target.checked)}
+                      className="accent-blush-deep"
+                    />
+                    <Zap
+                      className="size-3.5 text-blush-deep"
+                      strokeWidth={1.5}
+                    />
+                    <span>
+                      Apply this name to similar future transactions
+                    </span>
+                  </label>
+                  {saveAsRule && (
+                    <div>
+                      <Label htmlFor="rulePattern">
+                        Match merchants containing
+                      </Label>
+                      <Input
+                        id="rulePattern"
+                        value={pattern}
+                        onChange={(e) => setPattern(e.target.value)}
+                        className="mono"
+                      />
+                      <div className="text-[10px] text-foreground-faint mt-1">
+                        Case-insensitive. Existing matching transactions will
+                        also be renamed.
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>

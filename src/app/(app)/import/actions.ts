@@ -11,6 +11,10 @@ import {
   type ColumnMap,
 } from "@/lib/csv-import";
 import { applyRules, getRules } from "@/lib/categorize";
+import {
+  applyMerchantRules,
+  getMerchantRules,
+} from "@/lib/merchant-rename";
 
 export type ImportResult = {
   inserted: number;
@@ -38,6 +42,7 @@ export async function runImport(args: {
   if (acct.length === 0) throw new Error("Account not found");
 
   const rules = await getRules();
+  const merchantRules = await getMerchantRules();
 
   const [importRow] = await db
     .insert(imports)
@@ -67,7 +72,9 @@ export async function runImport(args: {
         date: m.date,
         amountCents: m.amountCents,
         merchantRaw: m.merchantRaw,
-        merchantClean: cleanMerchant(m.merchantRaw),
+        merchantClean:
+          applyMerchantRules(m.merchantRaw, merchantRules) ??
+          cleanMerchant(m.merchantRaw),
         categoryId: matchedCategoryId,
         source: "csv",
         dedupeHash: hash,

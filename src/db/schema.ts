@@ -115,6 +115,19 @@ export const categoryRules = sqliteTable("category_rules", {
     .default(sql`(unixepoch())`),
 });
 
+export const merchantRules = sqliteTable("merchant_rules", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  matchType: text("match_type", {
+    enum: ["merchant_contains", "merchant_exact", "regex"],
+  }).notNull(),
+  pattern: text("pattern").notNull(),
+  cleanName: text("clean_name").notNull(),
+  priority: integer("priority").notNull().default(0),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});
+
 export const recurringGroups = sqliteTable("recurring_groups", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   label: text("label").notNull(),
@@ -196,6 +209,8 @@ export type Transaction = typeof transactions.$inferSelect;
 export type NewTransaction = typeof transactions.$inferInsert;
 export type CategoryRule = typeof categoryRules.$inferSelect;
 export type NewCategoryRule = typeof categoryRules.$inferInsert;
+export type MerchantRule = typeof merchantRules.$inferSelect;
+export type NewMerchantRule = typeof merchantRules.$inferInsert;
 export type RecurringSchedule = typeof recurringSchedules.$inferSelect;
 export type NewRecurringSchedule = typeof recurringSchedules.$inferInsert;
 
