@@ -167,7 +167,15 @@ export async function updateTransaction(form: FormData) {
 
   const saveCategoryRule = form.get("saveCategoryRule") === "1";
   if (saveCategoryRule && categoryId && rulePattern) {
-    await createRuleFromTransaction(rulePattern, categoryId, "merchant_contains");
+    // priority=1 so an explicit edit beats older priority-0 rules whose
+    // patterns also match this merchant (e.g. an older rule on the full
+    // raw "10120D CAVA PARK LANE" alongside the new shorter "CAVA").
+    await createRuleFromTransaction(
+      rulePattern,
+      categoryId,
+      "merchant_contains",
+      1,
+    );
     await applyRulesToHistory({ onlyUncategorized: false });
   }
 
