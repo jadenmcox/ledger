@@ -536,7 +536,12 @@ function EditTxModal({
   const [merchantInput, setMerchantInput] = useState(initialMerchant);
   const [saveAsRule, setSaveAsRule] = useState(true);
   const [pattern, setPattern] = useState(() => guessPatternFromRaw(tx.merchantRaw));
-  const merchantChanged = merchantInput.trim() !== initialMerchant.trim();
+  const [categoryId, setCategoryIdState] = useState<string>(
+    tx.categoryId ? String(tx.categoryId) : "",
+  );
+  const [applyCategoryToHistory, setApplyCategoryToHistory] = useState(true);
+  const initialCategoryId = tx.categoryId ? String(tx.categoryId) : "";
+  const categoryChanged = categoryId !== initialCategoryId;
   return (
     <Sheet open onClose={onClose}>
       <Label>Edit transaction</Label>
@@ -553,9 +558,14 @@ function EditTxModal({
             <input
               type="hidden"
               name="saveAsRule"
-              value={merchantChanged && saveAsRule ? "1" : "0"}
+              value={saveAsRule ? "1" : "0"}
             />
             <input type="hidden" name="rulePattern" value={pattern} />
+            <input
+              type="hidden"
+              name="saveCategoryRule"
+              value={categoryChanged && applyCategoryToHistory ? "1" : "0"}
+            />
             <div>
               <Label>Merchant</Label>
               <Input
@@ -567,42 +577,39 @@ function EditTxModal({
               <div className="text-[10px] text-foreground-faint mt-1 mono">
                 raw: {tx.merchantRaw}
               </div>
-              {merchantChanged && (
-                <div className="mt-3 space-y-2">
-                  <label className="flex items-center gap-2 text-xs text-foreground-muted cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={saveAsRule}
-                      onChange={(e) => setSaveAsRule(e.target.checked)}
-                      className="accent-blush-deep"
+              <div className="mt-3 space-y-2">
+                <label className="flex items-center gap-2 text-xs text-foreground-muted cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={saveAsRule}
+                    onChange={(e) => setSaveAsRule(e.target.checked)}
+                    className="accent-blush-deep"
+                  />
+                  <Zap
+                    className="size-3.5 text-blush-deep"
+                    strokeWidth={1.5}
+                  />
+                  <span>
+                    Apply this name to similar transactions (past & future)
+                  </span>
+                </label>
+                {saveAsRule && (
+                  <div>
+                    <Label htmlFor="rulePattern">
+                      Match merchants containing
+                    </Label>
+                    <Input
+                      id="rulePattern"
+                      value={pattern}
+                      onChange={(e) => setPattern(e.target.value)}
+                      className="mono"
                     />
-                    <Zap
-                      className="size-3.5 text-blush-deep"
-                      strokeWidth={1.5}
-                    />
-                    <span>
-                      Apply this name to similar future transactions
-                    </span>
-                  </label>
-                  {saveAsRule && (
-                    <div>
-                      <Label htmlFor="rulePattern">
-                        Match merchants containing
-                      </Label>
-                      <Input
-                        id="rulePattern"
-                        value={pattern}
-                        onChange={(e) => setPattern(e.target.value)}
-                        className="mono"
-                      />
-                      <div className="text-[10px] text-foreground-faint mt-1">
-                        Case-insensitive. Existing matching transactions will
-                        also be renamed.
-                      </div>
+                    <div className="text-[10px] text-foreground-faint mt-1">
+                      Case-insensitive.
                     </div>
-                  )}
-                </div>
-              )}
+                  </div>
+                )}
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -629,7 +636,8 @@ function EditTxModal({
               <Label>Category</Label>
               <select
                 name="categoryId"
-                defaultValue={tx.categoryId ?? ""}
+                value={categoryId}
+                onChange={(e) => setCategoryIdState(e.target.value)}
                 className="h-10 w-full bg-surface border border-border rounded-xl px-3.5 text-sm focus:border-sage focus:ring-2 focus:ring-sage-tint focus:outline-none transition-all"
               >
                 <option value="">— Uncategorized —</option>
@@ -639,6 +647,26 @@ function EditTxModal({
                   </option>
                 ))}
               </select>
+              {categoryChanged && categoryId && (
+                <label className="flex items-center gap-2 text-xs text-foreground-muted cursor-pointer mt-2">
+                  <input
+                    type="checkbox"
+                    checked={applyCategoryToHistory}
+                    onChange={(e) =>
+                      setApplyCategoryToHistory(e.target.checked)
+                    }
+                    className="accent-blush-deep"
+                  />
+                  <Zap
+                    className="size-3.5 text-blush-deep"
+                    strokeWidth={1.5}
+                  />
+                  <span>
+                    Apply this category to similar transactions (past &amp;
+                    future)
+                  </span>
+                </label>
+              )}
             </div>
             <div>
               <Label>Notes</Label>
