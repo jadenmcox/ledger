@@ -80,6 +80,7 @@ export async function createRuleFromTransaction(
   merchant: string,
   categoryId: number,
   matchType: "merchant_contains" | "merchant_exact" = "merchant_contains",
+  priority = 0,
 ) {
   const pattern = normalize(merchant);
   // Avoid duplicates
@@ -95,13 +96,13 @@ export async function createRuleFromTransaction(
   if (existing.length > 0) {
     await db
       .update(categoryRules)
-      .set({ categoryId })
+      .set({ categoryId, priority: Math.max(existing[0].priority, priority) })
       .where(eq(categoryRules.id, existing[0].id));
     return existing[0].id;
   }
   const [r] = await db
     .insert(categoryRules)
-    .values({ pattern, matchType, categoryId, priority: 0 })
+    .values({ pattern, matchType, categoryId, priority })
     .returning();
   return r.id;
 }
