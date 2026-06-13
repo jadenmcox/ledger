@@ -165,6 +165,12 @@ export async function updateTransaction(form: FormData) {
     await applyMerchantRulesToHistory();
   }
 
+  const saveCategoryRule = form.get("saveCategoryRule") === "1";
+  if (saveCategoryRule && categoryId && rulePattern) {
+    await createRuleFromTransaction(rulePattern, categoryId, "merchant_contains");
+    await applyRulesToHistory({ onlyUncategorized: false });
+  }
+
   revalidatePath("/transactions");
   revalidatePath("/dashboard");
 }
