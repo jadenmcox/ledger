@@ -12,6 +12,10 @@ import {
 import { eq, and } from "drizzle-orm";
 import { plaid } from "./plaid";
 import { applyRules, getRules } from "./categorize";
+import {
+  applyMerchantRules,
+  getMerchantRules,
+} from "./merchant-rename";
 import type { CategoryRule } from "@/db/schema";
 
 function pickCategory(
@@ -269,6 +273,7 @@ export async function applyTransactionsDelta(
   removed: RemovedTransaction[],
 ): Promise<{ backfilled: number }> {
   const rules = await getRules();
+  const renameRules = await getMerchantRules();
   const userCategories = await db.select().from(categories);
   let backfilled = 0;
 
@@ -306,6 +311,9 @@ export async function applyTransactionsDelta(
         .set({
           amountCents: cents,
           merchantRaw: merchant,
+          merchantClean:
+            existingByExt.merchantClean ??
+            applyMerchantRules(merchant, renameRules),
           date,
           isPending: !!t.pending,
           categoryId: backfilledCategoryId,
@@ -331,6 +339,9 @@ export async function applyTransactionsDelta(
           externalId: t.transaction_id,
           source: "plaid",
           merchantRaw: merchant,
+          merchantClean:
+            existingByHash.merchantClean ??
+            applyMerchantRules(merchant, renameRules),
           isPending: !!t.pending,
           categoryId: existingByHash.categoryId ?? categoryId,
         })
@@ -345,6 +356,7 @@ export async function applyTransactionsDelta(
         date,
         amountCents: cents,
         merchantRaw: merchant,
+        merchantClean: applyMerchantRules(merchant, renameRules),
         categoryId,
         source: "plaid",
         externalId: t.transaction_id,
