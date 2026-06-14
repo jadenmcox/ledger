@@ -2,7 +2,7 @@ import { db } from "@/db";
 import { categories, transactions } from "@/db/schema";
 import { asc, and, gte, lte, eq, desc } from "drizzle-orm";
 import { Container, PageHeader } from "@/components/ui";
-import { CategoriesClient, type CategoryTx } from "./client";
+import { CategoriesClient, NewCategoryButton, type CategoryTx } from "./client";
 import { startOfMonth, endOfMonth } from "date-fns";
 
 export const dynamic = "force-dynamic";
@@ -52,6 +52,7 @@ export default async function CategoriesPage() {
         eyebrow="CATEGORIES"
         title="Categories"
         subtitle="Where every transaction lands. Set a monthly amount on the ones that matter."
+        right={<NewCategoryButton />}
       />
       <Container>
         <CategoriesClient
