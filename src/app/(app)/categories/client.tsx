@@ -37,6 +37,19 @@ const classificationLabel: Record<string, string> = {
 
 const classificationOrder = ["income", "need", "want", "savings"] as const;
 
+export function NewCategoryButton() {
+  return (
+    <Button
+      variant="primary"
+      onClick={() =>
+        window.dispatchEvent(new Event("budgetly:new-category"))
+      }
+    >
+      <Plus className="size-4" strokeWidth={1.5} /> New category
+    </Button>
+  );
+}
+
 export function CategoriesClient({
   initial,
   spendByCategory = {},
@@ -57,6 +70,12 @@ export function CategoriesClient({
     }
   }, [adding, editing]);
 
+  useEffect(() => {
+    const handler = () => setAdding(true);
+    window.addEventListener("budgetly:new-category", handler);
+    return () => window.removeEventListener("budgetly:new-category", handler);
+  }, []);
+
   const grouped = classificationOrder.map((c) => ({
     classification: c,
     items: initial.filter((cat) => cat.classification === c && !cat.isArchived),
@@ -64,12 +83,6 @@ export function CategoriesClient({
 
   return (
     <div className="space-y-12">
-      <div className="flex justify-end">
-        <Button variant="primary" onClick={() => setAdding(true)}>
-          <Plus className="size-4" strokeWidth={1.5} /> New category
-        </Button>
-      </div>
-
       {(adding || editing) && (
         <div ref={formRef}>
           <CategoryForm
@@ -160,30 +173,35 @@ function CategoryRow({
 
   return (
     <div className="group">
-    <div className="px-5 py-4 flex items-center gap-4">
-      <button
-        onClick={onToggle}
-        className="size-5 inline-flex items-center justify-center text-foreground-faint hover:text-foreground shrink-0"
-        aria-label={isExpanded ? "Collapse" : "Expand"}
-        aria-expanded={isExpanded}
+    <div
+      onClick={onToggle}
+      role="button"
+      tabIndex={0}
+      aria-expanded={isExpanded}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onToggle();
+        }
+      }}
+      className="px-5 py-4 flex items-center gap-4 cursor-pointer hover:bg-surface-2/40 transition-colors"
+    >
+      <span
+        aria-hidden
+        className="size-5 inline-flex items-center justify-center text-foreground-faint shrink-0"
       >
         <ChevronRight
           className={`size-3.5 transition-transform ${isExpanded ? "rotate-90" : ""}`}
           strokeWidth={2}
         />
-      </button>
+      </span>
       <div
         className="size-2.5 rounded-full shrink-0"
         style={{ background: cat.color }}
       />
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2 mb-1.5">
-          <button
-            onClick={onToggle}
-            className="tracking-tight hover:text-blush-deep transition-colors text-left"
-          >
-            {cat.name}
-          </button>
+          <span className="tracking-tight text-left">{cat.name}</span>
           {cat.isSystem && <Pill>system</Pill>}
         </div>
         {cat.classification !== "income" && (
@@ -218,7 +236,7 @@ function CategoryRow({
       </div>
       <div className="text-right shrink-0">
         {editLimit ? (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
             <Input
               autoFocus
               value={limitVal}
@@ -245,7 +263,10 @@ function CategoryRow({
           </div>
         ) : (
           <button
-            onClick={() => setEditLimit(true)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditLimit(true);
+            }}
             className="mono tabular text-sm text-foreground-muted hover:text-blush-deep transition-colors"
           >
             {cat.monthlyLimitCents
@@ -257,7 +278,7 @@ function CategoryRow({
           </button>
         )}
       </div>
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
         <button
           onClick={onEdit}
           className="size-8 inline-flex items-center justify-center text-foreground-faint hover:text-foreground rounded-md hover:bg-surface-2"
