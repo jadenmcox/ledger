@@ -375,6 +375,7 @@ export function BudgetClient({
               {(["need", "want", "savings"] as const).map((cls) => {
                 const target = suggested[cls];
                 const current = limitByClass(cls);
+                const spent = spendByClassification[cls];
                 const gap = current - target;
                 return (
                   <div
@@ -388,12 +389,21 @@ export function BudgetClient({
                       {formatCents(target)}
                     </div>
                     <div className="text-[11px] text-foreground-faint mt-1">
-                      currently {formatCentsCompact(current)}
-                      {Math.abs(gap) > 100 && (
-                        <span className={gap > 0 ? "text-blush-deep ml-1" : "text-sage-deep ml-1"}>
-                          ({gap > 0 ? "−" : "+"}{formatCentsCompact(Math.abs(gap))})
-                        </span>
+                      {current > 0 ? (
+                        <>
+                          limit {formatCentsCompact(current)}
+                          {Math.abs(gap) > 100 && (
+                            <span className={gap > 0 ? "text-blush-deep ml-1" : "text-sage-deep ml-1"}>
+                              ({gap > 0 ? "−" : "+"}{formatCentsCompact(Math.abs(gap))})
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span>no limit set</span>
                       )}
+                    </div>
+                    <div className="text-[11px] text-foreground-faint mono tabular mt-0.5">
+                      {formatCentsCompact(spent)} spent so far
                     </div>
                   </div>
                 );
@@ -411,32 +421,60 @@ export function BudgetClient({
         />
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {(["need", "want", "savings"] as const).map((cls) => {
+            const limit = limitByClass(cls);
             const remaining = remainingByClass[cls];
             const upcoming = upcomingByClass[cls];
             const afterBills = remaining - upcoming;
+            const spent = spendByClassification[cls];
+            const noLimit = limit <= 0;
             return (
               <Card key={cls} className="p-5">
                 <Pill tone={classificationTone[cls]}>
                   {classificationLabel[cls]}
                 </Pill>
-                <div className="mono tabular text-2xl mt-3 font-medium">
-                  {formatCents(afterBills)}
-                </div>
-                <div className="text-[11px] text-foreground-faint mt-1">
-                  left for the next {daysLeft} {daysLeft === 1 ? "day" : "days"}
-                </div>
-                <div className="mt-3 text-[11px] text-foreground-muted space-y-0.5">
-                  <div className="flex justify-between mono tabular">
-                    <span>Remaining limit</span>
-                    <span>{formatCentsCompact(remaining)}</span>
-                  </div>
-                  {upcoming > 0 && (
-                    <div className="flex justify-between mono tabular">
-                      <span>Upcoming bills</span>
-                      <span>−{formatCentsCompact(upcoming)}</span>
+                {noLimit ? (
+                  <>
+                    <div className="mono tabular text-2xl mt-3 font-medium">
+                      {formatCents(spent)}
                     </div>
-                  )}
-                </div>
+                    <div className="text-[11px] text-foreground-faint mt-1">
+                      spent this month, no limit set
+                    </div>
+                    {upcoming > 0 && (
+                      <div className="mt-3 text-[11px] text-foreground-muted">
+                        <div className="flex justify-between mono tabular">
+                          <span>Upcoming bills</span>
+                          <span>{formatCentsCompact(upcoming)}</span>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div className="mono tabular text-2xl mt-3 font-medium">
+                      {formatCents(afterBills)}
+                    </div>
+                    <div className="text-[11px] text-foreground-faint mt-1">
+                      left for the next {daysLeft} {daysLeft === 1 ? "day" : "days"}
+                    </div>
+                    <div className="mt-3 text-[11px] text-foreground-muted space-y-0.5">
+                      <div className="flex justify-between mono tabular">
+                        <span>Spent so far</span>
+                        <span>{formatCentsCompact(spent)}</span>
+                      </div>
+                      <div className="flex justify-between mono tabular">
+                        <span>Remaining limit</span>
+                        <span>{formatCentsCompact(remaining)}</span>
+                      </div>
+                      {upcoming > 0 && (
+                        <div className="flex justify-between mono tabular">
+                          <span>Upcoming bills</span>
+                          <span>−{formatCentsCompact(upcoming)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
               </Card>
             );
           })}
