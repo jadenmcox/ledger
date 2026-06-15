@@ -230,3 +230,18 @@ export const plaidItems = sqliteTable("plaid_items", {
 
 export type PlaidItem = typeof plaidItems.$inferSelect;
 export type NewPlaidItem = typeof plaidItems.$inferInsert;
+
+export const budgetFrameworks = ["50_30_20", "zero_based", "custom"] as const;
+export type BudgetFramework = (typeof budgetFrameworks)[number];
+
+export const budgetSettings = sqliteTable("budget_settings", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  framework: text("framework", { enum: budgetFrameworks })
+    .notNull()
+    .default("custom"),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});
+
+export type BudgetSettings = typeof budgetSettings.$inferSelect;
