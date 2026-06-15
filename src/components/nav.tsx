@@ -10,7 +10,7 @@ import {
   Wallet,
   Tag,
   CalendarRange,
-  Repeat,
+  PiggyBank,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -24,10 +24,10 @@ type NavItem = {
 const items: NavItem[] = [
   { href: "/dashboard", label: "Home", icon: LayoutDashboard, group: "primary" },
   { href: "/transactions", label: "Transactions", icon: ListOrdered, group: "primary" },
+  { href: "/budget", label: "Budget", icon: PiggyBank, group: "primary" },
   { href: "/year", label: "Year", icon: CalendarRange, group: "primary" },
   { href: "/accounts", label: "Accounts", icon: Wallet, group: "setup" },
   { href: "/categories", label: "Categories", icon: Tag, group: "setup" },
-  { href: "/recurring", label: "Recurring", icon: Repeat, group: "setup" },
 ];
 
 // First 5 items shown in mobile bottom nav (all of them, conveniently)
