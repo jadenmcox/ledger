@@ -282,16 +282,16 @@ export function BudgetClient({
           <div className="bg-surface p-5">
             <Stat
               label="Projected"
-              value={formatCents(projectedSpend + upcomingTotal)}
+              value={formatCents(projectedSpend)}
               tone={
-                totalLimit > 0 && projectedSpend + upcomingTotal > totalLimit
+                totalLimit > 0 && projectedSpend > totalLimit
                   ? "blush"
                   : "default"
               }
               hint={
                 upcomingTotal > 0
-                  ? `incl. ${formatCentsCompact(upcomingTotal)} upcoming`
-                  : "at current pace"
+                  ? `spent + ${formatCentsCompact(upcomingTotal)} bills due`
+                  : "spent so far"
               }
             />
           </div>
@@ -299,15 +299,19 @@ export function BudgetClient({
             <Stat
               label="Budgeted"
               value={formatCents(totalLimit)}
-              hint="needs + wants + savings"
+              hint={
+                incomeBasis > 0
+                  ? `${Math.round((totalLimit / incomeBasis) * 100)}% of ${formatCentsCompact(incomeBasis)} income`
+                  : "needs + wants + savings"
+              }
             />
           </div>
           <div className="bg-surface p-5">
             <Stat
               label="Headroom"
-              value={formatCents(Math.max(0, totalLimit - spend))}
-              tone={spend > totalLimit ? "blush" : "default"}
-              hint={spend > totalLimit ? "over budget" : "left to spend"}
+              value={formatCents(Math.max(0, totalLimit - projectedSpend))}
+              tone={projectedSpend > totalLimit ? "blush" : "default"}
+              hint={projectedSpend > totalLimit ? "over budget" : "after bills due"}
             />
           </div>
         </div>
