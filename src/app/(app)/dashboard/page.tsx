@@ -1,5 +1,6 @@
 import { db } from "@/db";
-import { accounts, categories, transactions } from "@/db/schema";
+import { accounts, categories, recurringSchedules, transactions } from "@/db/schema";
+import { computeOccurrences } from "@/lib/recurring-schedules";
 import { and, desc, eq, gte, lte } from "drizzle-orm";
 import {
   Container,
@@ -46,7 +47,7 @@ export default async function DashboardPage() {
 
   const thirtyDayStart = startOfDay(subDays(now, 29));
 
-  const [txThisMonth, txLastMonth, txLast30, allCategories, allAccounts, recurring] =
+  const [txThisMonth, txLastMonth, txLast30, allCategories, allAccounts, recurring, schedules] =
     await Promise.all([
       db
         .select()
@@ -81,6 +82,7 @@ export default async function DashboardPage() {
       db.select().from(categories),
       db.select().from(accounts),
       detectRecurring().catch(() => []),
+      db.select().from(recurringSchedules).where(eq(recurringSchedules.isActive, true)),
     ]);
 
   const catById = new Map(allCategories.map((c) => [c.id, c]));
@@ -144,9 +146,16 @@ export default async function DashboardPage() {
       ? ((spend - paceLastMonthSpend) / paceLastMonthSpend) * 100
       : 0;
 
-  // Forecast: project month-end spend from current pace
-  const dailyAvg = spend / Math.max(1, dayOfMonth);
-  const forecastSpend = Math.round(dailyAvg * daysInMonth);
+  // Expected month-end spend: what's hit so far plus known upcoming recurring bills
+  // (matches the budget page; pace extrapolation was noisy early in the month).
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  let upcomingTotal = 0;
+  for (const s of schedules) {
+    if (s.amountCents >= 0) continue;
+    const occs = computeOccurrences(s, tomorrow, monthEnd);
+    upcomingTotal += occs.length * Math.abs(s.amountCents);
+  }
+  const forecastSpend = spend + upcomingTotal;
 
   // Combined "need" monthly amount targets — what they should not exceed
   const needBudget = allCategories
@@ -310,9 +319,9 @@ export default async function DashboardPage() {
                   value={formatCents(forecastSpend)}
                   tone={totalBudget > 0 && forecastSpend > totalBudget ? "blush" : "default"}
                   hint={
-                    totalBudget > 0
-                      ? `${forecastSpend > totalBudget ? "over" : "under"} ${formatCentsCompact(totalBudget)} budget`
-                      : "at current pace"
+                    upcomingTotal > 0
+                      ? `spent + ${formatCentsCompact(upcomingTotal)} bills due`
+                      : "spent so far"
                   }
                 />
               </div>

@@ -116,9 +116,9 @@ export default async function BudgetPage() {
   const expectedIncome = paycheckCat?.monthlyLimitCents ?? 0;
   const incomeBasis = Math.max(income, expectedIncome);
 
-  // Pace-based projection (linear).
-  const dailyAvg = spend / Math.max(1, dayOfMonth);
-  const projectedSpend = Math.round(dailyAvg * daysInMonth);
+  // Expected month-end spend: what's hit so far plus known upcoming recurring bills.
+  // Pace extrapolation was noisy and conflicted with the per-class "what's left" math below.
+  const projectedSpend = spend + upcomingTotal;
 
   const totalLimit = allCategories.reduce(
     (s, c) =>
