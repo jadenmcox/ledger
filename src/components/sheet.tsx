@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 
 // Mobile bottom-sheet / desktop modal.
@@ -30,6 +30,8 @@ export function Sheet({
     };
   }, [open, onClose]);
 
+  const downOnBackdrop = useRef(false);
+
   if (!open) return null;
 
   return (
@@ -37,10 +39,16 @@ export function Sheet({
       role="dialog"
       aria-modal="true"
       className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex md:items-center justify-center items-end animate-in fade-in duration-150"
-      onClick={onClose}
+      onMouseDown={(e) => {
+        downOnBackdrop.current = e.target === e.currentTarget;
+      }}
+      onMouseUp={(e) => {
+        if (downOnBackdrop.current && e.target === e.currentTarget) onClose();
+        downOnBackdrop.current = false;
+      }}
     >
       <div
-        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
         className={cn(
           // Mobile: full-width bottom sheet
           "w-full bg-surface border-t md:border border-border",
