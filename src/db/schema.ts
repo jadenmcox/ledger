@@ -245,3 +245,27 @@ export const budgetSettings = sqliteTable("budget_settings", {
 });
 
 export type BudgetSettings = typeof budgetSettings.$inferSelect;
+
+export const savingsGoals = sqliteTable("savings_goals", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  // Optional linked account whose balance is the goal's "current" amount.
+  // If null, the user enters currentBalanceCents manually.
+  accountId: integer("account_id").references(() => accounts.id, {
+    onDelete: "set null",
+  }),
+  // Target by end of calendar year, in cents.
+  yearEndTargetCents: integer("year_end_target_cents").notNull().default(0),
+  // Planned per-month contribution, in cents. Used to grade "did I hit my plan."
+  monthlyTargetCents: integer("monthly_target_cents").notNull().default(0),
+  // Manual balance when no account is linked. Ignored when accountId is set.
+  manualBalanceCents: integer("manual_balance_cents").notNull().default(0),
+  sortOrder: integer("sort_order").notNull().default(0),
+  isArchived: integer("is_archived", { mode: "boolean" }).notNull().default(false),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});
+
+export type SavingsGoal = typeof savingsGoals.$inferSelect;
+export type NewSavingsGoal = typeof savingsGoals.$inferInsert;

@@ -1,99 +1,78 @@
 import { db } from "@/db";
-import { accounts, categories, recurringSchedules, transactions } from "@/db/schema";
+import {
+  accounts,
+  categories,
+  recurringSchedules,
+  savingsGoals,
+  transactions,
+  type Category,
+} from "@/db/schema";
 import { computeOccurrences } from "@/lib/recurring-schedules";
-import { and, desc, eq, gte, lte } from "drizzle-orm";
+import { and, asc, eq, gte, lte } from "drizzle-orm";
 import {
   Container,
   PageHeader,
   Card,
-  Stat,
   EmptyState,
   Pill,
-  HeroStat,
   ProgressBar,
   SectionHeader,
   Button,
-  Label,
 } from "@/components/ui";
-import { formatCents, formatCentsCompact } from "@/lib/utils";
+import { formatCents, formatCentsCompact, cn } from "@/lib/utils";
 import {
   startOfMonth,
   endOfMonth,
   format,
   getDaysInMonth,
   getDate,
-  subMonths,
-  startOfDay,
-  subDays,
-  addDays,
 } from "date-fns";
 import Link from "next/link";
-import { detectRecurring } from "@/lib/recurring";
-import { Repeat, ArrowRight } from "lucide-react";
-import { Gauge } from "@/components/charts/Gauge";
-import { ClassificationDonut, ThirtyDayArea } from "./charts";
+import { ArrowRight, Repeat } from "lucide-react";
+import { SavingsGoalsSection } from "./savings-goals";
 
 export const dynamic = "force-dynamic";
+
+type Classification = "need" | "want" | "savings";
 
 export default async function DashboardPage() {
   const now = new Date();
   const monthStart = startOfMonth(now);
   const monthEnd = endOfMonth(now);
-  const lastMonthStart = startOfMonth(subMonths(now, 1));
-  const lastMonthEnd = endOfMonth(subMonths(now, 1));
   const daysInMonth = getDaysInMonth(now);
   const dayOfMonth = getDate(now);
   const daysLeft = daysInMonth - dayOfMonth;
+  const yearEnd = new Date(now.getFullYear(), 11, 31);
 
-  const thirtyDayStart = startOfDay(subDays(now, 29));
-
-  const [txThisMonth, txLastMonth, txLast30, allCategories, allAccounts, recurring, schedules] =
-    await Promise.all([
-      db
-        .select()
-        .from(transactions)
-        .where(
-          and(
-            gte(transactions.date, monthStart),
-            lte(transactions.date, monthEnd),
-            eq(transactions.isTransfer, false),
-          ),
+  const [
+    txThisMonth,
+    allCategories,
+    allAccounts,
+    schedules,
+    goals,
+  ] = await Promise.all([
+    db
+      .select()
+      .from(transactions)
+      .where(
+        and(
+          gte(transactions.date, monthStart),
+          lte(transactions.date, monthEnd),
+          eq(transactions.isTransfer, false),
         ),
-      db
-        .select()
-        .from(transactions)
-        .where(
-          and(
-            gte(transactions.date, lastMonthStart),
-            lte(transactions.date, lastMonthEnd),
-            eq(transactions.isTransfer, false),
-          ),
-        ),
-      db
-        .select()
-        .from(transactions)
-        .where(
-          and(
-            gte(transactions.date, thirtyDayStart),
-            lte(transactions.date, now),
-            eq(transactions.isTransfer, false),
-          ),
-        ),
-      db.select().from(categories),
-      db.select().from(accounts),
-      detectRecurring().catch(() => []),
-      db.select().from(recurringSchedules).where(eq(recurringSchedules.isActive, true)),
-    ]);
+      ),
+    db.select().from(categories),
+    db.select().from(accounts),
+    db.select().from(recurringSchedules).where(eq(recurringSchedules.isActive, true)),
+    db.select().from(savingsGoals).where(eq(savingsGoals.isArchived, false)).orderBy(asc(savingsGoals.sortOrder), asc(savingsGoals.id)),
+  ]);
 
   const catById = new Map(allCategories.map((c) => [c.id, c]));
+  const acctById = new Map(allAccounts.map((a) => [a.id, a]));
 
-  // This month aggregates
   let income = 0;
   let spend = 0;
-  const spendByClassification = { need: 0, want: 0, savings: 0 };
   const spendByCategory = new Map<number, number>();
-  const spendByMerchant = new Map<string, number>();
-
   for (const t of txThisMonth) {
     const cat = t.categoryId ? catById.get(t.categoryId) : null;
     if (cat?.classification === "income") {
@@ -103,51 +82,10 @@ export default async function DashboardPage() {
     if (t.amountCents > 0) continue;
     const abs = Math.abs(t.amountCents);
     spend += abs;
-    const mk = (t.merchantClean || t.merchantRaw).trim();
-    spendByMerchant.set(mk, (spendByMerchant.get(mk) || 0) + abs);
-    if (cat) {
-      spendByCategory.set(cat.id, (spendByCategory.get(cat.id) || 0) + abs);
-      if (cat.classification === "need") spendByClassification.need += abs;
-      if (cat.classification === "want") spendByClassification.want += abs;
-      if (cat.classification === "savings")
-        spendByClassification.savings += abs;
-    }
+    if (cat) spendByCategory.set(cat.id, (spendByCategory.get(cat.id) || 0) + abs);
   }
 
-  // Last month spend (for delta)
-  let lastMonthSpend = 0;
-  for (const t of txLastMonth) {
-    const cat = t.categoryId ? catById.get(t.categoryId) : null;
-    if (cat?.classification === "income" || t.amountCents > 0) continue;
-    lastMonthSpend += Math.abs(t.amountCents);
-  }
-
-  // 30-day daily aggregation
-  const daily = new Map<string, number>();
-  for (let i = 0; i < 30; i++) {
-    const d = addDays(thirtyDayStart, i);
-    daily.set(format(d, "yyyy-MM-dd"), 0);
-  }
-  for (const t of txLast30) {
-    const cat = t.categoryId ? catById.get(t.categoryId) : null;
-    if (cat?.classification === "income" || t.amountCents > 0) continue;
-    const k = format(new Date(t.date), "yyyy-MM-dd");
-    daily.set(k, (daily.get(k) || 0) + Math.abs(t.amountCents));
-  }
-  const dailyData = Array.from(daily.entries()).map(([x, spend]) => ({ x, spend }));
-
-  const net = income - spend;
-  const savingsRate = income > 0 ? Math.max(0, net / income) * 100 : 0;
-
-  // Pace vs. last month: if at this point in the month last month, spend was X
-  const paceLastMonthSpend = (lastMonthSpend / daysInMonth) * dayOfMonth;
-  const paceDelta =
-    paceLastMonthSpend > 0
-      ? ((spend - paceLastMonthSpend) / paceLastMonthSpend) * 100
-      : 0;
-
-  // Expected month-end spend: what's hit so far plus known upcoming recurring bills
-  // (matches the budget page; pace extrapolation was noisy early in the month).
+  // Forecast: spend so far + upcoming recurring bills between tomorrow and EoM
   const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
   let upcomingTotal = 0;
   for (const s of schedules) {
@@ -157,92 +95,75 @@ export default async function DashboardPage() {
   }
   const forecastSpend = spend + upcomingTotal;
 
-  // Combined "need" monthly amount targets — what they should not exceed
-  const needBudget = allCategories
-    .filter((c) => c.classification === "need" && c.monthlyLimitCents)
-    .reduce((s, c) => s + (c.monthlyLimitCents ?? 0), 0);
-  const wantBudget = allCategories
-    .filter((c) => c.classification === "want" && c.monthlyLimitCents)
-    .reduce((s, c) => s + (c.monthlyLimitCents ?? 0), 0);
-  const totalBudget = needBudget + wantBudget;
-
-  // Paycheck cycle: semi-monthly. 1st–15th is the first half, 16th–EoM is the second.
-  const isFirstHalf = dayOfMonth <= 15;
-  const cycleStart = new Date(now.getFullYear(), now.getMonth(), isFirstHalf ? 1 : 16);
-  const cycleEnd = isFirstHalf
-    ? new Date(now.getFullYear(), now.getMonth(), 15)
-    : endOfMonth(now);
-  const cycleLengthDays =
-    Math.floor((cycleEnd.getTime() - cycleStart.getTime()) / 86400000) + 1;
-  const daysIntoCycle = Math.floor(
-    (now.getTime() - cycleStart.getTime()) / 86400000,
-  );
-  const daysLeftInCycle = Math.max(
-    0,
-    Math.ceil((cycleEnd.getTime() - now.getTime()) / 86400000),
-  );
-
-  // Paycheck income that landed inside this cycle (any income-classified tx)
-  const incomeCats = new Set(
-    allCategories.filter((c) => c.classification === "income").map((c) => c.id),
-  );
-  const cycleIncome = txThisMonth
-    .filter((t) => {
-      const d = new Date(t.date);
-      if (d < cycleStart || d > cycleEnd) return false;
-      if (!t.categoryId || !incomeCats.has(t.categoryId)) return false;
-      return t.amountCents > 0;
-    })
-    .reduce((s, t) => s + t.amountCents, 0);
-
-  // Spend inside the cycle (excludes income & transfers, including positives that aren't income)
-  const cycleSpend = txThisMonth
-    .filter((t) => {
-      if (t.isTransfer) return false;
-      const d = new Date(t.date);
-      if (d < cycleStart || d > cycleEnd) return false;
-      const cat = t.categoryId ? catById.get(t.categoryId) : null;
-      if (cat?.classification === "income") return false;
-      return t.amountCents < 0;
-    })
-    .reduce((s, t) => s + Math.abs(t.amountCents), 0);
-
-  // Use actual cycle income if present, otherwise fall back to Paycheck category's
-  // monthly amount halved (since the user's monthly amount represents 2 paychecks).
-  const paycheckCat = allCategories.find((c) => c.name === "Paycheck");
-  const expectedPerCycle = paycheckCat?.monthlyLimitCents
-    ? Math.round(paycheckCat.monthlyLimitCents / 2)
-    : 0;
-  const paycheckAmt = cycleIncome || expectedPerCycle;
-  const cycleSpendPct =
-    paycheckAmt > 0 ? Math.min(100, (cycleSpend / paycheckAmt) * 100) : 0;
-
-  const donutData = [
-    { name: "Need", value: spendByClassification.need, color: "var(--blush)" },
-    { name: "Want", value: spendByClassification.want, color: "var(--peach)" },
-    {
-      name: "Savings",
-      value: spendByClassification.savings,
-      color: "var(--blue)",
-    },
-  ];
-
-  const categoriesWithSpend = allCategories
+  // Planned vs Actual rows. Include every non-income, non-archived category
+  // that has a limit OR has spend this month. That mirrors the user's sheet:
+  // the rows in their Expenses/Spend block are the named categories they care
+  // about, plus anything that actually saw money move.
+  type Row = { category: Category; planned: number; actual: number; difference: number };
+  const rows: Row[] = allCategories
     .filter(
       (c) =>
         c.classification !== "income" &&
         !c.isArchived &&
-        ((spendByCategory.get(c.id) ?? 0) > 0 || c.monthlyLimitCents),
+        ((c.monthlyLimitCents ?? 0) > 0 || (spendByCategory.get(c.id) ?? 0) > 0),
     )
-    .map((c) => ({
-      category: c,
-      spent: spendByCategory.get(c.id) ?? 0,
-    }))
-    .sort((a, b) => b.spent - a.spent);
+    .map((c) => {
+      const planned = c.monthlyLimitCents ?? 0;
+      const actual = spendByCategory.get(c.id) ?? 0;
+      return { category: c, planned, actual, difference: planned - actual };
+    });
 
-  const topMerchants = Array.from(spendByMerchant.entries())
-    .sort((a, b) => b[1] - a[1])
+  const groups: { key: Classification; label: string; rows: Row[] }[] = (
+    ["need", "want", "savings"] as Classification[]
+  ).map((k) => ({
+    key: k,
+    label: k === "need" ? "Needs" : k === "want" ? "Wants" : "Savings",
+    rows: rows
+      .filter((r) => r.category.classification === k)
+      .sort((a, b) => b.actual - a.actual || b.planned - a.planned),
+  }));
+
+  const totals = rows.reduce(
+    (acc, r) => ({
+      planned: acc.planned + r.planned,
+      actual: acc.actual + r.actual,
+      difference: acc.difference + r.difference,
+    }),
+    { planned: 0, actual: 0, difference: 0 },
+  );
+
+  const upcomingBills = schedules
+    .filter((s) => s.amountCents < 0)
+    .flatMap((s) =>
+      computeOccurrences(s, tomorrow, monthEnd).map((d) => ({
+        merchant: s.merchantRaw,
+        amountCents: Math.abs(s.amountCents),
+        date: d,
+      })),
+    )
+    .sort((a, b) => a.date.getTime() - b.date.getTime())
     .slice(0, 6);
+
+  // Savings goals: derive "current balance" from linked account if present,
+  // otherwise from manual entry. Year-end projection assumes user keeps
+  // contributing at their stated monthly target through December.
+  const monthsRemaining = Math.max(0, 12 - now.getMonth() - 1) + 1; // includes current month
+  const goalView = goals.map((g) => {
+    const linked = g.accountId ? acctById.get(g.accountId) : null;
+    const current = linked ? linked.currentBalanceCents : g.manualBalanceCents;
+    const projectedYearEnd =
+      current + Math.max(0, monthsRemaining - 1) * g.monthlyTargetCents;
+    return { goal: g, accountName: linked?.name ?? null, current, projectedYearEnd };
+  });
+  const goalTotals = goalView.reduce(
+    (acc, v) => ({
+      target: acc.target + v.goal.yearEndTargetCents,
+      current: acc.current + v.current,
+      monthly: acc.monthly + v.goal.monthlyTargetCents,
+      projected: acc.projected + v.projectedYearEnd,
+    }),
+    { target: 0, current: 0, monthly: 0, projected: 0 },
+  );
 
   return (
     <>
@@ -269,291 +190,135 @@ export default async function DashboardPage() {
           />
         ) : (
           <div className="space-y-10 md:space-y-14">
-            {/* HERO */}
-            <div className="grid grid-cols-1 md:grid-cols-[1.5fr_auto] gap-8 md:gap-12 items-start">
-              <HeroStat
-                label="Spent this month"
-                value={formatCents(spend)}
-                tone="blush"
-                delta={
-                  lastMonthSpend > 0
-                    ? {
-                        value: `${paceDelta > 0 ? "+" : ""}${paceDelta.toFixed(0)}% vs. last month pace`,
-                        direction:
-                          paceDelta > 3
-                            ? "up"
-                            : paceDelta < -3
-                              ? "down"
-                              : "flat",
-                      }
-                    : undefined
-                }
-                hint={`${txThisMonth.length} transactions · ${daysLeft} days left`}
-              />
-              <Gauge
-                value={savingsRate}
-                max={100}
-                label="Saved"
-                valueDisplay={`${savingsRate.toFixed(0)}%`}
-                hint={income > 0 ? `of ${formatCentsCompact(income)}` : "no income yet"}
-                color="var(--blush-deep)"
-                size={132}
-              />
-            </div>
-
-            {/* QUICK STATS */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border rounded-2xl overflow-hidden border border-border">
-              <div className="bg-surface p-5 md:p-6">
-                <Stat label="Income" value={formatCents(income)} />
-              </div>
-              <div className="bg-surface p-5 md:p-6">
-                <Stat
-                  label="Net"
-                  value={formatCents(net, { signed: true })}
-                  tone={net < 0 ? "blush" : "default"}
-                />
-              </div>
-              <div className="bg-surface p-5 md:p-6">
-                <Stat
-                  label="Projected"
-                  value={formatCents(forecastSpend)}
-                  tone={totalBudget > 0 && forecastSpend > totalBudget ? "blush" : "default"}
-                  hint={
-                    upcomingTotal > 0
-                      ? `spent + ${formatCentsCompact(upcomingTotal)} bills due`
-                      : "spent so far"
-                  }
-                />
-              </div>
-              <div className="bg-surface p-5 md:p-6">
-                <Stat
-                  label="Last month"
-                  value={formatCents(lastMonthSpend)}
-                  hint="full month"
-                />
-              </div>
-            </div>
-
-            {/* PAYCHECK CYCLE */}
+            {/* SUMMARY LINE */}
             <Card className="p-6 md:p-7">
-              <div className="flex items-baseline justify-between mb-4 gap-4">
-                <div className="min-w-0">
-                  <Label>Pay period</Label>
-                  <div className="flex items-baseline gap-2 mt-1">
-                    <span className="text-xl font-semibold tracking-tight">
-                      Day {daysIntoCycle + 1}
-                    </span>
-                    <span className="text-sm text-foreground-faint">
-                      of {cycleLengthDays}
-                    </span>
+              <div className="flex flex-wrap items-baseline gap-x-8 gap-y-4 justify-between">
+                <div>
+                  <div className="text-[10px] tracking-[0.25em] uppercase text-foreground-faint mb-2">
+                    Spent this month
                   </div>
-                  <div className="text-[11px] text-foreground-faint mt-1 mono tabular">
-                    {format(cycleStart, "MMM d")} – {format(cycleEnd, "MMM d")}
+                  <div className="text-3xl md:text-4xl font-semibold tracking-tight">
+                    {formatCents(spend)}
+                  </div>
+                  <div className="text-[11px] text-foreground-faint mt-2 mono tabular">
+                    of {formatCents(totals.planned)} planned · {txThisMonth.length} transactions
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="mono tabular text-xl font-medium">
-                    {formatCents(cycleSpend)}
+                <div>
+                  <div className="text-[10px] tracking-[0.25em] uppercase text-foreground-faint mb-2">
+                    Income
                   </div>
-                  <div className="text-[11px] text-foreground-faint tracking-tight mt-1">
-                    {paycheckAmt > 0
-                      ? `of ${formatCents(paycheckAmt)} ${cycleIncome > 0 ? "earned" : "expected"}`
-                      : `${daysLeftInCycle} days left`}
+                  <div className="text-2xl md:text-3xl font-medium tracking-tight mono tabular">
+                    {formatCents(income)}
+                  </div>
+                  <div className="text-[11px] text-foreground-faint mt-2">
+                    {income - spend >= 0 ? "+" : ""}
+                    {formatCents(income - spend)} net so far
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] tracking-[0.25em] uppercase text-foreground-faint mb-2">
+                    Projected
+                  </div>
+                  <div
+                    className={cn(
+                      "text-2xl md:text-3xl font-medium tracking-tight mono tabular",
+                      totals.planned > 0 && forecastSpend > totals.planned && "text-blush-deep",
+                    )}
+                  >
+                    {formatCents(forecastSpend)}
+                  </div>
+                  <div className="text-[11px] text-foreground-faint mt-2">
+                    {upcomingTotal > 0
+                      ? `spent + ${formatCentsCompact(upcomingTotal)} bills due`
+                      : "spent so far"}
                   </div>
                 </div>
               </div>
-              {paycheckAmt > 0 ? (
-                <>
-                  <ProgressBar
-                    value={cycleSpend}
-                    max={Math.max(paycheckAmt, 1)}
-                    color={cycleSpendPct > 100 ? "var(--blush-deep)" : "var(--blush)"}
-                  />
-                  <div className="flex items-center justify-between text-[11px] text-foreground-faint mt-2 mono tabular">
-                    <span>{cycleSpendPct.toFixed(0)}% spent</span>
-                    <span>{daysLeftInCycle} days left</span>
-                  </div>
-                </>
-              ) : (
-                <div className="text-[11px] text-foreground-faint mt-1">
-                  Set a monthly amount on the Paycheck category to see this
-                  period's burn rate.
-                </div>
-              )}
             </Card>
 
-            {/* CHARTS ROW */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
-              <Card className="p-6 md:p-7">
-                <SectionHeader
-                  title="Need, want, save"
-                  hint="share of monthly spend"
-                />
-                <ClassificationDonut data={donutData} total={spend} />
-                <div className="mt-6 grid grid-cols-3 gap-3 text-xs">
-                  {donutData.map((d) => {
-                    const total =
-                      donutData.reduce((s, x) => s + x.value, 0) || 1;
-                    const pct = (d.value / total) * 100;
-                    return (
-                      <div key={d.name} className="flex items-start gap-2">
-                        <span
-                          className="size-2 rounded-full mt-1.5 shrink-0"
-                          style={{ background: d.color }}
-                        />
-                        <div className="min-w-0">
-                          <div className="text-[10px] tracking-[0.2em] uppercase text-foreground-faint">
-                            {d.name}
-                          </div>
-                          <div className="mono tabular text-sm mt-0.5 truncate">
-                            {formatCentsCompact(d.value)}
-                          </div>
-                          <div className="text-[10px] text-foreground-faint mono tabular">
-                            {pct.toFixed(0)}%
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </Card>
-
-              <Card className="p-6 md:p-7">
-                <SectionHeader title="Last 30 days" hint="daily spend" />
-                <ThirtyDayArea data={dailyData} />
-              </Card>
-            </div>
-
-            {/* TOP CATEGORIES + MERCHANTS */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
-              <div>
-                <SectionHeader
-                  title="Top categories"
-                  right={
-                    <Link
-                      href="/categories"
-                      className="text-xs text-foreground-muted hover:text-foreground transition-colors tracking-tight inline-flex items-center gap-1"
-                    >
-                      manage <ArrowRight className="size-3" strokeWidth={1.5} />
-                    </Link>
-                  }
-                />
-                {categoriesWithSpend.length === 0 ? (
-                  <div className="text-foreground-faint text-sm py-8">
-                    No spending tracked yet this month.
-                  </div>
-                ) : (
-                  <Card className="divide-y divide-border">
-                    {categoriesWithSpend.slice(0, 6).map(({ category, spent }) => {
-                      const limit = category.monthlyLimitCents;
-                      const overspent = limit && spent > limit;
-                      return (
-                        <div
-                          key={category.id}
-                          className="block px-5 py-4"
+            {/* PLANNED vs ACTUAL TABLE */}
+            <div>
+              <SectionHeader
+                title="Planned vs actual"
+                hint="categories with a limit or any activity this month"
+                right={
+                  <Link
+                    href="/budget"
+                    className="text-xs text-foreground-muted hover:text-foreground transition-colors tracking-tight inline-flex items-center gap-1"
+                  >
+                    edit limits <ArrowRight className="size-3" strokeWidth={1.5} />
+                  </Link>
+                }
+              />
+              {rows.length === 0 ? (
+                <Card className="p-8 text-center text-foreground-faint text-sm">
+                  No category limits set and no spending yet. Head to{" "}
+                  <Link href="/budget" className="text-blush-deep hover:underline">
+                    Budget
+                  </Link>{" "}
+                  to plan the month.
+                </Card>
+              ) : (
+                <Card className="overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-[10px] tracking-[0.18em] uppercase text-foreground-faint border-b border-border">
+                        <th className="text-left px-5 py-3 font-medium">Category</th>
+                        <th className="text-right px-3 py-3 font-medium hidden sm:table-cell">
+                          Planned
+                        </th>
+                        <th className="text-right px-3 py-3 font-medium">Actual</th>
+                        <th className="text-right px-5 py-3 font-medium">Difference</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {groups.map((g) =>
+                        g.rows.length === 0 ? null : (
+                          <RowGroup key={g.key} label={g.label} rows={g.rows} />
+                        ),
+                      )}
+                      <tr className="border-t-2 border-border bg-surface-2/40">
+                        <td className="px-5 py-3 text-sm font-medium tracking-tight">
+                          Total
+                        </td>
+                        <td className="px-3 py-3 text-right mono tabular hidden sm:table-cell">
+                          {formatCents(totals.planned)}
+                        </td>
+                        <td className="px-3 py-3 text-right mono tabular">
+                          {formatCents(totals.actual)}
+                        </td>
+                        <td
+                          className={cn(
+                            "px-5 py-3 text-right mono tabular",
+                            totals.difference < 0 && "text-blush-deep",
+                          )}
                         >
-                          <div className="flex items-center gap-4">
-                            <div
-                              className="size-2 rounded-full shrink-0"
-                              style={{ background: category.color }}
-                            />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-baseline gap-2 mb-1.5">
-                                <span className="text-sm tracking-tight truncate">
-                                  {category.name}
-                                </span>
-                                <Pill
-                                  tone={
-                                    category.classification as
-                                      | "need"
-                                      | "want"
-                                      | "savings"
-                                  }
-                                >
-                                  {category.classification}
-                                </Pill>
-                              </div>
-                              {limit ? (
-                                <ProgressBar
-                                  value={spent}
-                                  max={limit}
-                                  color={category.color}
-                                />
-                              ) : (
-                                <div className="h-1.5" />
-                              )}
-                            </div>
-                            <div className="text-right shrink-0">
-                              <div
-                                className={`mono text-sm tabular ${overspent ? "text-blush-deep" : ""}`}
-                              >
-                                {formatCentsCompact(spent)}
-                              </div>
-                              {limit ? (
-                                <div className="text-[10px] text-foreground-faint tracking-tight mono tabular">
-                                  of {formatCentsCompact(limit)}
-                                </div>
-                              ) : (
-                                <div className="text-[10px] text-foreground-faint tracking-tight">
-                                  no limit
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </Card>
-                )}
-              </div>
-
-              <div>
-                <SectionHeader title="Top merchants" hint="this month" />
-                {topMerchants.length === 0 ? (
-                  <div className="text-foreground-faint text-sm py-8">
-                    Nothing yet.
-                  </div>
-                ) : (
-                  <Card className="divide-y divide-border">
-                    {topMerchants.map(([name, amount]) => {
-                      const max = topMerchants[0][1];
-                      const ratio = amount / max;
-                      return (
-                        <div key={name} className="px-5 py-4 flex items-center gap-4">
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm tracking-tight truncate mb-1.5">
-                              {name}
-                            </div>
-                            <div
-                              className="h-1.5 rounded-full bg-surface-2 overflow-hidden"
-                            >
-                              <div
-                                className="h-full bg-blush rounded-full"
-                                style={{ width: `${ratio * 100}%` }}
-                              />
-                            </div>
-                          </div>
-                          <div className="mono tabular text-sm shrink-0">
-                            {formatCentsCompact(amount)}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </Card>
-                )}
-              </div>
+                          {totals.difference >= 0 ? "+" : ""}
+                          {formatCents(totals.difference)}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </Card>
+              )}
             </div>
 
-            {recurring.length > 0 && (
+            {/* SAVINGS GOALS */}
+            <SavingsGoalsSection
+              goals={goalView}
+              totals={goalTotals}
+              accounts={allAccounts.map((a) => ({ id: a.id, name: a.name, type: a.type }))}
+            />
+
+            {/* COMING UP */}
+            {upcomingBills.length > 0 && (
               <div>
-                <SectionHeader
-                  title="Coming up"
-                  hint="detected recurring expenses"
-                />
+                <SectionHeader title="Coming up" hint="recurring bills due this month" />
                 <Card className="divide-y divide-border">
-                  {recurring.slice(0, 8).map((r) => (
+                  {upcomingBills.map((b, i) => (
                     <div
-                      key={r.merchantKey}
+                      key={`${b.merchant}-${i}`}
                       className="px-5 py-4 flex items-center gap-4"
                     >
                       <Repeat
@@ -562,15 +327,14 @@ export default async function DashboardPage() {
                       />
                       <div className="flex-1 min-w-0">
                         <div className="text-sm tracking-tight truncate">
-                          {r.displayName}
+                          {b.merchant}
                         </div>
-                        <div className="text-[11px] text-foreground-faint tracking-tight mt-0.5">
-                          {r.cadence} · seen {r.occurrences}× · last on{" "}
-                          {format(r.lastSeen, "MMM d")}
+                        <div className="text-[11px] text-foreground-faint mt-0.5 mono tabular">
+                          {format(b.date, "EEE, MMM d")}
                         </div>
                       </div>
                       <div className="mono tabular text-sm shrink-0">
-                        {formatCents(r.expectedAmountCents)}
+                        {formatCents(b.amountCents)}
                       </div>
                     </div>
                   ))}
@@ -580,6 +344,110 @@ export default async function DashboardPage() {
           </div>
         )}
       </Container>
+    </>
+  );
+}
+
+function RowGroup({
+  label,
+  rows,
+}: {
+  label: string;
+  rows: { category: Category; planned: number; actual: number; difference: number }[];
+}) {
+  const subtotal = rows.reduce(
+    (acc, r) => ({
+      planned: acc.planned + r.planned,
+      actual: acc.actual + r.actual,
+      difference: acc.difference + r.difference,
+    }),
+    { planned: 0, actual: 0, difference: 0 },
+  );
+  return (
+    <>
+      <tr className="bg-surface-2/30 border-t border-border">
+        <td
+          colSpan={4}
+          className="px-5 py-2 text-[10px] tracking-[0.2em] uppercase text-foreground-faint"
+        >
+          {label}
+        </td>
+      </tr>
+      {rows.map(({ category, planned, actual, difference }) => {
+        const over = planned > 0 && actual > planned;
+        return (
+          <tr
+            key={category.id}
+            className="border-t border-border hover:bg-surface-2/30 transition-colors"
+          >
+            <td className="px-5 py-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <span
+                  className="size-2 rounded-full shrink-0"
+                  style={{ background: category.color }}
+                />
+                <span className="truncate">{category.name}</span>
+              </div>
+              {planned > 0 && (
+                <div className="ml-5 mt-2 max-w-[160px]">
+                  <ProgressBar
+                    value={actual}
+                    max={planned}
+                    color={category.color}
+                    height={4}
+                  />
+                </div>
+              )}
+            </td>
+            <td className="px-3 py-3 text-right mono tabular text-foreground-muted hidden sm:table-cell">
+              {planned > 0 ? formatCents(planned) : "—"}
+            </td>
+            <td
+              className={cn(
+                "px-3 py-3 text-right mono tabular",
+                over && "text-blush-deep",
+              )}
+            >
+              {formatCents(actual)}
+            </td>
+            <td
+              className={cn(
+                "px-5 py-3 text-right mono tabular",
+                difference < 0 && "text-blush-deep",
+              )}
+            >
+              {planned === 0 ? (
+                <span className="text-foreground-faint">no limit</span>
+              ) : (
+                <>
+                  {difference >= 0 ? "+" : ""}
+                  {formatCents(difference)}
+                </>
+              )}
+            </td>
+          </tr>
+        );
+      })}
+      <tr className="border-t border-border bg-surface-2/10">
+        <td className="px-5 py-2 text-[11px] text-foreground-faint tracking-tight">
+          {label} subtotal
+        </td>
+        <td className="px-3 py-2 text-right mono tabular text-foreground-faint text-[11px] hidden sm:table-cell">
+          {formatCents(subtotal.planned)}
+        </td>
+        <td className="px-3 py-2 text-right mono tabular text-foreground-faint text-[11px]">
+          {formatCents(subtotal.actual)}
+        </td>
+        <td
+          className={cn(
+            "px-5 py-2 text-right mono tabular text-[11px]",
+            subtotal.difference < 0 ? "text-blush-deep" : "text-foreground-faint",
+          )}
+        >
+          {subtotal.difference >= 0 ? "+" : ""}
+          {formatCents(subtotal.difference)}
+        </td>
+      </tr>
     </>
   );
 }
