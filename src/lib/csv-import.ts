@@ -45,17 +45,23 @@ function parseAmount(s: string): number {
 
 function parseDate(s: string): Date | null {
   if (!s) return null;
-  // Try ISO first
-  const iso = new Date(s);
-  if (!Number.isNaN(iso.getTime())) return iso;
-  // Try MM/DD/YYYY or M/D/YYYY
+  s = s.trim();
+  // Plain ISO date (YYYY-MM-DD): anchor to noon UTC so the calendar day
+  // survives display in any timezone. Bare new Date("YYYY-MM-DD") is midnight
+  // UTC, which renders as the prior day in US (UTC-negative) timezones.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    return new Date(s + "T12:00:00Z");
+  }
+  // MM/DD/YYYY or M/D/YYYY → noon UTC of that calendar day.
   const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
   if (m) {
     let [, mm, dd, yy] = m;
     if (yy.length === 2) yy = "20" + yy;
-    return new Date(Number(yy), Number(mm) - 1, Number(dd));
+    return new Date(Date.UTC(Number(yy), Number(mm) - 1, Number(dd), 12));
   }
-  return null;
+  // Anything else (e.g. ISO with a time component): trust the native parse.
+  const iso = new Date(s);
+  return Number.isNaN(iso.getTime()) ? null : iso;
 }
 
 export function mapRows(

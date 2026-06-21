@@ -33,7 +33,7 @@ export async function createManualTransaction(form: FormData) {
 
   const cents = parseDollarsToCents(amountStr);
   const signed = direction === "in" ? Math.abs(cents) : -Math.abs(cents);
-  const date = new Date(dateStr + "T12:00:00");
+  const date = new Date(dateStr + "T12:00:00Z");
 
   await db.insert(transactions).values({
     accountId,
@@ -145,7 +145,7 @@ export async function updateTransaction(form: FormData) {
   if (!merchant) throw new Error("Merchant required");
   if (!date) throw new Error("Date required");
   const amountCents = parseDollarsToCents(amount);
-  const parsedDate = new Date(date + "T12:00:00");
+  const parsedDate = new Date(date + "T12:00:00Z");
   if (Number.isNaN(parsedDate.getTime())) throw new Error("Invalid date");
   await db
     .update(transactions)
