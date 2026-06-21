@@ -280,7 +280,10 @@ export async function applyTransactionsDelta(
   for (const t of added) {
     const accountId = accountMap.get(t.account_id);
     if (!accountId) continue;
-    const date = new Date(t.date);
+    // Plaid gives a plain YYYY-MM-DD. Anchor to noon UTC so the calendar day
+    // survives display in any (esp. US, UTC-negative) timezone. Bare
+    // new Date("YYYY-MM-DD") is midnight UTC, which renders as the prior day.
+    const date = new Date(t.date + "T12:00:00Z");
     // Account type for sign handling
     const [acct] = await db
       .select()
@@ -371,7 +374,10 @@ export async function applyTransactionsDelta(
   for (const t of modified) {
     const existing = await findExistingByExternalId(t.transaction_id);
     if (!existing) continue;
-    const date = new Date(t.date);
+    // Plaid gives a plain YYYY-MM-DD. Anchor to noon UTC so the calendar day
+    // survives display in any (esp. US, UTC-negative) timezone. Bare
+    // new Date("YYYY-MM-DD") is midnight UTC, which renders as the prior day.
+    const date = new Date(t.date + "T12:00:00Z");
     const [acct] = await db
       .select()
       .from(accounts)
