@@ -239,7 +239,10 @@ export function TransactionsClient({
           <div key={day}>
             <div className="flex items-baseline justify-between px-1 mb-2">
               <h3 className="serif text-lg">
-                {format(new Date(day), "EEEE, MMMM d")}
+                {/* `day` is a yyyy-MM-dd key; append local midnight so it
+                    isn't parsed as midnight UTC (which renders a day early
+                    in US timezones). */}
+                {format(new Date(day + "T00:00:00"), "EEEE, MMMM d")}
               </h3>
               <div className="mono tabular text-xs text-foreground-faint">
                 {formatCents(total, { signed: true })}
