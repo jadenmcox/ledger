@@ -1,12 +1,14 @@
 import { db } from "@/db";
 import {
   accounts,
+  budgetSettings,
   categories,
   recurringSchedules,
   savingsGoals,
   transactions,
   type Category,
 } from "@/db/schema";
+import { CompositionBar } from "./composition-bar";
 import { computeOccurrences } from "@/lib/recurring-schedules";
 import { and, asc, eq, gte, lte } from "drizzle-orm";
 import {
@@ -50,6 +52,7 @@ export default async function DashboardPage() {
     allAccounts,
     schedules,
     goals,
+    settingsRows,
   ] = await Promise.all([
     db
       .select()
@@ -65,7 +68,9 @@ export default async function DashboardPage() {
     db.select().from(accounts),
     db.select().from(recurringSchedules).where(eq(recurringSchedules.isActive, true)),
     db.select().from(savingsGoals).where(eq(savingsGoals.isArchived, false)).orderBy(asc(savingsGoals.sortOrder), asc(savingsGoals.id)),
+    db.select().from(budgetSettings).limit(1),
   ]);
+  const framework = settingsRows[0]?.framework ?? "custom";
 
   const catById = new Map(allCategories.map((c) => [c.id, c]));
   const acctById = new Map(allAccounts.map((a) => [a.id, a]));
@@ -73,6 +78,7 @@ export default async function DashboardPage() {
   let income = 0;
   let spend = 0;
   const spendByCategory = new Map<number, number>();
+  const spendByClassification = { need: 0, want: 0, savings: 0 };
   for (const t of txThisMonth) {
     const cat = t.categoryId ? catById.get(t.categoryId) : null;
     if (cat?.classification === "income") {
@@ -82,7 +88,12 @@ export default async function DashboardPage() {
     if (t.amountCents > 0) continue;
     const abs = Math.abs(t.amountCents);
     spend += abs;
-    if (cat) spendByCategory.set(cat.id, (spendByCategory.get(cat.id) || 0) + abs);
+    if (cat) {
+      spendByCategory.set(cat.id, (spendByCategory.get(cat.id) || 0) + abs);
+      if (cat.classification === "need") spendByClassification.need += abs;
+      else if (cat.classification === "want") spendByClassification.want += abs;
+      else if (cat.classification === "savings") spendByClassification.savings += abs;
+    }
   }
 
   // Forecast: spend so far + upcoming recurring bills between tomorrow and EoM
@@ -236,6 +247,14 @@ export default async function DashboardPage() {
                 </div>
               </div>
             </Card>
+
+            {/* COMPOSITION BAR */}
+            <CompositionBar
+              income={income}
+              segments={spendByClassification}
+              framework={framework}
+              plannedTotal={totals.planned}
+            />
 
             {/* PLANNED vs ACTUAL TABLE */}
             <div>
