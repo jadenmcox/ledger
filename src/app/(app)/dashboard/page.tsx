@@ -25,13 +25,16 @@ import { formatCents, formatCentsCompact, cn } from "@/lib/utils";
 import {
   startOfMonth,
   endOfMonth,
+  subMonths,
   format,
   getDaysInMonth,
   getDate,
 } from "date-fns";
 import Link from "next/link";
-import { ArrowRight, Repeat } from "lucide-react";
+import { ArrowRight, Repeat, TrendingUp } from "lucide-react";
 import { SavingsGoalsSection } from "./savings-goals";
+import { CategoryDonut, MonthlyTrendBars } from "./charts";
+import type { DonutDatum } from "@/components/charts/DonutChart";
 
 export const dynamic = "force-dynamic";
 
@@ -45,9 +48,12 @@ export default async function DashboardPage() {
   const dayOfMonth = getDate(now);
   const daysLeft = daysInMonth - dayOfMonth;
   const yearEnd = new Date(now.getFullYear(), 11, 31);
+  // 6-month window for the spending-trend bars (current month + 5 prior).
+  const trendStart = startOfMonth(subMonths(now, 5));
 
   const [
     txThisMonth,
+    trendTx,
     allCategories,
     allAccounts,
     schedules,
@@ -60,6 +66,20 @@ export default async function DashboardPage() {
       .where(
         and(
           gte(transactions.date, monthStart),
+          lte(transactions.date, monthEnd),
+          eq(transactions.isTransfer, false),
+        ),
+      ),
+    db
+      .select({
+        date: transactions.date,
+        amountCents: transactions.amountCents,
+        categoryId: transactions.categoryId,
+      })
+      .from(transactions)
+      .where(
+        and(
+          gte(transactions.date, trendStart),
           lte(transactions.date, monthEnd),
           eq(transactions.isTransfer, false),
         ),
@@ -95,6 +115,83 @@ export default async function DashboardPage() {
       else if (cat.classification === "savings") spendByClassification.savings += abs;
     }
   }
+
+  // Spending by category this month, biggest first. spendByCategory already
+  // excludes income (skipped above) and transfers (filtered in the query) and
+  // only counts money going out. Uncategorized spend isn't in the map, so we
+  // add it as its own neutral slice to keep the donut total honest.
+  const categorySpend = [...spendByCategory.entries()]
+    .map(([id, value]) => ({ category: catById.get(id)!, value }))
+    .filter((x) => x.category)
+    .sort((a, b) => b.value - a.value);
+  const categorizedSpend = categorySpend.reduce((s, x) => s + x.value, 0);
+  const uncategorizedSpend = Math.max(0, spend - categorizedSpend);
+  const donutData: DonutDatum[] = categorySpend.map((x) => ({
+    name: x.category.name,
+    value: x.value,
+    color: x.category.color,
+  }));
+  if (uncategorizedSpend > 0) {
+    donutData.push({
+      name: "Uncategorized",
+      value: uncategorizedSpend,
+      color: "var(--surface-2)",
+    });
+  }
+  const biggestCategory = categorySpend[0] ?? null;
+
+  // Monthly spending trend: current month + 5 prior. Bucket by the stored
+  // Date (noon-UTC anchored, so the local calendar month is always correct —
+  // never parse a bare yyyy-MM-dd string here, per the date convention).
+  const trendMonths = Array.from({ length: 6 }, (_, i) => {
+    const d = startOfMonth(subMonths(now, 5 - i));
+    return { key: format(d, "yyyy-MM"), label: format(d, "MMM"), spend: 0 };
+  });
+  const trendIdx = new Map(trendMonths.map((m, i) => [m.key, i]));
+  for (const t of trendTx) {
+    if (t.amountCents > 0) continue;
+    const cat = t.categoryId ? catById.get(t.categoryId) : null;
+    if (cat?.classification === "income") continue;
+    const i = trendIdx.get(format(t.date, "yyyy-MM"));
+    if (i !== undefined) trendMonths[i].spend += Math.abs(t.amountCents);
+  }
+  const trendData = trendMonths.map((m) => ({ label: m.label, spend: m.spend }));
+  const trendColors = trendMonths.map((_, i) =>
+    i === trendMonths.length - 1 ? "var(--blush-deep)" : "var(--blush)",
+  );
+
+  // Overspending flag. Rule: exclude Rent/Mortgage (a big fixed cost that
+  // would always dominate), then flag any category whose spend this month is
+  // more than 1.5x the MEDIAN non-rent category spend. We also note when a
+  // flagged category is over its set monthlyLimitCents. Needs at least 3
+  // non-rent categories for a median to mean anything.
+  const isRent = (name: string) => /\b(rent|mortgage)\b/i.test(name);
+  const nonRent = categorySpend.filter((x) => !isRent(x.category.name));
+  const sortedSpends = nonRent.map((x) => x.value).sort((a, b) => a - b);
+  const medianSpend =
+    sortedSpends.length === 0
+      ? 0
+      : sortedSpends.length % 2 === 1
+        ? sortedSpends[(sortedSpends.length - 1) / 2]
+        : (sortedSpends[sortedSpends.length / 2 - 1] +
+            sortedSpends[sortedSpends.length / 2]) /
+          2;
+  const overspendThreshold = medianSpend * 1.5;
+  const overspending =
+    nonRent.length >= 3 && medianSpend > 0
+      ? nonRent
+          .filter((x) => x.value > overspendThreshold)
+          .map((x) => ({
+            category: x.category,
+            value: x.value,
+            multiple: x.value / medianSpend,
+            overLimit:
+              x.category.monthlyLimitCents != null &&
+              x.value > x.category.monthlyLimitCents,
+            limit: x.category.monthlyLimitCents,
+          }))
+          .sort((a, b) => b.value - a.value)
+      : [];
 
   // Forecast: spend so far + upcoming recurring bills between tomorrow and EoM
   const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
@@ -245,6 +342,34 @@ export default async function DashboardPage() {
                       : "spent so far"}
                   </div>
                 </div>
+                <div>
+                  <div className="text-[10px] tracking-[0.25em] uppercase text-foreground-faint mb-2">
+                    Biggest category
+                  </div>
+                  {biggestCategory ? (
+                    <>
+                      <div className="text-2xl md:text-3xl font-medium tracking-tight flex items-center gap-2">
+                        <span
+                          className="size-2.5 rounded-full shrink-0"
+                          style={{ background: biggestCategory.category.color }}
+                        />
+                        <span className="truncate">
+                          {biggestCategory.category.name}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-foreground-faint mt-2 mono tabular">
+                        {formatCents(biggestCategory.value)}
+                        {spend > 0
+                          ? ` · ${((biggestCategory.value / spend) * 100).toFixed(0)}% of spend`
+                          : ""}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-2xl md:text-3xl font-medium tracking-tight text-foreground-faint">
+                      —
+                    </div>
+                  )}
+                </div>
               </div>
             </Card>
 
@@ -255,6 +380,105 @@ export default async function DashboardPage() {
               framework={framework}
               plannedTotal={totals.planned}
             />
+
+            {/* SPENDING BREAKDOWN + TREND */}
+            <div className="grid gap-6 md:gap-8 lg:grid-cols-2">
+              <Card className="p-6 md:p-7">
+                <SectionHeader
+                  title="Where it's going"
+                  hint="spending by category this month"
+                />
+                {categorySpend.length === 0 && uncategorizedSpend === 0 ? (
+                  <div className="py-10 text-center text-foreground-faint text-sm">
+                    No spending yet this month.
+                  </div>
+                ) : (
+                  <div className="flex flex-col sm:flex-row items-center gap-6">
+                    <div className="shrink-0">
+                      <CategoryDonut data={donutData} total={spend} />
+                    </div>
+                    <div className="flex-1 min-w-0 w-full space-y-2.5">
+                      {donutData.slice(0, 6).map((d) => (
+                        <div
+                          key={d.name}
+                          className="flex items-center gap-3 text-sm"
+                        >
+                          <span
+                            className="size-2.5 rounded-full shrink-0"
+                            style={{ background: d.color }}
+                          />
+                          <span className="truncate flex-1 tracking-tight">
+                            {d.name}
+                          </span>
+                          <span className="mono tabular text-foreground-muted shrink-0">
+                            {formatCents(d.value)}
+                          </span>
+                          <span className="mono tabular text-foreground-faint text-[11px] shrink-0 w-9 text-right">
+                            {spend > 0 ? `${((d.value / spend) * 100).toFixed(0)}%` : ""}
+                          </span>
+                        </div>
+                      ))}
+                      {donutData.length > 6 && (
+                        <div className="text-[11px] text-foreground-faint pt-1">
+                          +{donutData.length - 6} more
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </Card>
+
+              <Card className="p-6 md:p-7">
+                <SectionHeader
+                  title="Monthly trend"
+                  hint="total spent, last 6 months"
+                />
+                <MonthlyTrendBars data={trendData} colors={trendColors} />
+              </Card>
+            </div>
+
+            {/* OVERSPENDING FLAGS */}
+            {overspending.length > 0 && (
+              <div>
+                <SectionHeader
+                  title="Watch these"
+                  hint="more than 1.5× your typical category (excludes rent/mortgage)"
+                />
+                <Card className="divide-y divide-border">
+                  {overspending.map((o) => (
+                    <div
+                      key={o.category.id}
+                      className="px-5 py-4 flex items-center gap-4"
+                    >
+                      <span
+                        className="size-2.5 rounded-full shrink-0"
+                        style={{ background: o.category.color }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm tracking-tight truncate flex items-center gap-2">
+                          {o.category.name}
+                          {o.overLimit && (
+                            <Pill tone="need">over limit</Pill>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-foreground-faint mt-0.5">
+                          {o.multiple.toFixed(1)}× your typical category
+                          {o.overLimit && o.limit != null
+                            ? ` · limit ${formatCentsCompact(o.limit)}`
+                            : ""}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0 text-blush-deep">
+                        <TrendingUp className="size-3.5" strokeWidth={1.5} />
+                        <span className="mono tabular text-sm">
+                          {formatCents(o.value)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </Card>
+              </div>
+            )}
 
             {/* PLANNED vs ACTUAL TABLE */}
             <div>
