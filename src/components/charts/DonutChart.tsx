@@ -36,7 +36,10 @@ export function DonutChart({
   const inner = Math.max(8, outer - thickness);
 
   return (
-    <div className="relative w-full flex items-center justify-center" style={{ height: size }}>
+    <div
+      className="relative flex items-center justify-center mx-auto"
+      style={{ height: size, width: size, maxWidth: "100%" }}
+    >
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie
