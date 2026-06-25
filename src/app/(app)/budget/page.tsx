@@ -5,16 +5,20 @@ import {
   recurringSchedules,
   transactions,
 } from "@/db/schema";
+import type { Classification } from "@/db/schema";
 import { and, eq, gte, lte } from "drizzle-orm";
 import { Container, PageHeader } from "@/components/ui";
 import {
   endOfMonth,
+  format,
   getDate,
   getDaysInMonth,
   startOfMonth,
+  subMonths,
 } from "date-fns";
 import { computeOccurrences } from "@/lib/recurring-schedules";
 import { BudgetClient } from "./client";
+import type { SmartFillRow } from "./smart-fill";
 import type { CategoryTx } from "../categories/client";
 
 export const dynamic = "force-dynamic";
@@ -25,25 +29,44 @@ export default async function BudgetPage() {
   const monthEnd = endOfMonth(now);
   const daysInMonth = getDaysInMonth(now);
   const dayOfMonth = getDate(now);
+  // Smart-fill basis: the 6 *complete* months before this one. The current
+  // month is partial so it would drag every average down — exclude it.
+  const histStart = startOfMonth(subMonths(now, 6));
+  const histEnd = endOfMonth(subMonths(now, 1));
 
-  const [allCategories, txThisMonth, schedules, settingsRows] = await Promise.all([
-    db.select().from(categories),
-    db
-      .select()
-      .from(transactions)
-      .where(
-        and(
-          gte(transactions.date, monthStart),
-          lte(transactions.date, monthEnd),
-          eq(transactions.isTransfer, false),
+  const [allCategories, txThisMonth, histTx, schedules, settingsRows] =
+    await Promise.all([
+      db.select().from(categories),
+      db
+        .select()
+        .from(transactions)
+        .where(
+          and(
+            gte(transactions.date, monthStart),
+            lte(transactions.date, monthEnd),
+            eq(transactions.isTransfer, false),
+          ),
         ),
-      ),
-    db
-      .select()
-      .from(recurringSchedules)
-      .where(eq(recurringSchedules.isActive, true)),
-    db.select().from(budgetSettings).limit(1),
-  ]);
+      db
+        .select({
+          date: transactions.date,
+          amountCents: transactions.amountCents,
+          categoryId: transactions.categoryId,
+        })
+        .from(transactions)
+        .where(
+          and(
+            gte(transactions.date, histStart),
+            lte(transactions.date, histEnd),
+            eq(transactions.isTransfer, false),
+          ),
+        ),
+      db
+        .select()
+        .from(recurringSchedules)
+        .where(eq(recurringSchedules.isActive, true)),
+      db.select().from(budgetSettings).limit(1),
+    ]);
 
   const framework = settingsRows[0]?.framework ?? "custom";
 
@@ -133,10 +156,6 @@ export default async function BudgetPage() {
   const expectedIncome = paycheckCat?.monthlyLimitCents ?? 0;
   const incomeBasis = Math.max(income, expectedIncome);
 
-  // Expected month-end spend: what's hit so far plus known upcoming recurring bills.
-  // Pace extrapolation was noisy and conflicted with the per-class "what's left" math below.
-  const projectedSpend = spend + upcomingTotal;
-
   const totalLimit = allCategories.reduce(
     (s, c) =>
       c.classification !== "income" && c.monthlyLimitCents
@@ -160,13 +179,101 @@ export default async function BudgetPage() {
       upcoming: upcomingByCategory.get(c.id) ?? 0,
     }));
 
+  // ---- Smart-fill basis: average monthly spend per category ----
+  // Bucket the trailing window by the stored noon-UTC Date (date-fns format on
+  // the Date is safe — never parse a bare yyyy-MM-dd string here).
+  const histByCategory = new Map<number, number>();
+  const monthsSeen = new Set<string>();
+  for (const t of histTx) {
+    if (t.amountCents > 0) continue;
+    const c = t.categoryId ? catById.get(t.categoryId) : null;
+    if (!c || c.classification === "income") continue;
+    monthsSeen.add(format(t.date, "yyyy-MM"));
+    histByCategory.set(
+      c.id,
+      (histByCategory.get(c.id) ?? 0) + Math.abs(t.amountCents),
+    );
+  }
+  // Divide each category's trailing total by how many months actually had
+  // activity (capped to the 6-month window). A two-month-old account shouldn't
+  // have its spend averaged over six empty months.
+  const basisMonths = Math.max(1, Math.min(6, monthsSeen.size));
+
+  const suggestRows = allCategories.filter(
+    (c) => c.classification !== "income" && !c.isArchived,
+  );
+  const avgByCategory = new Map<number, number>();
+  for (const c of suggestRows) {
+    avgByCategory.set(
+      c.id,
+      Math.round((histByCategory.get(c.id) ?? 0) / basisMonths),
+    );
+  }
+
+  // Framework scaling: keep each category's relative share of its class but
+  // stretch class totals to respect the chosen framework. Custom leaves the
+  // raw averages alone.
+  const scaledByCategory = new Map<number, number>();
+  for (const c of suggestRows)
+    scaledByCategory.set(c.id, avgByCategory.get(c.id) ?? 0);
+  if (framework === "50_30_20" && incomeBasis > 0) {
+    const splits: Record<string, number> = { need: 0.5, want: 0.3, savings: 0.2 };
+    for (const cls of ["need", "want", "savings"] as Exclude<
+      Classification,
+      "income"
+    >[]) {
+      const clsCats = suggestRows.filter((c) => c.classification === cls);
+      if (clsCats.length === 0) continue;
+      const target = Math.round(incomeBasis * splits[cls]);
+      const rawTotal = clsCats.reduce(
+        (s, c) => s + (avgByCategory.get(c.id) ?? 0),
+        0,
+      );
+      if (rawTotal > 0) {
+        for (const c of clsCats) {
+          scaledByCategory.set(
+            c.id,
+            Math.round(((avgByCategory.get(c.id) ?? 0) * target) / rawTotal),
+          );
+        }
+      } else {
+        const per = Math.round(target / clsCats.length);
+        for (const c of clsCats) scaledByCategory.set(c.id, per);
+      }
+    }
+  } else if (framework === "zero_based" && incomeBasis > 0) {
+    const rawTotal = suggestRows.reduce(
+      (s, c) => s + (avgByCategory.get(c.id) ?? 0),
+      0,
+    );
+    if (rawTotal > 0) {
+      const ratio = incomeBasis / rawTotal;
+      for (const c of suggestRows) {
+        scaledByCategory.set(
+          c.id,
+          Math.round((avgByCategory.get(c.id) ?? 0) * ratio),
+        );
+      }
+    }
+  }
+
+  const smartFillRows: SmartFillRow[] = suggestRows.map((c) => ({
+    id: c.id,
+    name: c.name,
+    color: c.color,
+    classification: c.classification,
+    currentLimitCents: c.monthlyLimitCents,
+    avgCents: avgByCategory.get(c.id) ?? 0,
+    scaledCents: scaledByCategory.get(c.id) ?? 0,
+  }));
+
   return (
     <>
       <PageHeader
         eyebrow="BUDGET"
         title="What's left to "
         italic="spend."
-        subtitle="Pick a framework, set limits across every category, and see what's actually projected to land before month-end."
+        subtitle="Pick a framework, set a monthly limit on each category, and see what's left before month-end."
       />
       <Container className="pb-32 md:pb-16">
         <BudgetClient
@@ -175,7 +282,6 @@ export default async function BudgetPage() {
           incomeBasis={incomeBasis}
           spend={spend}
           spendByClassification={spendByClassification}
-          projectedSpend={projectedSpend}
           totalLimit={totalLimit}
           upcomingTotal={upcomingTotal}
           upcomingList={upcomingList}
@@ -184,6 +290,8 @@ export default async function BudgetPage() {
           calendarPct={calendarPct}
           categories={cats}
           txByCategory={txByCategory}
+          smartFillRows={smartFillRows}
+          basisMonths={basisMonths}
         />
       </Container>
     </>

@@ -8,7 +8,6 @@ import {
   createCategory,
   updateCategory,
   deleteCategory,
-  setLimit,
 } from "./actions";
 import type { Category } from "@/db/schema";
 import { classifications } from "@/db/schema";
@@ -16,8 +15,6 @@ import {
   Plus,
   Trash2,
   Pencil,
-  Check,
-  X,
   ChevronRight,
 } from "lucide-react";
 
@@ -158,19 +155,6 @@ function CategoryRow({
   onToggle: () => void;
   onEdit: () => void;
 }) {
-  const [editLimit, setEditLimit] = useState(false);
-  const [limitVal, setLimitVal] = useState(
-    cat.monthlyLimitCents ? (cat.monthlyLimitCents / 100).toFixed(2) : "",
-  );
-  const [, startTransition] = useTransition();
-
-  const saveLimit = () => {
-    startTransition(async () => {
-      await setLimit(cat.id, limitVal);
-      setEditLimit(false);
-    });
-  };
-
   return (
     <div className="group">
     <div
@@ -234,50 +218,16 @@ function CategoryRow({
           </div>
         )}
       </div>
-      <div className="text-right shrink-0">
-        {editLimit ? (
-          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-            <Input
-              autoFocus
-              value={limitVal}
-              onChange={(e) => setLimitVal(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") saveLimit();
-                if (e.key === "Escape") setEditLimit(false);
-              }}
-              placeholder="0.00"
-              className="w-24 text-right mono tabular h-7"
-            />
-            <button
-              onClick={saveLimit}
-              className="size-7 inline-flex items-center justify-center text-blue-deep rounded-md hover:bg-surface-2"
-            >
-              <Check className="size-4" strokeWidth={1.5} />
-            </button>
-            <button
-              onClick={() => setEditLimit(false)}
-              className="size-7 inline-flex items-center justify-center text-foreground-faint rounded-md hover:bg-surface-2"
-            >
-              <X className="size-4" strokeWidth={1.5} />
-            </button>
+      {cat.classification !== "income" && (
+        <div className="text-right shrink-0">
+          <div className="mono tabular text-sm text-foreground-muted">
+            {cat.monthlyLimitCents ? formatCents(cat.monthlyLimitCents) : "—"}
           </div>
-        ) : (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setEditLimit(true);
-            }}
-            className="mono tabular text-sm text-foreground-muted hover:text-blush-deep transition-colors"
-          >
-            {cat.monthlyLimitCents
-              ? formatCents(cat.monthlyLimitCents)
-              : "—"}
-            <span className="block text-[10px] text-foreground-faint tracking-tight font-sans">
-              monthly amount
-            </span>
-          </button>
-        )}
-      </div>
+          <span className="block text-[10px] text-foreground-faint tracking-tight">
+            monthly limit
+          </span>
+        </div>
+      )}
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
         <button
           onClick={onEdit}

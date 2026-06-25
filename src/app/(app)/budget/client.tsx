@@ -14,9 +14,11 @@ import {
 } from "@/components/ui";
 import { formatCents, formatCentsCompact, parseDollarsToCents } from "@/lib/utils";
 import { format } from "date-fns";
-import { Check, Sparkles, ArrowRight, ChevronRight } from "lucide-react";
+import Link from "next/link";
+import { Check, ArrowRight, ChevronRight, Tag } from "lucide-react";
 import type { BudgetFramework, Classification } from "@/db/schema";
 import { bulkSetMonthlyLimits, setBudgetFramework } from "./actions";
+import { SmartFillLimits, type SmartFillRow } from "./smart-fill";
 import type { CategoryTx } from "../categories/client";
 
 type CatRow = {
@@ -80,7 +82,6 @@ export function BudgetClient({
   incomeBasis,
   spend,
   spendByClassification,
-  projectedSpend,
   totalLimit,
   upcomingTotal,
   upcomingList,
@@ -89,13 +90,14 @@ export function BudgetClient({
   calendarPct,
   categories,
   txByCategory = {},
+  smartFillRows,
+  basisMonths,
 }: {
   framework: BudgetFramework;
   income: number;
   incomeBasis: number;
   spend: number;
   spendByClassification: { need: number; want: number; savings: number };
-  projectedSpend: number;
   totalLimit: number;
   upcomingTotal: number;
   upcomingList: UpcomingItem[];
@@ -104,6 +106,8 @@ export function BudgetClient({
   calendarPct: number;
   categories: CatRow[];
   txByCategory?: Record<number, CategoryTx[]>;
+  smartFillRows: SmartFillRow[];
+  basisMonths: number;
 }) {
   const [selectedFramework, setSelectedFramework] =
     useState<BudgetFramework>(framework);
@@ -149,8 +153,6 @@ export function BudgetClient({
 
   const limitByClass = (cls: Classification) =>
     byClass[cls].reduce((s, c) => s + (c.monthlyLimitCents ?? 0), 0);
-  const draftLimitByClass = (cls: Classification) =>
-    byClass[cls].reduce((s, c) => s + (draftCents(c.id) ?? 0), 0);
 
   const remainingByClass = {
     need: Math.max(
@@ -173,35 +175,6 @@ export function BudgetClient({
   })();
   const daysLeft = daysInMonth - dayOfMonth;
 
-  // Suggested allocations based on framework + incomeBasis.
-  const suggested = useMemo(() => {
-    if (selectedFramework === "50_30_20") {
-      return {
-        need: Math.round(incomeBasis * 0.5),
-        want: Math.round(incomeBasis * 0.3),
-        savings: Math.round(incomeBasis * 0.2),
-      };
-    }
-    if (selectedFramework === "zero_based") {
-      // Suggest scaling current draft limits up/down so they sum to income.
-      const total = ["need", "want", "savings"].reduce(
-        (s, k) => s + draftLimitByClass(k as Classification),
-        0,
-      );
-      if (total <= 0 || incomeBasis <= 0) {
-        return { need: 0, want: 0, savings: 0 };
-      }
-      const ratio = incomeBasis / total;
-      return {
-        need: Math.round(draftLimitByClass("need") * ratio),
-        want: Math.round(draftLimitByClass("want") * ratio),
-        savings: Math.round(draftLimitByClass("savings") * ratio),
-      };
-    }
-    return null; // custom — no suggestion
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedFramework, incomeBasis, drafts, categories]);
-
   const onPickFramework = (f: BudgetFramework) => {
     setSelectedFramework(f);
     startTransition(async () => {
@@ -222,31 +195,6 @@ export function BudgetClient({
     });
   };
 
-  const onApplySuggested = () => {
-    if (!suggested) return;
-    setDrafts((prev) => {
-      const next = { ...prev };
-      for (const cls of ["need", "want", "savings"] as Classification[]) {
-        const rows = byClass[cls];
-        const currentTotal = rows.reduce((s, r) => s + (draftCents(r.id) ?? 0), 0);
-        const target = suggested[cls as "need" | "want" | "savings"];
-        if (rows.length === 0) continue;
-        if (currentTotal <= 0) {
-          // Even split when no existing values
-          const per = Math.round(target / rows.length);
-          for (const r of rows) next[r.id] = (per / 100).toFixed(0);
-        } else {
-          const ratio = target / currentTotal;
-          for (const r of rows) {
-            const c = (draftCents(r.id) ?? 0) * ratio;
-            next[r.id] = (c / 100).toFixed(0);
-          }
-        }
-      }
-      return next;
-    });
-  };
-
   return (
     <div className="space-y-10 md:space-y-14">
       {/* GLANCE */}
@@ -258,7 +206,7 @@ export function BudgetClient({
             tone="blush"
             hint={
               totalLimit > 0
-                ? `of ${formatCentsCompact(totalLimit)} budgeted · ${daysLeft} days left`
+                ? `of ${formatCentsCompact(totalLimit)} planned · ${daysLeft} days left`
                 : `${daysLeft} days left this month`
             }
           />
@@ -286,37 +234,34 @@ export function BudgetClient({
           </div>
           <div className="bg-surface p-5">
             <Stat
-              label="Projected"
-              value={formatCents(projectedSpend)}
-              tone={
-                totalLimit > 0 && projectedSpend > totalLimit
-                  ? "blush"
-                  : "default"
-              }
-              hint={
-                upcomingTotal > 0
-                  ? `spent + ${formatCentsCompact(upcomingTotal)} bills due`
-                  : "spent so far"
-              }
-            />
-          </div>
-          <div className="bg-surface p-5">
-            <Stat
-              label="Budgeted"
+              label="Planned"
               value={formatCents(totalLimit)}
               hint={
                 incomeBasis > 0
                   ? `${Math.round((totalLimit / incomeBasis) * 100)}% of ${formatCentsCompact(incomeBasis)} income`
-                  : "needs + wants + savings"
+                  : "your limits, added up"
               }
             />
           </div>
           <div className="bg-surface p-5">
             <Stat
-              label="Headroom"
-              value={formatCents(Math.max(0, totalLimit - projectedSpend))}
-              tone={projectedSpend > totalLimit ? "blush" : "default"}
-              hint={projectedSpend > totalLimit ? "over budget" : "after bills due"}
+              label="Left to spend"
+              value={formatCents(Math.max(0, totalLimit - spend))}
+              tone={totalLimit > 0 && spend > totalLimit ? "blush" : "default"}
+              hint={
+                totalLimit <= 0
+                  ? "set limits to track this"
+                  : spend > totalLimit
+                    ? "over your plan"
+                    : `for the next ${daysLeft} ${daysLeft === 1 ? "day" : "days"}`
+              }
+            />
+          </div>
+          <div className="bg-surface p-5">
+            <Stat
+              label="Bills still due"
+              value={formatCents(upcomingTotal)}
+              hint={upcomingTotal > 0 ? "before month-end" : "none scheduled"}
             />
           </div>
         </div>
@@ -360,67 +305,15 @@ export function BudgetClient({
           })}
         </div>
 
-        {suggested && incomeBasis > 0 && (
-          <Card className="mt-4 p-5 md:p-6">
-            <div className="flex items-baseline justify-between gap-4 mb-4">
-              <div>
-                <Label className="mb-1">Suggested allocation</Label>
-                <div className="text-[12px] text-foreground-muted">
-                  Against {formatCents(incomeBasis)}{" "}
-                  {income >= incomeBasis ? "earned" : "expected income"}.
-                </div>
-              </div>
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={onApplySuggested}
-                disabled={pending}
-              >
-                <Sparkles className="size-3.5" strokeWidth={1.75} />
-                Apply to limits
-              </Button>
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              {(["need", "want", "savings"] as const).map((cls) => {
-                const target = suggested[cls];
-                const current = limitByClass(cls);
-                const spent = spendByClassification[cls];
-                const gap = current - target;
-                return (
-                  <div
-                    key={cls}
-                    className="rounded-xl border border-border bg-surface-2/40 p-4"
-                  >
-                    <Pill tone={classificationTone[cls]}>
-                      {classificationLabel[cls]}
-                    </Pill>
-                    <div className="mono tabular text-lg mt-2 font-medium">
-                      {formatCents(target)}
-                    </div>
-                    <div className="text-[11px] text-foreground-faint mt-1">
-                      {current > 0 ? (
-                        <>
-                          limit {formatCentsCompact(current)}
-                          {Math.abs(gap) > 100 && (
-                            <span className={gap > 0 ? "text-blush-deep ml-1" : "text-sage-deep ml-1"}>
-                              ({gap > 0 ? "−" : "+"}{formatCentsCompact(Math.abs(gap))})
-                            </span>
-                          )}
-                        </>
-                      ) : (
-                        <span>no limit set</span>
-                      )}
-                    </div>
-                    <div className="text-[11px] text-foreground-faint mono tabular mt-0.5">
-                      {formatCentsCompact(spent)} spent so far
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
-        )}
       </div>
+
+      {/* SMART-FILL — the one place to suggest limits from spending + framework */}
+      <SmartFillLimits
+        rows={smartFillRows}
+        framework={framework}
+        incomeBasis={incomeBasis}
+        basisMonths={basisMonths}
+      />
 
       {/* FORECASTING */}
       <div>
@@ -531,6 +424,14 @@ export function BudgetClient({
             </Button>
           }
         />
+        <Link
+          href="/categories"
+          className="inline-flex items-center gap-1.5 text-xs text-foreground-muted hover:text-blush-deep transition-colors mb-4"
+        >
+          <Tag className="size-3.5" strokeWidth={1.5} />
+          Add or rename a category
+          <ArrowRight className="size-3" strokeWidth={1.5} />
+        </Link>
         <div className="space-y-6">
           {classificationOrder.map((cls) => {
             const rows = byClass[cls];

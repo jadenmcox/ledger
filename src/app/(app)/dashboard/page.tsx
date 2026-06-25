@@ -193,15 +193,8 @@ export default async function DashboardPage() {
           .sort((a, b) => b.value - a.value)
       : [];
 
-  // Forecast: spend so far + upcoming recurring bills between tomorrow and EoM
+  // Upcoming recurring bills between tomorrow and end-of-month (for "Coming up").
   const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-  let upcomingTotal = 0;
-  for (const s of schedules) {
-    if (s.amountCents >= 0) continue;
-    const occs = computeOccurrences(s, tomorrow, monthEnd);
-    upcomingTotal += occs.length * Math.abs(s.amountCents);
-  }
-  const forecastSpend = spend + upcomingTotal;
 
   // Planned vs Actual rows. Include every non-income, non-archived category
   // that has a limit OR has spend this month. That mirrors the user's sheet:
@@ -322,24 +315,6 @@ export default async function DashboardPage() {
                   <div className="text-[11px] text-foreground-faint mt-2">
                     {income - spend >= 0 ? "+" : ""}
                     {formatCents(income - spend)} net so far
-                  </div>
-                </div>
-                <div>
-                  <div className="text-[10px] tracking-[0.25em] uppercase text-foreground-faint mb-2">
-                    Projected
-                  </div>
-                  <div
-                    className={cn(
-                      "text-2xl md:text-3xl font-medium tracking-tight mono tabular",
-                      totals.planned > 0 && forecastSpend > totals.planned && "text-blush-deep",
-                    )}
-                  >
-                    {formatCents(forecastSpend)}
-                  </div>
-                  <div className="text-[11px] text-foreground-faint mt-2">
-                    {upcomingTotal > 0
-                      ? `spent + ${formatCentsCompact(upcomingTotal)} bills due`
-                      : "spent so far"}
                   </div>
                 </div>
                 <div>
