@@ -14,9 +14,10 @@ import {
 } from "@/components/ui";
 import { formatCents, formatCentsCompact, parseDollarsToCents } from "@/lib/utils";
 import { format } from "date-fns";
-import { Check, Sparkles, ArrowRight } from "lucide-react";
+import { Check, Sparkles, ArrowRight, ChevronRight } from "lucide-react";
 import type { BudgetFramework, Classification } from "@/db/schema";
 import { bulkSetMonthlyLimits, setBudgetFramework } from "./actions";
+import type { CategoryTx } from "../categories/client";
 
 type CatRow = {
   id: number;
@@ -87,6 +88,7 @@ export function BudgetClient({
   daysInMonth,
   calendarPct,
   categories,
+  txByCategory = {},
 }: {
   framework: BudgetFramework;
   income: number;
@@ -101,10 +103,13 @@ export function BudgetClient({
   daysInMonth: number;
   calendarPct: number;
   categories: CatRow[];
+  txByCategory?: Record<number, CategoryTx[]>;
 }) {
   const [selectedFramework, setSelectedFramework] =
     useState<BudgetFramework>(framework);
   const [pending, startTransition] = useTransition();
+  // Which category row in the "Every limit" list is expanded to show its tx.
+  const [expanded, setExpanded] = useState<number | null>(null);
 
   // Local-edited limits for the edit-all view (dollars as strings, persisted on save).
   const initialDrafts = useMemo(() => {
@@ -556,57 +561,116 @@ export function BudgetClient({
                     const spent = r.spent;
                     const overspent = limit != null && spent > limit;
                     const gap = limit != null ? limit - spent : null;
+                    const txs = txByCategory[r.id] ?? [];
+                    const isExpanded = expanded === r.id;
+                    const toggle = () =>
+                      setExpanded((prev) => (prev === r.id ? null : r.id));
                     return (
-                      <div
-                        key={r.id}
-                        className="px-4 md:px-5 py-3 flex items-center gap-3 md:gap-4"
-                      >
-                        <span
-                          className="size-2 rounded-full shrink-0"
-                          style={{ background: r.color }}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm tracking-tight truncate">
-                            {r.name}
+                      <div key={r.id}>
+                        <div
+                          onClick={toggle}
+                          role="button"
+                          tabIndex={0}
+                          aria-expanded={isExpanded}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              toggle();
+                            }
+                          }}
+                          className="px-4 md:px-5 py-3 flex items-center gap-3 md:gap-4 cursor-pointer hover:bg-surface-2/40 transition-colors"
+                        >
+                          <span
+                            aria-hidden
+                            className="size-4 inline-flex items-center justify-center text-foreground-faint shrink-0"
+                          >
+                            <ChevronRight
+                              className={`size-3.5 transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                              strokeWidth={2}
+                            />
+                          </span>
+                          <span
+                            className="size-2 rounded-full shrink-0"
+                            style={{ background: r.color }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm tracking-tight truncate">
+                              {r.name}
+                            </div>
+                            <div className="mt-1.5 max-w-[280px]">
+                              {limit != null && limit > 0 && cls !== "income" ? (
+                                <ProgressBar
+                                  value={spent}
+                                  max={limit}
+                                  color={r.color}
+                                />
+                              ) : (
+                                <div className="h-1.5" />
+                              )}
+                            </div>
                           </div>
-                          <div className="mt-1.5 max-w-[280px]">
-                            {limit != null && limit > 0 && cls !== "income" ? (
-                              <ProgressBar
-                                value={spent}
-                                max={limit}
-                                color={r.color}
-                              />
-                            ) : (
-                              <div className="h-1.5" />
+                          <div className="hidden md:flex flex-col items-end text-[11px] text-foreground-faint mono tabular w-24 shrink-0">
+                            {cls !== "income" && (
+                              <span className={overspent ? "text-blush-deep" : ""}>
+                                {formatCentsCompact(spent)} spent
+                              </span>
+                            )}
+                            {gap != null && cls !== "income" && (
+                              <span>
+                                {gap >= 0
+                                  ? `${formatCentsCompact(gap)} left`
+                                  : `${formatCentsCompact(Math.abs(gap))} over`}
+                              </span>
                             )}
                           </div>
+                          <div
+                            className="flex items-center gap-1.5 shrink-0"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <span className="text-foreground-faint text-sm">$</span>
+                            <Input
+                              value={drafts[r.id] ?? ""}
+                              onChange={(e) =>
+                                setDrafts((p) => ({ ...p, [r.id]: e.target.value }))
+                              }
+                              inputMode="decimal"
+                              placeholder="—"
+                              className="h-9 w-24 md:w-28 text-right mono tabular"
+                            />
+                          </div>
                         </div>
-                        <div className="hidden md:flex flex-col items-end text-[11px] text-foreground-faint mono tabular w-24 shrink-0">
-                          {cls !== "income" && (
-                            <span className={overspent ? "text-blush-deep" : ""}>
-                              {formatCentsCompact(spent)} spent
-                            </span>
-                          )}
-                          {gap != null && cls !== "income" && (
-                            <span>
-                              {gap >= 0
-                                ? `${formatCentsCompact(gap)} left`
-                                : `${formatCentsCompact(Math.abs(gap))} over`}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <span className="text-foreground-faint text-sm">$</span>
-                          <Input
-                            value={drafts[r.id] ?? ""}
-                            onChange={(e) =>
-                              setDrafts((p) => ({ ...p, [r.id]: e.target.value }))
-                            }
-                            inputMode="decimal"
-                            placeholder="—"
-                            className="h-9 w-24 md:w-28 text-right mono tabular"
-                          />
-                        </div>
+                        {isExpanded && (
+                          <div className="px-4 md:px-5 pb-4 pl-[2.75rem] md:pl-[3.5rem] bg-surface-2/40">
+                            {txs.length === 0 ? (
+                              <div className="text-xs text-foreground-faint py-3">
+                                No transactions this month.
+                              </div>
+                            ) : (
+                              <ul className="divide-y divide-border/70">
+                                {txs.map((t) => (
+                                  <li
+                                    key={t.id}
+                                    className="flex items-center gap-3 py-2.5 text-sm"
+                                  >
+                                    <div className="flex-1 min-w-0">
+                                      <div className="tracking-tight truncate">
+                                        {t.merchant}
+                                      </div>
+                                      <div className="text-[11px] text-foreground-faint mt-0.5">
+                                        {format(new Date(t.date), "EEE, MMM d")}
+                                      </div>
+                                    </div>
+                                    <div className="mono tabular text-sm shrink-0">
+                                      {formatCents(t.amountCents, {
+                                        signed: t.amountCents > 0,
+                                      })}
+                                    </div>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
