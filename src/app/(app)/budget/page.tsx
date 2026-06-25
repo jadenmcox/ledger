@@ -15,6 +15,7 @@ import {
 } from "date-fns";
 import { computeOccurrences } from "@/lib/recurring-schedules";
 import { BudgetClient } from "./client";
+import type { CategoryTx } from "../categories/client";
 
 export const dynamic = "force-dynamic";
 
@@ -53,8 +54,18 @@ export default async function BudgetPage() {
   let spend = 0;
   const spendByClassification = { need: 0, want: 0, savings: 0 };
   const spendByCategory = new Map<number, number>();
+  // Per-category drill-down: the actual transactions behind each row's spend.
+  const txByCategory: Record<number, CategoryTx[]> = {};
   for (const t of txThisMonth) {
     const cat = t.categoryId ? catById.get(t.categoryId) : null;
+    if (cat) {
+      (txByCategory[cat.id] ??= []).push({
+        id: t.id,
+        date: t.date instanceof Date ? t.date.toISOString() : String(t.date),
+        merchant: t.merchantClean || t.merchantRaw,
+        amountCents: t.amountCents,
+      });
+    }
     if (cat?.classification === "income") {
       if (t.amountCents > 0) income += t.amountCents;
       continue;
@@ -68,6 +79,12 @@ export default async function BudgetPage() {
       if (cat.classification === "want") spendByClassification.want += abs;
       if (cat.classification === "savings") spendByClassification.savings += abs;
     }
+  }
+  // Newest first within each category, matching the /categories drill-down.
+  for (const id in txByCategory) {
+    txByCategory[id].sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+    );
   }
 
   // Forecast: still-expected recurring outflows between today and end-of-month.
@@ -166,6 +183,7 @@ export default async function BudgetPage() {
           daysInMonth={daysInMonth}
           calendarPct={calendarPct}
           categories={cats}
+          txByCategory={txByCategory}
         />
       </Container>
     </>
