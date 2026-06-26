@@ -30,10 +30,17 @@ export function CompositionBar({
   framework: BudgetFramework;
   plannedTotal: number;
 }) {
-  const totalSpent = segments.need + segments.want + segments.savings;
-  const leftover = Math.max(0, income - totalSpent);
-  const over = totalSpent > income;
-  const scale = over ? totalSpent : Math.max(income, 1);
+  const consumption = segments.need + segments.want;
+  const saved = segments.savings;
+  const totalOut = consumption + saved;
+  const leftover = Math.max(0, income - totalOut);
+  // Bars run past the income line only when total outflow exceeds income. That
+  // usually means heavy *saving* (money moved in from existing cash), not
+  // overspending. We only call it an overage when needs + wants alone exceed
+  // income.
+  const overIncome = totalOut > income;
+  const overspent = consumption > income;
+  const scale = Math.max(income, totalOut, 1);
 
   const segs = [
     {
@@ -52,17 +59,17 @@ export function CompositionBar({
     },
     {
       key: "savings",
-      label: "Savings",
-      value: segments.savings,
+      label: "Saved",
+      value: saved,
       bg: "var(--blue-deep)",
       text: "text-white",
     },
     {
       key: "leftover",
-      label: over ? "Over income" : "Leftover",
-      value: over ? totalSpent - income : leftover,
-      bg: over ? "var(--blush)" : "var(--surface-2)",
-      text: over ? "text-white" : "text-foreground-muted",
+      label: "Leftover",
+      value: leftover,
+      bg: "var(--surface-2)",
+      text: "text-foreground-muted",
     },
   ];
 
@@ -70,15 +77,16 @@ export function CompositionBar({
   // labeled with its meaning. The leftover edge always sits at income/scale.
   const markers: { at: number; label: string }[] = [];
   if (income > 0) {
-    if (framework === "50_30_20") {
-      markers.push({ at: 0.5 * (income / scale), label: "50% needs target" });
-      markers.push({ at: 0.8 * (income / scale), label: "80% needs + wants target" });
-    } else if (plannedTotal > 0) {
-      const plannedFrac = Math.min(1, plannedTotal / scale);
-      markers.push({ at: plannedFrac, label: "planned spend" });
-    }
-    if (over) {
+    // Once outflow runs past income, the only marker that matters is where
+    // income sits. Showing the 50/30/20 targets there too crowds and collides
+    // with the income line, so we drop them in that case.
+    if (overIncome) {
       markers.push({ at: income / scale, label: "income line" });
+    } else if (framework === "50_30_20") {
+      markers.push({ at: 0.5, label: "50% needs target" });
+      markers.push({ at: 0.8, label: "80% needs + wants target" });
+    } else if (plannedTotal > 0) {
+      markers.push({ at: Math.min(1, plannedTotal / scale), label: "planned spend" });
     }
   }
 
@@ -164,6 +172,19 @@ export function CompositionBar({
           </div>
         ))}
       </div>
+
+      {income > 0 && (overspent || (overIncome && saved > 0)) && (
+        <p
+          className={cn(
+            "text-[11px] mt-5 leading-relaxed",
+            overspent ? "text-blush-deep" : "text-foreground-faint",
+          )}
+        >
+          {overspent
+            ? `Your needs and wants came to ${formatCentsCompact(consumption - income)} more than your income this month.`
+            : `You saved ${formatCentsCompact(saved)} this month, and ${formatCentsCompact(totalOut - income)} of that went beyond this month's income, drawn from existing cash. That is saving, not overspending.`}
+        </p>
+      )}
     </Card>
   );
 }
