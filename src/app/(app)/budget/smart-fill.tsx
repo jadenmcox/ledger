@@ -11,7 +11,7 @@ import {
 import { formatCents, formatCentsCompact, parseDollarsToCents, cn } from "@/lib/utils";
 import { Sparkles, ArrowRight, RotateCcw } from "lucide-react";
 import type { BudgetFramework, Classification } from "@/db/schema";
-import { bulkSetMonthlyLimits } from "../budget/actions";
+import { bulkSetMonthlyLimits } from "./actions";
 
 export type SmartFillRow = {
   id: number;

@@ -50,13 +50,3 @@ export async function deleteCategory(id: number) {
   revalidatePath("/categories");
   revalidatePath("/dashboard");
 }
-
-export async function setLimit(id: number, dollars: string) {
-  const cents = dollars ? parseDollarsToCents(dollars) : null;
-  await db
-    .update(categories)
-    .set({ monthlyLimitCents: cents })
-    .where(eq(categories.id, id));
-  revalidatePath("/categories");
-  revalidatePath("/dashboard");
-}
