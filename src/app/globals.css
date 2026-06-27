@@ -213,6 +213,64 @@ body {
   animation: drift 4s ease-in-out infinite;
 }
 
+/* Display face — Bricolage Grotesque. Headings + big dashboard numbers.
+   Tight tracking, tabular figures so stacked numbers still line up. */
+.display {
+  font-family: var(--font-display), var(--font-sans), ui-sans-serif, system-ui,
+    sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" on;
+}
+
+/* Data-viz bars grow from the left on load, staggered via --i. */
+@keyframes grow-x {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.grow-x {
+  transform-origin: left center;
+  animation: grow-x 0.85s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: calc(var(--i, 0) * 70ms);
+}
+
+/* Atmospheric canvas — soft brand-colored gradient blooms behind the
+   dashboard so it reads "designed" rather than flat. Pointer-events off,
+   sits beneath content. */
+.viz-canvas {
+  position: relative;
+  isolation: isolate;
+}
+.viz-canvas::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      42rem 42rem at 88% -8%,
+      color-mix(in srgb, var(--blush) 26%, transparent),
+      transparent 58%
+    ),
+    radial-gradient(
+      38rem 38rem at -8% 12%,
+      color-mix(in srgb, var(--blue) 22%, transparent),
+      transparent 56%
+    ),
+    radial-gradient(
+      34rem 34rem at 55% 108%,
+      color-mix(in srgb, var(--lavender) 24%, transparent),
+      transparent 60%
+    );
+}
+
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
