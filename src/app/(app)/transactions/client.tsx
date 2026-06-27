@@ -134,6 +134,9 @@ export function TransactionsClient({
     if (searchParams?.get("add") === "1") setAdding(true);
     const q = searchParams?.get("q");
     if (q) setSearch(q);
+    const cat = searchParams?.get("cat");
+    if (cat === "uncategorized") setCatFilter("uncategorized");
+    else if (cat && !Number.isNaN(Number(cat))) setCatFilter(Number(cat));
   }, [searchParams]);
 
   const catById = useMemo(

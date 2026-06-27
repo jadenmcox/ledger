@@ -1,13 +1,7 @@
 "use client";
 
 import * as React from "react";
-import {
-  PieChart,
-  Pie,
-  Cell,
-  ResponsiveContainer,
-  Tooltip,
-} from "recharts";
+import { PieChart, Pie, Cell, Tooltip } from "recharts";
 
 export type DonutDatum = {
   name: string;
@@ -40,8 +34,7 @@ export function DonutChart({
       className="relative flex items-center justify-center mx-auto"
       style={{ height: size, width: size, maxWidth: "100%" }}
     >
-      <ResponsiveContainer width="100%" height="100%">
-        <PieChart>
+      <PieChart width={size} height={size}>
           <Pie
             data={hasData ? filtered : [{ name: "—", value: 1, color: "var(--surface-2)" }]}
             dataKey="value"
@@ -79,8 +72,7 @@ export function DonutChart({
               ]) as unknown as never}
             />
           )}
-        </PieChart>
-      </ResponsiveContainer>
+      </PieChart>
       {(centerLabel || centerValue) && (
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center px-6">
           {centerLabel && (

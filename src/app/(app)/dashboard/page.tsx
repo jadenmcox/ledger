@@ -1,14 +1,13 @@
 import { db } from "@/db";
 import {
   accounts,
-  budgetSettings,
   categories,
   recurringSchedules,
   savingsGoals,
   transactions,
   type Category,
 } from "@/db/schema";
-import { CompositionBar } from "./composition-bar";
+import { SpendingBreakdown, type SpendingSlice } from "./spending-breakdown";
 import { computeOccurrences } from "@/lib/recurring-schedules";
 import { and, asc, eq, gte, lte } from "drizzle-orm";
 import {
@@ -51,7 +50,6 @@ export default async function DashboardPage() {
     allAccounts,
     schedules,
     goals,
-    settingsRows,
   ] = await Promise.all([
     db
       .select()
@@ -67,9 +65,7 @@ export default async function DashboardPage() {
     db.select().from(accounts),
     db.select().from(recurringSchedules).where(eq(recurringSchedules.isActive, true)),
     db.select().from(savingsGoals).where(eq(savingsGoals.isArchived, false)).orderBy(asc(savingsGoals.sortOrder), asc(savingsGoals.id)),
-    db.select().from(budgetSettings).limit(1),
   ]);
-  const framework = settingsRows[0]?.framework ?? "custom";
 
   const catById = new Map(allCategories.map((c) => [c.id, c]));
   const acctById = new Map(allAccounts.map((a) => [a.id, a]));
@@ -110,6 +106,40 @@ export default async function DashboardPage() {
     .map(([id, value]) => ({ category: catById.get(id)!, value }))
     .filter((x) => x.category && x.category.classification !== "savings")
     .sort((a, b) => b.value - a.value);
+
+  // Slices for the "Where your money went" donut + ranked list. Show the top
+  // categories individually, roll the rest into a muted "Other", and add an
+  // "Uncategorized" slice for outflow that has no category so the slices sum to
+  // the "Spent this month" headline (consumption).
+  const TOP_N = 8;
+  const categorized = spendingCategories.reduce((s, x) => s + x.value, 0);
+  const uncategorizedSpend = Math.max(0, consumption - categorized);
+  const top = spendingCategories.slice(0, TOP_N);
+  const rest = spendingCategories.slice(TOP_N);
+  const spendingSlices: SpendingSlice[] = [
+    ...top.map((x) => ({
+      id: x.category.id,
+      name: x.category.name,
+      value: x.value,
+      color: x.category.color,
+    })),
+  ];
+  if (rest.length > 0) {
+    spendingSlices.push({
+      id: null,
+      name: `Other (${rest.length} ${rest.length === 1 ? "category" : "categories"})`,
+      value: rest.reduce((s, x) => s + x.value, 0),
+      color: "var(--surface-2)",
+    });
+  }
+  if (uncategorizedSpend > 0) {
+    spendingSlices.push({
+      id: "uncategorized",
+      name: "Uncategorized",
+      value: uncategorizedSpend,
+      color: "var(--border-strong)",
+    });
+  }
 
   // Overspending flag. Rule: exclude Rent/Mortgage (a big fixed cost that
   // would always dominate), then flag any category whose spend this month is
@@ -289,12 +319,10 @@ export default async function DashboardPage() {
               </div>
             </Card>
 
-            {/* COMPOSITION BAR */}
-            <CompositionBar
-              income={income}
-              segments={spendByClassification}
-              framework={framework}
-              plannedTotal={totals.planned}
+            {/* WHERE YOUR MONEY WENT */}
+            <SpendingBreakdown
+              slices={spendingSlices}
+              consumption={consumption}
             />
 
             {/* OVERSPENDING FLAGS */}
