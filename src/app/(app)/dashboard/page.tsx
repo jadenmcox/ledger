@@ -7,17 +7,16 @@ import {
   transactions,
   type Category,
 } from "@/db/schema";
-import { SpendingBreakdown, type SpendingSlice } from "./spending-breakdown";
+import { SpendingHero, type SpendingSlice } from "./spending-breakdown";
 import { computeOccurrences } from "@/lib/recurring-schedules";
 import { and, asc, eq, gte, lte } from "drizzle-orm";
+import type { ReactNode } from "react";
 import {
   Container,
-  PageHeader,
   Card,
   EmptyState,
   Pill,
   ProgressBar,
-  SectionHeader,
   Button,
 } from "@/components/ui";
 import { formatCents, formatCentsCompact, cn } from "@/lib/utils";
@@ -254,12 +253,19 @@ export default async function DashboardPage() {
   );
 
   return (
-    <>
-      <PageHeader
-        eyebrow={format(now, "EEEE · MMMM d, yyyy")}
-        title={format(now, "MMMM yyyy")}
-        subtitle={`${daysLeft} days left this month.`}
-      />
+    <div className="viz-canvas">
+      <div className="px-5 md:px-12 pt-6 md:pt-14 pb-4 md:pb-9 relative">
+        <div className="inline-flex items-center gap-2 text-foreground-faint text-[10px] tracking-[0.25em] uppercase mb-3">
+          <span className="size-1 rounded-full bg-blush drift" />
+          {format(now, "EEEE · MMMM d, yyyy")}
+        </div>
+        <h1 className="display text-[2.7rem] md:text-[3.6rem] leading-[0.92]">
+          {format(now, "MMMM yyyy")}
+        </h1>
+        <p className="mt-3 text-foreground-muted text-sm">
+          {daysLeft} days left this month.
+        </p>
+      </div>
       <Container className="pb-32 md:pb-16">
         {allAccounts.length === 0 ? (
           <EmptyState
@@ -277,61 +283,23 @@ export default async function DashboardPage() {
             }
           />
         ) : (
-          <div className="space-y-10 md:space-y-14">
-            {/* SUMMARY LINE */}
-            <Card className="p-6 md:p-7">
-              <div className="flex flex-wrap items-baseline gap-x-8 gap-y-4 justify-between">
-                <div>
-                  <div className="text-[10px] tracking-[0.25em] uppercase text-foreground-faint mb-2">
-                    Spent this month
-                  </div>
-                  <div className="text-3xl md:text-4xl font-semibold tracking-tight">
-                    {formatCents(consumption)}
-                  </div>
-                  <div className="text-[11px] text-foreground-faint mt-2 mono tabular">
-                    of {formatCents(consumptionPlanned)} planned · {txThisMonth.length} transactions
-                  </div>
-                </div>
-                <div>
-                  <div className="text-[10px] tracking-[0.25em] uppercase text-foreground-faint mb-2">
-                    Saved this month
-                  </div>
-                  <div className="text-2xl md:text-3xl font-medium tracking-tight mono tabular">
-                    {formatCents(saved)}
-                  </div>
-                  <div className="text-[11px] text-foreground-faint mt-2">
-                    into savings &amp; investments
-                  </div>
-                </div>
-                <div>
-                  <div className="text-[10px] tracking-[0.25em] uppercase text-foreground-faint mb-2">
-                    Income
-                  </div>
-                  <div className="text-2xl md:text-3xl font-medium tracking-tight mono tabular">
-                    {formatCents(income)}
-                  </div>
-                  <div className="text-[11px] text-foreground-faint mt-2">
-                    {income - consumption >= 0
-                      ? `${formatCents(income - consumption)} left after spending`
-                      : `${formatCents(consumption - income)} over income`}
-                  </div>
-                </div>
-              </div>
-            </Card>
-
-            {/* WHERE YOUR MONEY WENT */}
-            <SpendingBreakdown
+          <div className="space-y-12 md:space-y-16">
+            {/* HERO — spent / saved / income + spending breakdown */}
+            <SpendingHero
               slices={spendingSlices}
               consumption={consumption}
+              saved={saved}
+              income={income}
+              plannedConsumption={consumptionPlanned}
+              txCount={txThisMonth.length}
             />
 
             {/* OVERSPENDING FLAGS */}
             {overspending.length > 0 && (
-              <div>
-                <SectionHeader
-                  title="Watch these"
-                  hint="more than 1.5× your typical category (excludes rent/mortgage)"
-                />
+              <Section
+                title="Watch these"
+                hint="more than 1.5× your typical category (excludes rent/mortgage)"
+              >
                 <Card className="divide-y divide-border">
                   {overspending.map((o) => (
                     <div
@@ -365,23 +333,22 @@ export default async function DashboardPage() {
                     </div>
                   ))}
                 </Card>
-              </div>
+              </Section>
             )}
 
             {/* PLANNED vs ACTUAL TABLE */}
-            <div>
-              <SectionHeader
-                title="Planned vs actual"
-                hint="categories with a limit or any activity this month"
-                right={
-                  <Link
-                    href="/budget"
-                    className="text-xs text-foreground-muted hover:text-foreground transition-colors tracking-tight inline-flex items-center gap-1"
-                  >
-                    edit limits <ArrowRight className="size-3" strokeWidth={1.5} />
-                  </Link>
-                }
-              />
+            <Section
+              title="Planned vs actual"
+              hint="categories with a limit or any activity this month"
+              right={
+                <Link
+                  href="/budget"
+                  className="text-xs text-foreground-muted hover:text-foreground transition-colors tracking-tight inline-flex items-center gap-1"
+                >
+                  edit limits <ArrowRight className="size-3" strokeWidth={1.5} />
+                </Link>
+              }
+            >
               {rows.length === 0 ? (
                 <Card className="p-8 text-center text-foreground-faint text-sm">
                   No category limits set and no spending yet. Head to{" "}
@@ -433,7 +400,7 @@ export default async function DashboardPage() {
                   </table>
                 </Card>
               )}
-            </div>
+            </Section>
 
             {/* SAVINGS GOALS */}
             <SavingsGoalsSection
@@ -444,8 +411,7 @@ export default async function DashboardPage() {
 
             {/* COMING UP */}
             {upcomingBills.length > 0 && (
-              <div>
-                <SectionHeader title="Coming up" hint="recurring bills due this month" />
+              <Section title="Coming up" hint="recurring bills due this month">
                 <Card className="divide-y divide-border">
                   {upcomingBills.map((b, i) => (
                     <div
@@ -470,12 +436,42 @@ export default async function DashboardPage() {
                     </div>
                   ))}
                 </Card>
-              </div>
+              </Section>
             )}
           </div>
         )}
       </Container>
-    </>
+    </div>
+  );
+}
+
+// Section header with a display-font title, matching the bold dashboard.
+function Section({
+  title,
+  hint,
+  right,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  right?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section>
+      <div className="flex items-baseline justify-between gap-4 mb-4 md:mb-5">
+        <div className="min-w-0">
+          <h2 className="display text-lg md:text-xl tracking-tight">{title}</h2>
+          {hint && (
+            <p className="text-[11px] text-foreground-faint tracking-tight mt-1">
+              {hint}
+            </p>
+          )}
+        </div>
+        {right && <div className="shrink-0">{right}</div>}
+      </div>
+      {children}
+    </section>
   );
 }
 

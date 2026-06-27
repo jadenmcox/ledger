@@ -1,14 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import {
-  Card,
-  SectionHeader,
-  Button,
-  Input,
-  Label,
-  ProgressBar,
-} from "@/components/ui";
+import { Card, Button, Input, Label, ProgressBar } from "@/components/ui";
 import { Sheet } from "@/components/sheet";
 import { formatCents, cn } from "@/lib/utils";
 import { Pencil, Plus, Trash2 } from "lucide-react";
@@ -49,18 +42,22 @@ export function SavingsGoalsSection({
 
   return (
     <div>
-      <SectionHeader
-        title="Savings goals"
-        hint="year-end target vs where you'd land"
-        right={
-          <button
-            onClick={() => setCreating(true)}
-            className="text-xs text-foreground-muted hover:text-foreground transition-colors tracking-tight inline-flex items-center gap-1"
-          >
-            <Plus className="size-3" strokeWidth={1.5} /> add goal
-          </button>
-        }
-      />
+      <div className="flex items-baseline justify-between gap-4 mb-4 md:mb-5">
+        <div className="min-w-0">
+          <h2 className="display text-lg md:text-xl tracking-tight">
+            Savings goals
+          </h2>
+          <p className="text-[11px] text-foreground-faint tracking-tight mt-1">
+            year-end target vs where you&apos;d land
+          </p>
+        </div>
+        <button
+          onClick={() => setCreating(true)}
+          className="shrink-0 text-xs text-foreground-muted hover:text-foreground transition-colors tracking-tight inline-flex items-center gap-1"
+        >
+          <Plus className="size-3" strokeWidth={1.5} /> add goal
+        </button>
+      </div>
       {goals.length === 0 ? (
         <Card className="p-8 text-center text-foreground-faint text-sm">
           No savings goals yet.{" "}
@@ -255,7 +252,7 @@ function GoalModal({
             defaultValue={goal?.accountId ?? ""}
             className="h-11 w-full bg-surface border border-border rounded-xl px-3.5 text-sm focus:border-blush focus:ring-2 focus:ring-blush-tint focus:outline-none transition-all"
           >
-            <option value="">No account · I'll enter the balance manually</option>
+            <option value="">No account · I&apos;ll enter the balance manually</option>
             {savingsAccounts.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
