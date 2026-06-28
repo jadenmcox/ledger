@@ -213,13 +213,13 @@ body {
   animation: drift 4s ease-in-out infinite;
 }
 
-/* Display face — Bricolage Grotesque. Headings + big dashboard numbers.
-   Tight tracking, tabular figures so stacked numbers still line up. */
+/* Display face — Geist. Headings + big dashboard numbers. Clean and modern;
+   modest negative tracking, tabular figures so stacked numbers line up. */
 .display {
   font-family: var(--font-display), var(--font-sans), ui-sans-serif, system-ui,
     sans-serif;
   font-weight: 600;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.022em;
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" on;
 }

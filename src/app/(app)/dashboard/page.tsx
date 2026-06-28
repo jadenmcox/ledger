@@ -213,12 +213,6 @@ export default async function DashboardPage() {
     { planned: 0, actual: 0, difference: 0 },
   );
 
-  // Planned amount for spending (needs + wants) only, to sit under the "spent
-  // this month" headline which now excludes saving.
-  const consumptionPlanned = rows
-    .filter((r) => r.category.classification !== "savings")
-    .reduce((s, r) => s + r.planned, 0);
-
   const upcomingBills = schedules
     .filter((s) => s.amountCents < 0)
     .flatMap((s) =>
@@ -254,17 +248,16 @@ export default async function DashboardPage() {
 
   return (
     <div className="viz-canvas">
-      <div className="px-5 md:px-12 pt-6 md:pt-14 pb-4 md:pb-9 relative">
-        <div className="inline-flex items-center gap-2 text-foreground-faint text-[10px] tracking-[0.25em] uppercase mb-3">
-          <span className="size-1 rounded-full bg-blush drift" />
-          {format(now, "EEEE · MMMM d, yyyy")}
+      <div className="px-5 md:px-12 pt-5 md:pt-8 pb-3 md:pb-5 relative">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h1 className="display text-[2rem] md:text-[2.5rem] leading-[0.95]">
+            {format(now, "MMMM yyyy")}
+          </h1>
+          <span className="text-foreground-faint text-[10px] tracking-[0.25em] uppercase inline-flex items-center gap-2">
+            <span className="size-1 rounded-full bg-blush drift" />
+            {format(now, "EEE · MMM d")} · {daysLeft} days left
+          </span>
         </div>
-        <h1 className="display text-[2.7rem] md:text-[3.6rem] leading-[0.92]">
-          {format(now, "MMMM yyyy")}
-        </h1>
-        <p className="mt-3 text-foreground-muted text-sm">
-          {daysLeft} days left this month.
-        </p>
       </div>
       <Container className="pb-32 md:pb-16">
         {allAccounts.length === 0 ? (
@@ -283,15 +276,13 @@ export default async function DashboardPage() {
             }
           />
         ) : (
-          <div className="space-y-12 md:space-y-16">
+          <div className="space-y-7 md:space-y-9">
             {/* HERO — spent / saved / income + spending breakdown */}
             <SpendingHero
               slices={spendingSlices}
               consumption={consumption}
               saved={saved}
               income={income}
-              plannedConsumption={consumptionPlanned}
-              txCount={txThisMonth.length}
             />
 
             {/* OVERSPENDING FLAGS */}

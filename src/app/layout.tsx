@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Bricolage_Grotesque } from "next/font/google";
+import { Inter, Geist } from "next/font/google";
 import "./globals.css";
 
 // Body / UI / numbers — Inter handles all the small, dense, tabular work (via
@@ -11,9 +11,10 @@ const inter = Inter({
   // but they all resolve to Inter in globals.css.
 });
 
-// Display — Bricolage Grotesque, a modern grotesque with character. Used for
-// headings and the big numbers on the dashboard via the `.display` class.
-const bricolage = Bricolage_Grotesque({
+// Display — Geist. A clean, modern, neutral sans for headings and the big
+// numbers (via the `.display` class). Distinct enough from Inter to give the
+// app presence, but "normal" rather than stylized.
+const geist = Geist({
   variable: "--font-display",
   subsets: ["latin"],
   display: "swap",
@@ -46,7 +47,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${bricolage.variable} h-full antialiased`}
+      className={`${inter.variable} ${geist.variable} h-full antialiased`}
     >
       <body className="min-h-full bg-background text-foreground">
         {children}
