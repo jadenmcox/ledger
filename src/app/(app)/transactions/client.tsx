@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { Account, Category, Transaction } from "@/db/schema";
 import { Card, Input, Label, Pill, Button } from "@/components/ui";
 import { Sheet } from "@/components/sheet";
+import { CategoryGlyph } from "@/components/category-glyph";
 import { cn, formatCents } from "@/lib/utils";
 import { format } from "date-fns";
 import Link from "next/link";
@@ -436,15 +437,11 @@ function Row({
   return (
     <div
       className={cn(
-        "relative pl-5 md:pl-6 pr-4 md:pr-5 py-3.5 flex items-center gap-3 md:gap-4 group",
+        "relative pl-4 md:pl-5 pr-4 md:pr-5 py-3.5 flex items-center gap-3 md:gap-3.5 group",
         tx.isTransfer && "opacity-50",
       )}
     >
-      <span
-        aria-hidden
-        className="absolute left-0 top-0 bottom-0 w-1"
-        style={{ background: color }}
-      />
+      <CategoryGlyph icon={cat?.icon} color={color} size={36} />
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2">
           <span className="text-[15px] md:text-sm tracking-tight truncate font-medium md:font-normal">
@@ -742,10 +739,7 @@ function CategoryPicker({
               }
               className="w-full text-left px-3 py-2 hover:bg-surface-2 rounded-md flex items-center gap-3"
             >
-              <span
-                className="size-2 rounded-full"
-                style={{ background: c.color }}
-              />
+              <CategoryGlyph icon={c.icon} color={c.color} size={28} />
               <span className="flex-1 text-sm tracking-tight">{c.name}</span>
               <Pill
                 tone={

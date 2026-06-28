@@ -8,6 +8,7 @@ import {
   type Category,
 } from "@/db/schema";
 import { SpendingHero, type SpendingSlice } from "./spending-breakdown";
+import { CategoryGlyph } from "@/components/category-glyph";
 import { computeOccurrences } from "@/lib/recurring-schedules";
 import { and, asc, eq, gte, lte } from "drizzle-orm";
 import type { ReactNode } from "react";
@@ -121,6 +122,7 @@ export default async function DashboardPage() {
       name: x.category.name,
       value: x.value,
       color: x.category.color,
+      icon: x.category.icon,
     })),
   ];
   if (rest.length > 0) {
@@ -128,7 +130,8 @@ export default async function DashboardPage() {
       id: null,
       name: `Other (${rest.length} ${rest.length === 1 ? "category" : "categories"})`,
       value: rest.reduce((s, x) => s + x.value, 0),
-      color: "var(--surface-2)",
+      color: "var(--lavender)",
+      icon: "more-horizontal",
     });
   }
   if (uncategorizedSpend > 0) {
@@ -136,7 +139,8 @@ export default async function DashboardPage() {
       id: "uncategorized",
       name: "Uncategorized",
       value: uncategorizedSpend,
-      color: "var(--border-strong)",
+      color: "var(--foreground-faint)",
+      icon: "alert-circle",
     });
   }
 
@@ -247,7 +251,7 @@ export default async function DashboardPage() {
   );
 
   return (
-    <div className="viz-canvas">
+    <div>
       <div className="px-5 md:px-12 pt-5 md:pt-8 pb-3 md:pb-5 relative">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <h1 className="display text-[2rem] md:text-[2.5rem] leading-[0.95]">
@@ -295,11 +299,12 @@ export default async function DashboardPage() {
                   {overspending.map((o) => (
                     <div
                       key={o.category.id}
-                      className="px-5 py-4 flex items-center gap-4"
+                      className="px-5 py-4 flex items-center gap-3.5"
                     >
-                      <span
-                        className="size-2.5 rounded-full shrink-0"
-                        style={{ background: o.category.color }}
+                      <CategoryGlyph
+                        icon={o.category.icon}
+                        color={o.category.color}
+                        size={38}
                       />
                       <div className="flex-1 min-w-0">
                         <div className="text-sm tracking-tight truncate flex items-center gap-2">
@@ -500,14 +505,15 @@ function RowGroup({
           >
             <td className="px-5 py-3">
               <div className="flex items-center gap-3 min-w-0">
-                <span
-                  className="size-2 rounded-full shrink-0"
-                  style={{ background: category.color }}
+                <CategoryGlyph
+                  icon={category.icon}
+                  color={category.color}
+                  size={30}
                 />
                 <span className="truncate">{category.name}</span>
               </div>
               {planned > 0 && (
-                <div className="ml-5 mt-2 max-w-[160px]">
+                <div className="ml-[42px] mt-2 max-w-[160px]">
                   <ProgressBar
                     value={actual}
                     max={planned}
