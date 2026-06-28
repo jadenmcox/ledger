@@ -20,6 +20,8 @@ export function DonutChart({
   thickness = 22,
   formatValue = (v) => v.toLocaleString(),
   onSliceClick,
+  onActiveChange,
+  showTooltip = true,
 }: {
   data: DonutDatum[];
   centerLabel?: string;
@@ -28,6 +30,11 @@ export function DonutChart({
   thickness?: number;
   formatValue?: (v: number) => string;
   onSliceClick?: (d: DonutDatum) => void;
+  // Fires with the hovered slice on mouse-enter. Let a parent drive a custom
+  // hover affordance (e.g. swapping the donut's center) instead of the
+  // floating Recharts tooltip.
+  onActiveChange?: (d: DonutDatum) => void;
+  showTooltip?: boolean;
 }) {
   const filtered = data.filter((d) => d.value > 0);
   const hasData = filtered.length > 0;
@@ -58,6 +65,10 @@ export function DonutChart({
               const d = entry as DonutDatum | undefined;
               if (d?.href) onSliceClick?.(d);
             }}
+            onMouseEnter={(entry: unknown) => {
+              const d = entry as DonutDatum | undefined;
+              if (d) onActiveChange?.(d);
+            }}
           >
             {(hasData ? filtered : [{ color: "var(--surface-2)" }]).map(
               (d, i) => (
@@ -73,7 +84,7 @@ export function DonutChart({
               ),
             )}
           </Pie>
-          {hasData && (
+          {hasData && showTooltip && (
             <Tooltip
               cursor={false}
               contentStyle={{
