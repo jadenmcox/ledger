@@ -23,15 +23,11 @@ export function SpendingHero({
   consumption,
   saved,
   income,
-  plannedConsumption,
-  txCount,
 }: {
   slices: SpendingSlice[];
   consumption: number;
   saved: number;
   income: number;
-  plannedConsumption: number;
-  txCount: number;
 }) {
   const donutData: DonutDatum[] = slices.map((s) => ({
     name: s.name,
@@ -41,41 +37,20 @@ export function SpendingHero({
   const maxValue = slices.reduce((m, s) => Math.max(m, s.value), 1);
   const pct = (v: number) =>
     consumption > 0 ? Math.round((v / consumption) * 100) : 0;
-  const leftover = income - consumption;
 
   return (
     <section className="rise overflow-hidden rounded-[28px] border border-border bg-surface/85 backdrop-blur-sm shadow-[0_30px_70px_-40px_rgba(34,28,74,0.45)]">
       {/* KPI STRIP */}
       <div className="grid grid-cols-1 divide-y divide-border sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-        <Kpi
-          label="Spent this month"
-          value={formatCents(consumption)}
-          hint={`of ${formatCents(plannedConsumption)} planned · ${txCount} transactions`}
-          dot="var(--blush-deep)"
-          dominant
-        />
-        <Kpi
-          label="Saved this month"
-          value={formatCents(saved)}
-          hint="into savings & investments"
-          dot="var(--blue-deep)"
-        />
-        <Kpi
-          label="Income"
-          value={formatCents(income)}
-          hint={
-            leftover >= 0
-              ? `${formatCents(leftover)} left after spending`
-              : `${formatCents(-leftover)} over income`
-          }
-          dot="var(--sage-deep)"
-        />
+        <Kpi label="Spent" value={formatCents(consumption)} dot="var(--blush-deep)" dominant />
+        <Kpi label="Saved" value={formatCents(saved)} dot="var(--blue-deep)" />
+        <Kpi label="Income" value={formatCents(income)} dot="var(--sage-deep)" />
       </div>
 
       {/* SPENDING VIZ */}
-      <div className="border-t border-border bg-surface/60 p-6 md:p-9">
-        <div className="mb-7 flex items-baseline justify-between gap-4">
-          <h2 className="display text-xl tracking-tight md:text-[1.7rem]">
+      <div className="border-t border-border bg-surface/60 p-5 md:p-7">
+        <div className="mb-5 flex items-baseline justify-between gap-4">
+          <h2 className="display text-lg tracking-tight md:text-[1.5rem]">
             Where your money went
           </h2>
           <span className="hidden text-[11px] tracking-tight text-foreground-faint sm:block">
@@ -84,34 +59,34 @@ export function SpendingHero({
         </div>
 
         {consumption <= 0 ? (
-          <div className="py-12 text-center text-sm text-foreground-faint">
+          <div className="py-10 text-center text-sm text-foreground-faint">
             No spending recorded yet this month.
           </div>
         ) : (
-          <div className="grid items-center gap-9 lg:grid-cols-[auto_1fr] lg:gap-14">
+          <div className="grid items-center gap-6 lg:grid-cols-[auto_1fr] lg:gap-10">
             {/* Donut with display-font center */}
             <div
               className="relative mx-auto shrink-0"
-              style={{ width: 244, height: 244 }}
+              style={{ width: 196, height: 196 }}
             >
               <DonutChart
                 data={donutData}
-                size={244}
-                thickness={30}
+                size={196}
+                thickness={24}
                 formatValue={formatCents}
               />
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-                <span className="mb-1 text-[10px] uppercase tracking-[0.28em] text-foreground-faint">
+                <span className="mb-0.5 text-[9px] uppercase tracking-[0.28em] text-foreground-faint">
                   spent
                 </span>
-                <span className="display text-[2rem] leading-none md:text-[2.3rem]">
+                <span className="display text-[1.7rem] leading-none">
                   {formatCents(consumption)}
                 </span>
               </div>
             </div>
 
             {/* Ranked category bars */}
-            <div className="min-w-0 space-y-4">
+            <div className="min-w-0 space-y-3">
               {slices.map((s, i) => {
                 const widthPct = (s.value / maxValue) * 100;
                 const isLink = s.id !== null;
@@ -186,23 +161,18 @@ export function SpendingHero({
 function Kpi({
   label,
   value,
-  hint,
   dot,
   dominant = false,
 }: {
   label: string;
   value: string;
-  hint: string;
   dot: string;
   dominant?: boolean;
 }) {
   return (
-    <div className="px-6 py-6 md:px-8 md:py-7">
-      <div className="mb-3 flex items-center gap-2">
-        <span
-          className="size-1.5 rounded-full"
-          style={{ background: dot }}
-        />
+    <div className="flex flex-col gap-2 px-6 py-4 md:py-5">
+      <div className="flex items-center gap-2">
+        <span className="size-1.5 rounded-full" style={{ background: dot }} />
         <span className="text-[10px] uppercase tracking-[0.22em] text-foreground-faint">
           {label}
         </span>
@@ -210,13 +180,10 @@ function Kpi({
       <div
         className={cn(
           "display leading-none text-foreground",
-          dominant ? "text-[2.6rem] md:text-[3.1rem]" : "text-4xl md:text-[2.6rem]",
+          dominant ? "text-[2.1rem] md:text-[2.5rem]" : "text-[1.9rem] md:text-[2.1rem]",
         )}
       >
         {value}
-      </div>
-      <div className="mt-2.5 text-[11px] leading-relaxed text-foreground-faint">
-        {hint}
       </div>
     </div>
   );

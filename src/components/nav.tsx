@@ -41,10 +41,10 @@ function titleFor(pathname: string): string {
 }
 
 function Wordmark({ size = "lg" }: { size?: "lg" | "md" }) {
-  const cls = size === "lg" ? "text-2xl" : "text-xl";
+  const cls = size === "lg" ? "text-[1.6rem]" : "text-xl";
   return (
     <span
-      className={`${cls} leading-none inline-flex items-center gap-1.5 font-semibold tracking-[-0.04em]`}
+      className={`${cls} display leading-none inline-flex items-center gap-2`}
     >
       <LogoMark size={size === "lg" ? 22 : 18} />
       Budgetly
@@ -82,11 +82,11 @@ function LogoMark({ size = 22 }: { size?: number }) {
 export function DesktopNav() {
   const pathname = usePathname();
   return (
-    <aside className="hidden md:flex md:w-60 lg:w-64 shrink-0 flex-col bg-transparent border-r border-border relative z-10">
-      <div className="px-7 pt-10 pb-10">
+    <aside className="hidden md:flex md:w-56 lg:w-60 shrink-0 flex-col bg-surface/40 backdrop-blur-sm border-r border-border relative z-10">
+      <div className="px-6 pt-7 pb-7">
         <Link href="/dashboard" className="block">
           <Wordmark />
-          <div className="text-foreground-faint text-[10px] tracking-[0.3em] uppercase mt-2.5">
+          <div className="text-foreground-faint text-[10px] tracking-[0.3em] uppercase mt-2">
             Personal
           </div>
         </Link>
