@@ -8,6 +8,7 @@ import {
   type Category,
 } from "@/db/schema";
 import { SpendingHero, type SpendingSlice } from "./spending-breakdown";
+import { PlannedActual } from "./planned-actual";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { computeOccurrences } from "@/lib/recurring-schedules";
 import { and, asc, eq, gte, lte } from "drizzle-orm";
@@ -17,10 +18,9 @@ import {
   Card,
   EmptyState,
   Pill,
-  ProgressBar,
   Button,
 } from "@/components/ui";
-import { formatCents, formatCentsCompact, cn } from "@/lib/utils";
+import { formatCents, formatCentsCompact } from "@/lib/utils";
 import {
   startOfMonth,
   endOfMonth,
@@ -74,6 +74,9 @@ export default async function DashboardPage() {
   let spend = 0;
   const spendByCategory = new Map<number, number>();
   const spendByClassification = { need: 0, want: 0, savings: 0 };
+  // Per-category vendor rollup: categoryId -> (merchant -> {total, count}). Powers
+  // the expandable Planned-vs-actual rows (totals combined by vendor).
+  const merchantAgg = new Map<number, Map<string, { total: number; count: number }>>();
   for (const t of txThisMonth) {
     const cat = t.categoryId ? catById.get(t.categoryId) : null;
     if (cat?.classification === "income") {
@@ -88,7 +91,25 @@ export default async function DashboardPage() {
       if (cat.classification === "need") spendByClassification.need += abs;
       else if (cat.classification === "want") spendByClassification.want += abs;
       else if (cat.classification === "savings") spendByClassification.savings += abs;
+
+      const merchant = (t.merchantClean || t.merchantRaw || "—").trim();
+      if (!merchantAgg.has(cat.id)) merchantAgg.set(cat.id, new Map());
+      const inner = merchantAgg.get(cat.id)!;
+      const cur = inner.get(merchant) || { total: 0, count: 0 };
+      cur.total += abs;
+      cur.count += 1;
+      inner.set(merchant, cur);
     }
+  }
+  // Flatten to a serializable record, biggest vendor first, for the client.
+  const merchantsByCategory: Record<
+    number,
+    { merchant: string; total: number; count: number }[]
+  > = {};
+  for (const [catId, inner] of merchantAgg) {
+    merchantsByCategory[catId] = [...inner.entries()]
+      .map(([merchant, v]) => ({ merchant, total: v.total, count: v.count }))
+      .sort((a, b) => b.total - a.total);
   }
 
   // Saving/investing (a "savings"-class category, e.g. a brokerage
@@ -355,45 +376,23 @@ export default async function DashboardPage() {
                 </Card>
               ) : (
                 <Card className="overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-[10px] tracking-[0.18em] uppercase text-foreground-faint border-b border-border">
-                        <th className="text-left px-5 py-3 font-medium">Category</th>
-                        <th className="text-right px-3 py-3 font-medium hidden sm:table-cell">
-                          Planned
-                        </th>
-                        <th className="text-right px-3 py-3 font-medium">Actual</th>
-                        <th className="text-right px-5 py-3 font-medium">Difference</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {groups.map((g) =>
-                        g.rows.length === 0 ? null : (
-                          <RowGroup key={g.key} label={g.label} rows={g.rows} />
-                        ),
-                      )}
-                      <tr className="border-t-2 border-border bg-surface-2/40">
-                        <td className="px-5 py-3 text-sm font-medium tracking-tight">
-                          Total
-                        </td>
-                        <td className="px-3 py-3 text-right mono tabular hidden sm:table-cell">
-                          {formatCents(totals.planned)}
-                        </td>
-                        <td className="px-3 py-3 text-right mono tabular">
-                          {formatCents(totals.actual)}
-                        </td>
-                        <td
-                          className={cn(
-                            "px-5 py-3 text-right mono tabular",
-                            totals.difference < 0 && "text-blush-deep",
-                          )}
-                        >
-                          {totals.difference >= 0 ? "+" : ""}
-                          {formatCents(totals.difference)}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
+                  <PlannedActual
+                    groups={groups.map((g) => ({
+                      key: g.key,
+                      label: g.label,
+                      rows: g.rows.map((r) => ({
+                        id: r.category.id,
+                        name: r.category.name,
+                        color: r.category.color,
+                        icon: r.category.icon,
+                        planned: r.planned,
+                        actual: r.actual,
+                        difference: r.difference,
+                      })),
+                    }))}
+                    totals={totals}
+                    merchantsByCategory={merchantsByCategory}
+                  />
                 </Card>
               )}
             </Section>
@@ -471,107 +470,3 @@ function Section({
   );
 }
 
-function RowGroup({
-  label,
-  rows,
-}: {
-  label: string;
-  rows: { category: Category; planned: number; actual: number; difference: number }[];
-}) {
-  const subtotal = rows.reduce(
-    (acc, r) => ({
-      planned: acc.planned + r.planned,
-      actual: acc.actual + r.actual,
-      difference: acc.difference + r.difference,
-    }),
-    { planned: 0, actual: 0, difference: 0 },
-  );
-  return (
-    <>
-      <tr className="bg-surface-2/30 border-t border-border">
-        <td
-          colSpan={4}
-          className="px-5 py-2 text-[10px] tracking-[0.2em] uppercase text-foreground-faint"
-        >
-          {label}
-        </td>
-      </tr>
-      {rows.map(({ category, planned, actual, difference }) => {
-        const over = planned > 0 && actual > planned;
-        return (
-          <tr
-            key={category.id}
-            className="border-t border-border hover:bg-surface-2/30 transition-colors"
-          >
-            <td className="px-5 py-3">
-              <div className="flex items-center gap-3 min-w-0">
-                <CategoryGlyph
-                  icon={category.icon}
-                  color={category.color}
-                  size={30}
-                />
-                <span className="truncate">{category.name}</span>
-              </div>
-              {planned > 0 && (
-                <div className="ml-[42px] mt-2 max-w-[160px]">
-                  <ProgressBar
-                    value={actual}
-                    max={planned}
-                    color={category.color}
-                    height={4}
-                  />
-                </div>
-              )}
-            </td>
-            <td className="px-3 py-3 text-right mono tabular text-foreground-muted hidden sm:table-cell">
-              {planned > 0 ? formatCents(planned) : "—"}
-            </td>
-            <td
-              className={cn(
-                "px-3 py-3 text-right mono tabular",
-                over && "text-blush-deep",
-              )}
-            >
-              {formatCents(actual)}
-            </td>
-            <td
-              className={cn(
-                "px-5 py-3 text-right mono tabular",
-                difference < 0 && "text-blush-deep",
-              )}
-            >
-              {planned === 0 ? (
-                <span className="text-foreground-faint">no limit</span>
-              ) : (
-                <>
-                  {difference >= 0 ? "+" : ""}
-                  {formatCents(difference)}
-                </>
-              )}
-            </td>
-          </tr>
-        );
-      })}
-      <tr className="border-t border-border bg-surface-2/10">
-        <td className="px-5 py-2 text-[11px] text-foreground-faint tracking-tight">
-          {label} subtotal
-        </td>
-        <td className="px-3 py-2 text-right mono tabular text-foreground-faint text-[11px] hidden sm:table-cell">
-          {formatCents(subtotal.planned)}
-        </td>
-        <td className="px-3 py-2 text-right mono tabular text-foreground-faint text-[11px]">
-          {formatCents(subtotal.actual)}
-        </td>
-        <td
-          className={cn(
-            "px-5 py-2 text-right mono tabular text-[11px]",
-            subtotal.difference < 0 ? "text-blush-deep" : "text-foreground-faint",
-          )}
-        >
-          {subtotal.difference >= 0 ? "+" : ""}
-          {formatCents(subtotal.difference)}
-        </td>
-      </tr>
-    </>
-  );
-}

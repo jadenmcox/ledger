@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { DonutChart, type DonutDatum } from "@/components/charts/DonutChart";
@@ -38,12 +39,17 @@ export function SpendingHero({
   income: number;
 }) {
   const router = useRouter();
+  const [active, setActive] = useState<DonutDatum | null>(null);
   const donutData: DonutDatum[] = slices.map((s) => ({
     name: s.name,
     value: s.value,
     color: s.color,
     href: hrefFor(s.id),
   }));
+  const activePct =
+    active && consumption > 0
+      ? Math.round((active.value / consumption) * 100)
+      : 0;
 
   return (
     <section className="rise overflow-hidden rounded-[28px] border border-border bg-surface/85 p-6 backdrop-blur-sm shadow-[0_30px_70px_-40px_rgba(34,28,74,0.45)] md:p-9">
@@ -72,21 +78,46 @@ export function SpendingHero({
             </div>
           ) : (
             <>
-              <div className="relative" style={{ width: 300, height: 300 }}>
+              <div
+                className="relative"
+                style={{ width: 300, height: 300 }}
+                onMouseLeave={() => setActive(null)}
+              >
                 <DonutChart
                   data={donutData}
                   size={300}
                   thickness={40}
                   formatValue={formatCents}
+                  showTooltip={false}
+                  onActiveChange={setActive}
                   onSliceClick={(d) => d.href && router.push(d.href)}
                 />
-                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-                  <span className="mb-1 text-[10px] uppercase tracking-[0.28em] text-foreground-faint">
-                    spent
-                  </span>
-                  <span className="display text-[2.3rem] leading-none">
-                    {formatCents(consumption)}
-                  </span>
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-12 text-center">
+                  {active ? (
+                    <>
+                      <span
+                        className="mb-1.5 max-w-full truncate text-[11px] font-semibold uppercase tracking-[0.18em]"
+                        style={{ color: active.color }}
+                      >
+                        {active.name}
+                      </span>
+                      <span className="display text-[2rem] leading-none">
+                        {formatCents(active.value)}
+                      </span>
+                      <span className="mt-1.5 text-[11px] text-foreground-faint">
+                        {activePct}% of spending
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="mb-1 text-[10px] uppercase tracking-[0.28em] text-foreground-faint">
+                        spent
+                      </span>
+                      <span className="display text-[2.3rem] leading-none">
+                        {formatCents(consumption)}
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
 
