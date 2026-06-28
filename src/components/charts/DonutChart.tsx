@@ -7,6 +7,9 @@ export type DonutDatum = {
   name: string;
   value: number;
   color: string;
+  // Optional click target. When set and the slice is clicked, onSliceClick
+  // fires with this datum so the consumer can navigate.
+  href?: string | null;
 };
 
 export function DonutChart({
@@ -16,6 +19,7 @@ export function DonutChart({
   size = 220,
   thickness = 22,
   formatValue = (v) => v.toLocaleString(),
+  onSliceClick,
 }: {
   data: DonutDatum[];
   centerLabel?: string;
@@ -23,9 +27,11 @@ export function DonutChart({
   size?: number;
   thickness?: number;
   formatValue?: (v: number) => string;
+  onSliceClick?: (d: DonutDatum) => void;
 }) {
   const filtered = data.filter((d) => d.value > 0);
   const hasData = filtered.length > 0;
+  const total = filtered.reduce((s, d) => s + d.value, 0) || 1;
   const outer = Math.floor(size / 2) - 6;
   const inner = Math.max(8, outer - thickness);
 
@@ -48,10 +54,22 @@ export function DonutChart({
             endAngle={-270}
             paddingAngle={hasData ? 1.5 : 0}
             isAnimationActive={false}
+            onClick={(entry: unknown) => {
+              const d = entry as DonutDatum | undefined;
+              if (d?.href) onSliceClick?.(d);
+            }}
           >
             {(hasData ? filtered : [{ color: "var(--surface-2)" }]).map(
               (d, i) => (
-                <Cell key={i} fill={d.color} />
+                <Cell
+                  key={i}
+                  fill={d.color}
+                  className={
+                    onSliceClick && "href" in d && d.href
+                      ? "cursor-pointer outline-none"
+                      : "outline-none"
+                  }
+                />
               ),
             )}
           </Pie>
@@ -66,10 +84,11 @@ export function DonutChart({
                 padding: "6px 10px",
                 boxShadow: "0 8px 24px -12px rgba(0,0,0,0.15)",
               }}
-              formatter={((v: unknown, n: unknown) => [
-                formatValue(Number(v ?? 0)),
-                String(n ?? ""),
-              ]) as unknown as never}
+              formatter={((v: unknown, n: unknown) => {
+                const val = Number(v ?? 0);
+                const pct = Math.round((val / total) * 100);
+                return [`${formatValue(val)} · ${pct}%`, String(n ?? "")];
+              }) as unknown as never}
             />
           )}
       </PieChart>
