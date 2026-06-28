@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { Card, Label, Input, Button, Pill, ProgressBar } from "@/components/ui";
+import { CategoryGlyph } from "@/components/category-glyph";
 import { formatCents } from "@/lib/utils";
 import { format } from "date-fns";
 import {
@@ -179,10 +180,7 @@ function CategoryRow({
           strokeWidth={2}
         />
       </span>
-      <div
-        className="size-2.5 rounded-full shrink-0"
-        style={{ background: cat.color }}
-      />
+      <CategoryGlyph icon={cat.icon} color={cat.color} size={34} />
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2 mb-1.5">
           <span className="tracking-tight text-left">{cat.name}</span>

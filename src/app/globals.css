@@ -240,34 +240,34 @@ body {
   animation-delay: calc(var(--i, 0) * 70ms);
 }
 
-/* Atmospheric canvas — soft brand-colored gradient blooms behind the
-   dashboard so it reads "designed" rather than flat. Pointer-events off,
-   sits beneath content. */
-.viz-canvas {
+/* Atmospheric canvas — soft brand-colored gradient blooms that sit behind
+   the whole app (sidebar + content) so every page shares one designed
+   backdrop. Fixed to the viewport, pointer-events off, beneath content. */
+.app-canvas {
   position: relative;
   isolation: isolate;
 }
-.viz-canvas::before {
+.app-canvas::before {
   content: "";
-  position: absolute;
+  position: fixed;
   inset: 0;
   z-index: -1;
   pointer-events: none;
   background:
     radial-gradient(
-      42rem 42rem at 88% -8%,
-      color-mix(in srgb, var(--blush) 26%, transparent),
-      transparent 58%
-    ),
-    radial-gradient(
-      38rem 38rem at -8% 12%,
-      color-mix(in srgb, var(--blue) 22%, transparent),
+      48rem 48rem at 100% -6%,
+      color-mix(in srgb, var(--blush) 20%, transparent),
       transparent 56%
     ),
     radial-gradient(
-      34rem 34rem at 55% 108%,
-      color-mix(in srgb, var(--lavender) 24%, transparent),
-      transparent 60%
+      42rem 42rem at -6% 6%,
+      color-mix(in srgb, var(--blue) 15%, transparent),
+      transparent 54%
+    ),
+    radial-gradient(
+      40rem 40rem at 50% 112%,
+      color-mix(in srgb, var(--lavender) 16%, transparent),
+      transparent 58%
     );
 }
 

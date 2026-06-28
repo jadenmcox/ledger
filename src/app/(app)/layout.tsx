@@ -42,7 +42,7 @@ export default async function AppLayout({
   );
 
   return (
-    <div className="relative flex min-h-screen">
+    <div className="app-canvas relative flex min-h-screen">
       <DesktopNav />
       <div className="flex-1 flex flex-col min-w-0">
         <MobileHeader />

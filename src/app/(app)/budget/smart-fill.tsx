@@ -9,6 +9,7 @@ import {
   SectionHeader,
 } from "@/components/ui";
 import { formatCents, formatCentsCompact, parseDollarsToCents, cn } from "@/lib/utils";
+import { CategoryGlyph } from "@/components/category-glyph";
 import { Sparkles, ArrowRight, RotateCcw } from "lucide-react";
 import type { BudgetFramework, Classification } from "@/db/schema";
 import { bulkSetMonthlyLimits } from "./actions";
@@ -17,6 +18,7 @@ export type SmartFillRow = {
   id: number;
   name: string;
   color: string;
+  icon: string;
   classification: Classification;
   currentLimitCents: number | null;
   avgCents: number;
@@ -233,10 +235,7 @@ export function SmartFillLimits({
                       key={r.id}
                       className="px-4 md:px-5 py-3 flex items-center gap-3 md:gap-4"
                     >
-                      <span
-                        className="size-2 rounded-full shrink-0"
-                        style={{ background: r.color }}
-                      />
+                      <CategoryGlyph icon={r.icon} color={r.color} size={30} />
                       <div className="flex-1 min-w-0">
                         <div className="text-sm tracking-tight truncate">
                           {r.name}

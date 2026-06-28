@@ -12,6 +12,7 @@ import {
   Stat,
   HeroStat,
 } from "@/components/ui";
+import { CategoryGlyph } from "@/components/category-glyph";
 import { formatCents, formatCentsCompact, parseDollarsToCents } from "@/lib/utils";
 import { format } from "date-fns";
 import Link from "next/link";
@@ -25,6 +26,7 @@ type CatRow = {
   id: number;
   name: string;
   color: string;
+  icon: string;
   classification: Classification;
   monthlyLimitCents: number | null;
   spent: number;
@@ -490,10 +492,7 @@ export function BudgetClient({
                               strokeWidth={2}
                             />
                           </span>
-                          <span
-                            className="size-2 rounded-full shrink-0"
-                            style={{ background: r.color }}
-                          />
+                          <CategoryGlyph icon={r.icon} color={r.color} size={32} />
                           <div className="flex-1 min-w-0">
                             <div className="text-sm tracking-tight truncate">
                               {r.name}

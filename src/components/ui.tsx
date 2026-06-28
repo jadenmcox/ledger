@@ -24,7 +24,7 @@ export function PageHeader({
               {eyebrow}
             </div>
           )}
-          <h1 className="text-[2rem] md:text-[2.5rem] leading-[1.05] font-semibold tracking-[-0.03em]">
+          <h1 className="display text-[2rem] md:text-[2.5rem] leading-[1.05]">
             {title}
             {italic && (
               <>
@@ -167,7 +167,7 @@ export function Stat({
       <Label className="mb-0">{label}</Label>
       <div
         className={cn(
-          "mono text-2xl md:text-[1.75rem] tracking-[-0.02em] tabular leading-none font-medium",
+          "display text-2xl md:text-[1.75rem] tabular leading-none",
           tone === "blush" && "text-blush-deep",
           tone === "blue" && "text-foreground",
           tone === "peach" && "text-foreground",
@@ -207,7 +207,7 @@ export function EmptyState({
           <span className="size-1 rounded-full bg-blush" />
           Empty
         </div>
-        <h3 className="text-2xl md:text-3xl font-semibold tracking-[-0.035em] mb-3">
+        <h3 className="display text-2xl md:text-3xl mb-3">
           {title}
         </h3>
         <p className="text-foreground-muted text-sm max-w-md mx-auto mb-6 leading-relaxed">
@@ -237,7 +237,7 @@ export function HeroStat({
       <Label className="mb-0">{label}</Label>
       <div
         className={cn(
-          "mono tabular text-[2.5rem] md:text-[3.5rem] leading-[1] tracking-[-0.035em] font-semibold",
+          "display tabular text-[2.5rem] md:text-[3.5rem] leading-[1]",
           tone === "blush" && "text-blush-deep",
           tone === "blue" && "text-blue-deep",
           tone === "peach" && "text-peach-deep",
@@ -328,7 +328,7 @@ export function SectionHeader({
   return (
     <div className="flex items-baseline justify-between gap-4 mb-4">
       <div className="min-w-0">
-        <h2 className="text-sm font-medium tracking-tight truncate text-foreground">
+        <h2 className="display text-[15px] truncate text-foreground">
           {title}
           {italic && <span className="text-foreground-faint font-normal">{italic}</span>}
         </h2>

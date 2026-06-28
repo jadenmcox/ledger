@@ -41,57 +41,52 @@ function titleFor(pathname: string): string {
 }
 
 function Wordmark({ size = "lg" }: { size?: "lg" | "md" }) {
-  const cls = size === "lg" ? "text-[1.6rem]" : "text-xl";
+  const cls = size === "lg" ? "text-[1.55rem]" : "text-xl";
   return (
     <span
-      className={`${cls} display leading-none inline-flex items-center gap-2`}
+      className={`${cls} display leading-none inline-flex items-center gap-2.5`}
     >
-      <LogoMark size={size === "lg" ? 22 : 18} />
+      <LogoMark size={size === "lg" ? 32 : 28} />
       Budgetly
     </span>
   );
 }
 
-function LogoMark({ size = 22 }: { size?: number }) {
-  // Abstract mark: a "B" suggestion built from two soft arcs in the
-  // brand blush. Replaces the italic-d + dot wordmark.
+function LogoMark({ size = 32 }: { size?: number }) {
+  // Gradient squircle badge with a clean "B" set in the display face — the
+  // app icon. Brand pink → indigo gradient with a soft inner highlight.
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
+    <span
+      className="relative grid shrink-0 place-items-center overflow-hidden rounded-[28%] text-white shadow-[0_4px_12px_-4px_rgba(196,61,98,0.55)]"
+      style={{
+        width: size,
+        height: size,
+        background:
+          "linear-gradient(140deg, var(--blush) 0%, var(--blush-deep) 45%, var(--sage-deep) 100%)",
+      }}
       aria-hidden="true"
-      className="shrink-0"
     >
-      <rect
-        x="2"
-        y="2"
-        width="20"
-        height="20"
-        rx="6"
-        fill="var(--sage-deep)"
-      />
-      <path
-        d="M8 7h5.5a3 3 0 0 1 0 6H8V7Zm0 6h6a3 3 0 0 1 0 6H8v-6Z"
-        fill="var(--blush)"
-      />
-    </svg>
+      <span className="pointer-events-none absolute inset-0 rounded-[28%] ring-1 ring-inset ring-white/25" />
+      <span
+        className="display font-bold leading-none"
+        style={{ fontSize: size * 0.6 }}
+      >
+        B
+      </span>
+    </span>
   );
 }
 
 export function DesktopNav() {
   const pathname = usePathname();
   return (
-    <aside className="hidden md:flex md:w-56 lg:w-60 shrink-0 flex-col bg-surface/40 backdrop-blur-sm border-r border-border relative z-10">
-      <div className="px-6 pt-7 pb-7">
+    <aside className="hidden md:flex md:w-56 lg:w-60 shrink-0 flex-col bg-surface/55 backdrop-blur-md border-r border-border/70 relative z-10">
+      <div className="px-5 pt-7 pb-8">
         <Link href="/dashboard" className="block">
           <Wordmark />
-          <div className="text-foreground-faint text-[10px] tracking-[0.3em] uppercase mt-2">
-            Personal
-          </div>
         </Link>
       </div>
-      <nav className="flex-1 px-3 space-y-0.5">
+      <nav className="flex-1 px-3 space-y-1">
         {items.map((item, idx) => {
           const prev = items[idx - 1];
           const showDivider = prev && prev.group !== item.group;
@@ -101,41 +96,47 @@ export function DesktopNav() {
           return (
             <Fragment key={item.href}>
               {showDivider && (
-                <div className="px-4 pt-6 pb-2 text-[10px] tracking-[0.3em] uppercase text-foreground-faint">
+                <div className="px-3 pt-6 pb-2 text-[10px] tracking-[0.28em] uppercase text-foreground-faint/80">
                   Setup
                 </div>
               )}
-            <Link
-              href={item.href}
-              className={cn(
-                "group relative flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition-colors",
-                active
-                  ? "text-blush-deep"
-                  : "text-foreground-muted hover:text-foreground hover:bg-surface-2/60",
-              )}
-            >
-              {active && (
-                <motion.span
-                  layoutId="desktop-nav-pill"
-                  className="absolute inset-0 rounded-lg bg-blush-tint"
-                  transition={{ type: "spring", stiffness: 400, damping: 32 }}
-                />
-              )}
-              <Icon
+              <Link
+                href={item.href}
                 className={cn(
-                  "size-4 shrink-0 transition-colors relative z-10",
-                  active ? "text-blush-deep" : "text-foreground-faint",
+                  "group relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors",
+                  active
+                    ? "text-blush-deep"
+                    : "text-foreground-muted hover:text-foreground hover:bg-surface-2/70",
                 )}
-                strokeWidth={1.75}
-              />
-              <span className="tracking-tight relative z-10 font-medium">{item.label}</span>
-            </Link>
+              >
+                {active && (
+                  <motion.span
+                    layoutId="desktop-nav-pill"
+                    className="absolute inset-0 rounded-xl bg-blush-tint/90 shadow-[inset_0_0_0_1px_var(--blush-tint)] ring-1 ring-blush/15"
+                    transition={{ type: "spring", stiffness: 400, damping: 32 }}
+                  />
+                )}
+                <span
+                  className={cn(
+                    "relative z-10 grid place-items-center size-7 rounded-lg transition-colors",
+                    active
+                      ? "bg-blush-deep text-white shadow-sm"
+                      : "bg-surface-2/70 text-foreground-faint group-hover:text-foreground-muted",
+                  )}
+                >
+                  <Icon className="size-[15px]" strokeWidth={2} />
+                </span>
+                <span className="tracking-tight relative z-10 font-medium">
+                  {item.label}
+                </span>
+              </Link>
             </Fragment>
           );
         })}
       </nav>
-      <div className="p-7 text-[10px] tracking-[0.25em] uppercase text-foreground-faint">
-        v0.1 — local
+      <div className="px-6 py-6 flex items-center gap-2 text-[10px] tracking-[0.25em] uppercase text-foreground-faint/70">
+        <span className="size-1.5 rounded-full bg-blue/60" />
+        Personal · v0.1
       </div>
     </aside>
   );

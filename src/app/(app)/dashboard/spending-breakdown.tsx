@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { DonutChart, type DonutDatum } from "@/components/charts/DonutChart";
+import { CategoryGlyph } from "@/components/category-glyph";
 import { formatCents, cn } from "@/lib/utils";
 import { ArrowUpRight } from "lucide-react";
 
@@ -12,6 +13,7 @@ export type SpendingSlice = {
   name: string;
   value: number;
   color: string;
+  icon?: string | null;
 };
 
 // The dashboard hero. One bold panel that answers "where did my money go":
@@ -42,9 +44,9 @@ export function SpendingHero({
     <section className="rise overflow-hidden rounded-[28px] border border-border bg-surface/85 backdrop-blur-sm shadow-[0_30px_70px_-40px_rgba(34,28,74,0.45)]">
       {/* KPI STRIP */}
       <div className="grid grid-cols-1 divide-y divide-border sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-        <Kpi label="Spent" value={formatCents(consumption)} dot="var(--blush-deep)" dominant />
-        <Kpi label="Saved" value={formatCents(saved)} dot="var(--blue-deep)" />
-        <Kpi label="Income" value={formatCents(income)} dot="var(--sage-deep)" />
+        <Kpi label="Spent" value={formatCents(consumption)} accent="var(--blush-deep)" dominant />
+        <Kpi label="Saved" value={formatCents(saved)} accent="var(--blue-deep)" />
+        <Kpi label="Income" value={formatCents(income)} accent="var(--sage-deep)" />
       </div>
 
       {/* SPENDING VIZ */}
@@ -91,43 +93,47 @@ export function SpendingHero({
                 const widthPct = (s.value / maxValue) * 100;
                 const isLink = s.id !== null;
                 const body = (
-                  <>
-                    <div className="mb-2 flex items-baseline justify-between gap-3">
-                      <span className="flex min-w-0 items-center gap-2.5 text-sm font-medium tracking-tight">
-                        <span
-                          className="size-2.5 shrink-0 rounded-full"
-                          style={{ background: s.color }}
+                  <div className="flex items-center gap-3">
+                    <CategoryGlyph
+                      icon={s.icon}
+                      color={s.color}
+                      size={38}
+                      className="mt-0.5"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-2 flex items-baseline justify-between gap-3">
+                        <span className="flex min-w-0 items-center gap-1.5 text-sm font-medium tracking-tight">
+                          <span className="truncate">{s.name}</span>
+                          {isLink && (
+                            <ArrowUpRight
+                              className="size-3.5 -translate-x-1 text-foreground-faint opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100"
+                              strokeWidth={2}
+                            />
+                          )}
+                        </span>
+                        <span className="flex shrink-0 items-baseline gap-2.5">
+                          <span className="display text-base md:text-lg">
+                            {formatCents(s.value)}
+                          </span>
+                          <span className="mono tabular w-9 text-right text-[11px] text-foreground-faint">
+                            {pct(s.value)}%
+                          </span>
+                        </span>
+                      </div>
+                      <div className="h-2.5 overflow-hidden rounded-full bg-surface-2">
+                        <div
+                          className="grow-x h-full rounded-full"
+                          style={
+                            {
+                              width: `${widthPct}%`,
+                              background: `linear-gradient(90deg, ${s.color}, color-mix(in srgb, ${s.color} 62%, white))`,
+                              "--i": i,
+                            } as React.CSSProperties
+                          }
                         />
-                        <span className="truncate">{s.name}</span>
-                        {isLink && (
-                          <ArrowUpRight
-                            className="size-3.5 -translate-x-1 text-foreground-faint opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100"
-                            strokeWidth={2}
-                          />
-                        )}
-                      </span>
-                      <span className="flex shrink-0 items-baseline gap-2.5">
-                        <span className="display text-base md:text-lg">
-                          {formatCents(s.value)}
-                        </span>
-                        <span className="mono tabular w-9 text-right text-[11px] text-foreground-faint">
-                          {pct(s.value)}%
-                        </span>
-                      </span>
+                      </div>
                     </div>
-                    <div className="h-2.5 overflow-hidden rounded-full bg-surface-2">
-                      <div
-                        className="grow-x h-full rounded-full"
-                        style={
-                          {
-                            width: `${widthPct}%`,
-                            background: `linear-gradient(90deg, ${s.color}, color-mix(in srgb, ${s.color} 62%, white))`,
-                            "--i": i,
-                          } as React.CSSProperties
-                        }
-                      />
-                    </div>
-                  </>
+                  </div>
                 );
 
                 if (!isLink) {
@@ -161,22 +167,28 @@ export function SpendingHero({
 function Kpi({
   label,
   value,
-  dot,
+  accent,
   dominant = false,
 }: {
   label: string;
   value: string;
-  dot: string;
+  accent: string;
   dominant?: boolean;
 }) {
   return (
-    <div className="flex flex-col gap-2 px-6 py-4 md:py-5">
-      <div className="flex items-center gap-2">
-        <span className="size-1.5 rounded-full" style={{ background: dot }} />
-        <span className="text-[10px] uppercase tracking-[0.22em] text-foreground-faint">
-          {label}
-        </span>
-      </div>
+    <div className="relative flex flex-col gap-2 px-6 py-4 md:py-5">
+      {dominant && (
+        <span
+          className="absolute left-0 top-5 h-7 w-[3px] rounded-full"
+          style={{ background: accent }}
+        />
+      )}
+      <span
+        className="text-[10px] font-semibold uppercase tracking-[0.2em]"
+        style={{ color: accent }}
+      >
+        {label}
+      </span>
       <div
         className={cn(
           "display leading-none text-foreground",
