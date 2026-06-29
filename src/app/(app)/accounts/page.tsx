@@ -4,6 +4,12 @@ import { and, eq, gte, sql } from "drizzle-orm";
 import { Container, PageHeader } from "@/components/ui";
 import { AccountsClient } from "./client";
 import { PlaidConnectButton, PlaidItemsList } from "./PlaidConnect";
+import { AccountsHero } from "./accounts-hero";
+
+const ACCOUNT_PALETTE = [
+  "#6C7FFF", "#9B85F5", "#52C99A", "#F5A05A", "#F06E8C",
+  "#5BC4E0", "#A3C65D", "#E08B5A", "#8B7EC8", "#5ABFB5",
+];
 import { format, subDays, startOfDay } from "date-fns";
 
 export const dynamic = "force-dynamic";
@@ -93,6 +99,29 @@ export default async function AccountsPage() {
     trendByAccount[a.id] = series;
   }
 
+  const debtTypes = new Set(["credit", "loan"]);
+  const activeRows = rows.filter((a) => a.isActive);
+
+  // Asset slices: positive-balance non-debt accounts, sorted largest first
+  const assetAccounts = activeRows
+    .filter((a) => !debtTypes.has(a.type) && a.currentBalanceCents > 0)
+    .sort((a, b) => b.currentBalanceCents - a.currentBalanceCents);
+
+  const heroSlices = assetAccounts.map((a, i) => ({
+    id: a.id,
+    name: a.name,
+    value: a.currentBalanceCents,
+    color: ACCOUNT_PALETTE[i % ACCOUNT_PALETTE.length],
+  }));
+
+  const totalAssets = assetAccounts.reduce(
+    (s, a) => s + a.currentBalanceCents,
+    0,
+  );
+  const totalDebt = activeRows
+    .filter((a) => debtTypes.has(a.type))
+    .reduce((s, a) => s + Math.abs(a.currentBalanceCents), 0);
+
   return (
     <>
       <PageHeader
@@ -102,6 +131,13 @@ export default async function AccountsPage() {
         right={<PlaidConnectButton />}
       />
       <Container>
+        <div className="mb-10">
+          <AccountsHero
+            slices={heroSlices}
+            totalAssets={totalAssets}
+            totalDebt={totalDebt}
+          />
+        </div>
         <AccountsClient
           initial={rows}
           today={format(new Date(), "yyyy-MM-dd")}
