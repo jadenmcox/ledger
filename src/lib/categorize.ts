@@ -1,6 +1,5 @@
 import { db } from "@/db";
 import {
-  categories,
   categoryRules,
   transactions,
   type CategoryRule,
@@ -64,6 +63,10 @@ export async function applyRulesToHistory(
 
   let updated = 0;
   for (const t of txs) {
+    // Never override a category a human set by hand — that's the whole point
+    // of the lock. (onlyUncategorized rows are all unlocked, so this only
+    // matters for the full-history pass.)
+    if (t.categoryLocked) continue;
     const matched = applyRules(t.merchantRaw, rules);
     if (matched && matched !== t.categoryId) {
       await db

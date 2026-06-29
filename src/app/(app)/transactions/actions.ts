@@ -42,6 +42,7 @@ export async function createManualTransaction(form: FormData) {
     merchantRaw,
     merchantClean: merchantRaw,
     categoryId,
+    categoryLocked: categoryId !== null,
     notes,
     source: "manual",
     dedupeHash: dedupeHash(accountId, date, signed, merchantRaw),
@@ -53,7 +54,9 @@ export async function createManualTransaction(form: FormData) {
 export async function setCategory(txId: number, categoryId: number | null) {
   await db
     .update(transactions)
-    .set({ categoryId })
+    // Picking a category by hand locks it so rule re-runs / Plaid re-sync
+    // won't overwrite it. Clearing it (null) unlocks so rules can fill it in.
+    .set({ categoryId, categoryLocked: categoryId !== null })
     .where(eq(transactions.id, txId));
   revalidatePath("/transactions");
   revalidatePath("/dashboard");
@@ -72,7 +75,7 @@ export async function bulkSetCategory(ids: number[], categoryId: number | null) 
   if (ids.length === 0) return;
   await db
     .update(transactions)
-    .set({ categoryId })
+    .set({ categoryId, categoryLocked: categoryId !== null })
     .where(inArray(transactions.id, ids));
   revalidatePath("/transactions");
   revalidatePath("/dashboard");
@@ -155,6 +158,8 @@ export async function updateTransaction(form: FormData) {
       date: parsedDate,
       notes,
       categoryId,
+      // An explicit edit of the category locks it against later rule re-runs.
+      categoryLocked: categoryId !== null,
     })
     .where(eq(transactions.id, id));
 

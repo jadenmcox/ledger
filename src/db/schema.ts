@@ -75,6 +75,13 @@ export const transactions = sqliteTable(
     categoryId: integer("category_id").references(() => categories.id, {
       onDelete: "set null",
     }),
+    // Set when a human picks the category by hand. Locked rows are never
+    // overwritten by rule re-application or Plaid re-sync, so a manual
+    // override (e.g. one Costco run categorized as Transportation for gas)
+    // sticks even when a broader merchant rule exists.
+    categoryLocked: integer("category_locked", { mode: "boolean" })
+      .notNull()
+      .default(false),
     notes: text("notes"),
     source: text("source", { enum: txSources }).notNull(),
     externalId: text("external_id"),
