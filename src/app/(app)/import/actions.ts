@@ -65,7 +65,7 @@ export async function runImport(args: {
       m.amountCents,
       m.merchantRaw,
     );
-    const matchedCategoryId = applyRules(m.merchantRaw, rules);
+    const matchedCategoryId = applyRules(m.merchantRaw, rules, m.amountCents);
     try {
       await db.insert(transactions).values({
         accountId: args.accountId,

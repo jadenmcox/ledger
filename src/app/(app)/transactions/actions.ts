@@ -85,8 +85,19 @@ export async function makeRule(
   merchant: string,
   categoryId: number,
   applyToHistory: boolean,
+  bounds: { minAmountCents?: number | null; maxAmountCents?: number | null } = {},
 ) {
-  await createRuleFromTransaction(merchant, categoryId, "merchant_contains");
+  const hasBounds =
+    bounds.minAmountCents != null || bounds.maxAmountCents != null;
+  // Amount-narrowed rules ("Costco under $50 -> Transportation") get a higher
+  // priority so they win over a broad merchant rule ("Costco -> Groceries").
+  await createRuleFromTransaction(
+    merchant,
+    categoryId,
+    "merchant_contains",
+    hasBounds ? 2 : 0,
+    bounds,
+  );
   let touched = 0;
   if (applyToHistory) {
     touched = await applyRulesToHistory({ onlyUncategorized: false });
@@ -94,6 +105,15 @@ export async function makeRule(
   revalidatePath("/transactions");
   revalidatePath("/dashboard");
   return touched;
+}
+
+export async function setReimbursable(txId: number, reimbursable: boolean) {
+  await db
+    .update(transactions)
+    .set({ reimbursable })
+    .where(eq(transactions.id, txId));
+  revalidatePath("/transactions");
+  revalidatePath("/dashboard");
 }
 
 /**

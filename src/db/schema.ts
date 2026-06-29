@@ -82,6 +82,13 @@ export const transactions = sqliteTable(
     categoryLocked: integer("category_locked", { mode: "boolean" })
       .notNull()
       .default(false),
+    // A charge you expect to be paid back for (a reimbursed work lunch) or the
+    // incoming reimbursement itself. Reimbursable outflows are kept out of
+    // "spent" and reimbursable inflows out of "income", so the pair nets to
+    // zero instead of inflating both sides of the budget.
+    reimbursable: integer("reimbursable", { mode: "boolean" })
+      .notNull()
+      .default(false),
     notes: text("notes"),
     source: text("source", { enum: txSources }).notNull(),
     externalId: text("external_id"),
@@ -117,6 +124,11 @@ export const categoryRules = sqliteTable("category_rules", {
     .notNull()
     .references(() => categories.id, { onDelete: "cascade" }),
   priority: integer("priority").notNull().default(0),
+  // Optional amount condition (on the absolute value, in cents). Lets a rule
+  // be narrowed by size, e.g. "Costco under $50 -> Transportation" alongside a
+  // broader "Costco -> Groceries". Null bounds mean unbounded on that side.
+  minAmountCents: integer("min_amount_cents"),
+  maxAmountCents: integer("max_amount_cents"),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(unixepoch())`),

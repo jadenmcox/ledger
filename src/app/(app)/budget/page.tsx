@@ -80,6 +80,8 @@ export default async function BudgetPage() {
   // Per-category drill-down: the actual transactions behind each row's spend.
   const txByCategory: Record<number, CategoryTx[]> = {};
   for (const t of txThisMonth) {
+    // Reimbursable charges/paybacks net out — keep them off spend + income.
+    if (t.reimbursable) continue;
     const cat = t.categoryId ? catById.get(t.categoryId) : null;
     if (cat) {
       (txByCategory[cat.id] ??= []).push({
