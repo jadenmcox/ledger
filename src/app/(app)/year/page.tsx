@@ -13,6 +13,7 @@ import { formatCents, formatCentsCompact } from "@/lib/utils";
 import { startOfYear, endOfYear } from "date-fns";
 import { Heatmap } from "@/components/charts/Heatmap";
 import { YearStackedArea } from "./charts";
+import { YearHero } from "./year-hero";
 
 export const dynamic = "force-dynamic";
 
@@ -109,6 +110,18 @@ export default async function YearPage() {
     display: monthTotals[i] > 0 ? formatCentsCompact(monthTotals[i]) : undefined,
   }));
 
+  const heroSlices = rows
+    .filter((c) => c.classification !== "income")
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      value: (grid.get(c.id) ?? []).reduce((s, v) => s + v, 0),
+      color: c.color,
+      icon: c.icon,
+    }))
+    .filter((s) => s.value > 0)
+    .sort((a, b) => b.value - a.value);
+
   return (
     <>
       <PageHeader
@@ -117,25 +130,13 @@ export default async function YearPage() {
         subtitle="Every month side by side, with a category-by-category breakdown."
       />
       <Container>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-12 mb-12">
-          <Stat
-            label="YTD income"
-            value={formatCents(totalIncome)}
-            tone="blue"
-          />
-          <Stat
-            label="YTD spend"
-            value={formatCents(totalSpend)}
-            tone="blush"
-          />
-          <Stat
-            label="YTD net"
-            value={formatCents(net, { signed: true })}
-            tone={net >= 0 ? "blue" : "blush"}
-          />
-          <Stat
-            label="Avg monthly spend"
-            value={formatCents(Math.round(avgMonthlySpend))}
+        <div className="mb-10">
+          <YearHero
+            slices={heroSlices}
+            totalSpend={totalSpend}
+            totalIncome={totalIncome}
+            avgMonthlySpend={avgMonthlySpend}
+            year={now.getFullYear()}
           />
         </div>
 
