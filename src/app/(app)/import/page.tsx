@@ -1,17 +1,19 @@
 import { db } from "@/db";
-import { accounts } from "@/db/schema";
+import { accounts, categories, transactions } from "@/db/schema";
 import { Container, PageHeader, EmptyState, Button } from "@/components/ui";
 import { ImportClient } from "./client";
-import { eq } from "drizzle-orm";
+import { eq, count } from "drizzle-orm";
 import Link from "next/link";
+import { ImportHero } from "./import-hero";
 
 export const dynamic = "force-dynamic";
 
 export default async function ImportPage() {
-  const active = await db
-    .select()
-    .from(accounts)
-    .where(eq(accounts.isActive, true));
+  const [active, [{ txCount }], [{ catCount }]] = await Promise.all([
+    db.select().from(accounts).where(eq(accounts.isActive, true)),
+    db.select({ txCount: count() }).from(transactions),
+    db.select({ catCount: count() }).from(categories),
+  ]);
 
   return (
     <>
@@ -22,6 +24,13 @@ export default async function ImportPage() {
         subtitle="Drop in a CSV export from your bank. Budgetly will map the columns, drop duplicates, and apply any rules you've already created."
       />
       <Container>
+        <div className="mb-10">
+          <ImportHero
+            txCount={txCount}
+            accountCount={active.length}
+            categoryCount={catCount}
+          />
+        </div>
         {active.length === 0 ? (
           <EmptyState
             title="Add an account first"
