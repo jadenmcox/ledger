@@ -12,6 +12,7 @@ import {
 } from "./actions";
 import type { Category } from "@/db/schema";
 import { classifications } from "@/db/schema";
+import { CategoriesHero, type SpendSlice } from "./categories-hero";
 import {
   Plus,
   Trash2,
@@ -79,8 +80,40 @@ export function CategoriesClient({
     items: initial.filter((cat) => cat.classification === c && !cat.isArchived),
   }));
 
+  // Hero donut data: spending categories with activity this month, biggest first.
+  const nonIncome = initial.filter(
+    (c) => c.classification !== "income" && !c.isArchived,
+  );
+  const heroSlices: SpendSlice[] = nonIncome
+    .filter((c) => (spendByCategory[c.id] ?? 0) > 0)
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      value: spendByCategory[c.id]!,
+      color: c.color,
+      icon: c.icon,
+    }))
+    .sort((a, b) => b.value - a.value);
+  const totalSpent = heroSlices.reduce((s, c) => s + c.value, 0);
+  const limitsSet = nonIncome.filter((c) => c.monthlyLimitCents != null && c.monthlyLimitCents > 0).length;
+
+  const handleSliceClick = (id: number) => {
+    setExpanded(id);
+    setTimeout(() => {
+      document.getElementById(`cat-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 50);
+  };
+
   return (
     <div className="space-y-12">
+      <CategoriesHero
+        slices={heroSlices}
+        totalSpent={totalSpent}
+        categoryCount={nonIncome.length}
+        limitsSet={limitsSet}
+        onSliceClick={handleSliceClick}
+      />
+
       {(adding || editing) && (
         <div ref={formRef}>
           <CategoryForm
@@ -157,7 +190,7 @@ function CategoryRow({
   onEdit: () => void;
 }) {
   return (
-    <div className="group">
+    <div id={`cat-${cat.id}`} className="group">
     <div
       onClick={onToggle}
       role="button"
