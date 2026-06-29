@@ -5,7 +5,6 @@ import {
   Container,
   PageHeader,
   Card,
-  Stat,
   SectionHeader,
   Pill,
   EmptyState,
@@ -13,10 +12,10 @@ import {
 } from "@/components/ui";
 import { formatCents, formatCentsCompact } from "@/lib/utils";
 import { startOfMonth, endOfMonth, subMonths, format } from "date-fns";
-import { Gauge } from "@/components/charts/Gauge";
 import { detectRecurring } from "@/lib/recurring";
 import { TrendingUp, TrendingDown, Repeat } from "lucide-react";
 import Link from "next/link";
+import { InsightsHero } from "./insights-hero";
 
 export const dynamic = "force-dynamic";
 
@@ -115,6 +114,22 @@ export default async function InsightsPage() {
     0,
   );
 
+  const heroSlices = Array.from(tm.byCat.entries())
+    .map(([id, value]) => {
+      const cat = catById.get(id);
+      if (!cat) return null;
+      return {
+        id,
+        name: cat.name,
+        value,
+        delta: value - (lm.byCat.get(id) ?? 0),
+        color: cat.color,
+        icon: cat.icon,
+      };
+    })
+    .filter((s): s is NonNullable<typeof s> => s !== null)
+    .sort((a, b) => b.value - a.value);
+
   const hasData = thisTx.length > 0 || lastTx.length > 0;
 
   return (
@@ -137,59 +152,14 @@ export default async function InsightsPage() {
           />
         ) : (
           <div className="space-y-12">
-            <div className="grid grid-cols-1 md:grid-cols-[1fr_1.4fr] gap-6 md:gap-8">
-              <Card className="p-6 md:p-8 flex flex-col items-center justify-center relative overflow-hidden">
-                <div
-                  aria-hidden
-                  className="absolute -top-24 -right-24 size-72 rounded-full blur-3xl opacity-50"
-                  style={{ background: "var(--blue-tint)" }}
-                />
-                <Gauge
-                  value={savingsRate}
-                  max={100}
-                  size={200}
-                  label="Savings rate"
-                  valueDisplay={`${savingsRate.toFixed(0)}%`}
-                  hint={`last month: ${lastSavingsRate.toFixed(0)}%`}
-                  color="var(--blue)"
-                />
-              </Card>
-              <Card className="p-6 md:p-8">
-                <SectionHeader title="This month " italic="vs. last" />
-                <div className="grid grid-cols-2 gap-6 mt-4">
-                  <Stat
-                    label="Spent"
-                    value={formatCents(tm.spend)}
-                    tone="blush"
-                    hint={
-                      lm.spend > 0
-                        ? `${(((tm.spend - lm.spend) / lm.spend) * 100).toFixed(0)}% vs ${formatCentsCompact(lm.spend)}`
-                        : undefined
-                    }
-                  />
-                  <Stat
-                    label="Earned"
-                    value={formatCents(tm.income)}
-                    tone="blue"
-                    hint={
-                      lm.income > 0
-                        ? `${(((tm.income - lm.income) / lm.income) * 100).toFixed(0)}% vs ${formatCentsCompact(lm.income)}`
-                        : undefined
-                    }
-                  />
-                  <Stat
-                    label="Net"
-                    value={formatCents(tm.income - tm.spend, { signed: true })}
-                    tone={tm.income - tm.spend >= 0 ? "blue" : "blush"}
-                  />
-                  <Stat
-                    label="Recurring"
-                    value={formatCents(recurringTotal)}
-                    hint={`${recurring.length} detected`}
-                  />
-                </div>
-              </Card>
-            </div>
+            <InsightsHero
+              slices={heroSlices}
+              totalSpend={tm.spend}
+              totalIncome={tm.income}
+              savingsRate={savingsRate}
+              lastSavingsRate={lastSavingsRate}
+              monthLabel={format(now, "MMMM")}
+            />
 
             {movers.length > 0 && (
               <div>
