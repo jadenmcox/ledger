@@ -1,6 +1,5 @@
 import { db } from "@/db";
 import {
-  categories,
   categoryRules,
   transactions,
   type CategoryRule,
@@ -11,7 +10,19 @@ function normalize(s: string) {
   return s.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
-export function ruleMatches(rule: CategoryRule, merchant: string): boolean {
+export function ruleMatches(
+  rule: CategoryRule,
+  merchant: string,
+  amountCents?: number | null,
+): boolean {
+  // Amount condition (on the absolute value). A bounded rule can only match
+  // when we know the amount; without it (some legacy callers) it's skipped.
+  if (rule.minAmountCents != null || rule.maxAmountCents != null) {
+    if (amountCents == null) return false;
+    const abs = Math.abs(amountCents);
+    if (rule.minAmountCents != null && abs < rule.minAmountCents) return false;
+    if (rule.maxAmountCents != null && abs > rule.maxAmountCents) return false;
+  }
   const m = normalize(merchant);
   const p = normalize(rule.pattern);
   switch (rule.matchType) {
@@ -38,9 +49,10 @@ export async function getRules() {
 export function applyRules(
   merchant: string,
   rules: CategoryRule[],
+  amountCents?: number | null,
 ): number | null {
   for (const r of rules) {
-    if (ruleMatches(r, merchant)) return r.categoryId;
+    if (ruleMatches(r, merchant, amountCents)) return r.categoryId;
   }
   return null;
 }
@@ -64,7 +76,11 @@ export async function applyRulesToHistory(
 
   let updated = 0;
   for (const t of txs) {
-    const matched = applyRules(t.merchantRaw, rules);
+    // Never override a category a human set by hand — that's the whole point
+    // of the lock. (onlyUncategorized rows are all unlocked, so this only
+    // matters for the full-history pass.)
+    if (t.categoryLocked) continue;
+    const matched = applyRules(t.merchantRaw, rules, t.amountCents);
     if (matched && matched !== t.categoryId) {
       await db
         .update(transactions)
@@ -81,9 +97,13 @@ export async function createRuleFromTransaction(
   categoryId: number,
   matchType: "merchant_contains" | "merchant_exact" = "merchant_contains",
   priority = 0,
+  bounds: { minAmountCents?: number | null; maxAmountCents?: number | null } = {},
 ) {
   const pattern = normalize(merchant);
-  // Avoid duplicates
+  const minAmountCents = bounds.minAmountCents ?? null;
+  const maxAmountCents = bounds.maxAmountCents ?? null;
+  // Dedupe on pattern + matchType + amount bounds, so a broad "Costco" rule and
+  // a narrowed "Costco under $50" rule coexist rather than clobbering each other.
   const existing = await db
     .select()
     .from(categoryRules)
@@ -93,16 +113,19 @@ export async function createRuleFromTransaction(
         eq(categoryRules.matchType, matchType),
       ),
     );
-  if (existing.length > 0) {
+  const sameBounds = existing.find(
+    (e) => e.minAmountCents === minAmountCents && e.maxAmountCents === maxAmountCents,
+  );
+  if (sameBounds) {
     await db
       .update(categoryRules)
-      .set({ categoryId, priority: Math.max(existing[0].priority, priority) })
-      .where(eq(categoryRules.id, existing[0].id));
-    return existing[0].id;
+      .set({ categoryId, priority: Math.max(sameBounds.priority, priority) })
+      .where(eq(categoryRules.id, sameBounds.id));
+    return sameBounds.id;
   }
   const [r] = await db
     .insert(categoryRules)
-    .values({ pattern, matchType, categoryId, priority })
+    .values({ pattern, matchType, categoryId, priority, minAmountCents, maxAmountCents })
     .returning();
   return r.id;
 }

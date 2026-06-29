@@ -23,9 +23,10 @@ function pickCategory(
   pfc: { primary?: string | null; detailed?: string | null } | null | undefined,
   rules: CategoryRule[],
   userCategories: Category[],
+  amountCents?: number | null,
 ): number | null {
   return (
-    applyRules(merchant, rules) ??
+    applyRules(merchant, rules, amountCents) ??
     mapPlaidDetailed(pfc?.detailed, userCategories) ??
     mapPlaidCategory(pfc?.primary, userCategories)
   );
@@ -307,6 +308,7 @@ export async function applyTransactionsDelta(
           t.personal_finance_category,
           rules,
           userCategories,
+          cents,
         );
       if (!existingByExt.categoryId && backfilledCategoryId) backfilled++;
       await db
@@ -332,6 +334,7 @@ export async function applyTransactionsDelta(
       t.personal_finance_category,
       rules,
       userCategories,
+      cents,
     );
 
     if (existingByHash) {

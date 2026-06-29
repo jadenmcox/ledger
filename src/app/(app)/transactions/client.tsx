@@ -13,12 +13,13 @@ import {
   setCategory,
   makeRule,
   setIsTransfer,
+  setReimbursable,
   deleteTransaction,
   updateTransaction,
   createManualTransaction,
   recategorizeAll,
 } from "./actions";
-import { Search, Zap, ArrowRightLeft, Trash2, Pencil, Plus, Upload, Sparkles } from "lucide-react";
+import { Search, Zap, ArrowRightLeft, Trash2, Pencil, Plus, Upload, Sparkles, Receipt } from "lucide-react";
 
 function guessPatternFromRaw(raw: string): string {
   const cleaned = raw
@@ -448,6 +449,7 @@ function Row({
             {tx.merchantClean || tx.merchantRaw}
           </span>
           {tx.isTransfer && <Pill>transfer</Pill>}
+          {tx.reimbursable && <Pill tone="savings">reimbursable</Pill>}
         </div>
         <div className="flex items-baseline gap-2 mt-1 md:mt-0.5">
           <button
@@ -493,6 +495,20 @@ function Row({
           title="Mark as transfer"
         >
           <ArrowRightLeft className="size-3.5" strokeWidth={1.5} />
+        </button>
+        <button
+          onClick={() =>
+            startTransition(() => setReimbursable(tx.id, !tx.reimbursable))
+          }
+          className={cn(
+            "size-7 inline-flex items-center justify-center rounded-md hover:bg-surface-2",
+            tx.reimbursable
+              ? "text-blue-deep"
+              : "text-foreground-faint hover:text-foreground",
+          )}
+          title="Reimbursable — won't count toward spending or income"
+        >
+          <Receipt className="size-3.5" strokeWidth={1.5} />
         </button>
         <button
           onClick={() => {
@@ -702,11 +718,24 @@ function CategoryPicker({
   // merchant you almost always want every future transaction from them to
   // land in the same bucket. Uncheck for one-offs.
   const [makingRule, setMakingRule] = useState(true);
+  const [amountCond, setAmountCond] = useState<"any" | "under" | "over">("any");
+  const [amountThreshold, setAmountThreshold] = useState("");
   const [pending, startTransition] = useTransition();
 
   const results = categories.filter((c) =>
     c.name.toLowerCase().includes(q.toLowerCase()),
   );
+
+  const ruleBounds = (): {
+    minAmountCents?: number;
+    maxAmountCents?: number;
+  } => {
+    const cents = Math.round(Number(amountThreshold) * 100);
+    if (!makingRule || amountCond === "any" || !cents) return {};
+    return amountCond === "under"
+      ? { maxAmountCents: cents }
+      : { minAmountCents: cents };
+  };
 
   return (
     <Sheet open onClose={onClose}>
@@ -730,7 +759,7 @@ function CategoryPicker({
               onClick={() =>
                 startTransition(async () => {
                   if (makingRule) {
-                    await makeRule(tx.merchantRaw, c.id, true);
+                    await makeRule(tx.merchantRaw, c.id, true, ruleBounds());
                   } else {
                     await setCategory(tx.id, c.id);
                   }
@@ -768,6 +797,34 @@ function CategoryPicker({
             this way (applies to history)
           </span>
         </label>
+        {makingRule && (
+          <div className="mt-3 ml-7 flex flex-wrap items-center gap-2 text-xs text-foreground-muted">
+            <span>only when the amount is</span>
+            <select
+              value={amountCond}
+              onChange={(e) =>
+                setAmountCond(e.target.value as "any" | "under" | "over")
+              }
+              className="h-8 bg-surface-2 border border-border-strong rounded-md px-2 text-xs"
+            >
+              <option value="any">any amount</option>
+              <option value="under">under</option>
+              <option value="over">over</option>
+            </select>
+            {amountCond !== "any" && (
+              <span className="inline-flex items-center gap-1">
+                <span className="text-foreground-faint">$</span>
+                <input
+                  value={amountThreshold}
+                  onChange={(e) => setAmountThreshold(e.target.value)}
+                  inputMode="decimal"
+                  placeholder="50"
+                  className="h-8 w-16 bg-surface-2 border border-border-strong rounded-md px-2 text-xs mono tabular outline-none focus:border-blush"
+                />
+              </span>
+            )}
+          </div>
+        )}
         <div className="flex justify-end gap-2 mt-5">
           <Button variant="ghost" onClick={onClose}>
             Cancel

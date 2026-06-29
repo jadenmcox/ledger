@@ -42,6 +42,7 @@ export async function createManualTransaction(form: FormData) {
     merchantRaw,
     merchantClean: merchantRaw,
     categoryId,
+    categoryLocked: categoryId !== null,
     notes,
     source: "manual",
     dedupeHash: dedupeHash(accountId, date, signed, merchantRaw),
@@ -53,7 +54,9 @@ export async function createManualTransaction(form: FormData) {
 export async function setCategory(txId: number, categoryId: number | null) {
   await db
     .update(transactions)
-    .set({ categoryId })
+    // Picking a category by hand locks it so rule re-runs / Plaid re-sync
+    // won't overwrite it. Clearing it (null) unlocks so rules can fill it in.
+    .set({ categoryId, categoryLocked: categoryId !== null })
     .where(eq(transactions.id, txId));
   revalidatePath("/transactions");
   revalidatePath("/dashboard");
@@ -72,7 +75,7 @@ export async function bulkSetCategory(ids: number[], categoryId: number | null) 
   if (ids.length === 0) return;
   await db
     .update(transactions)
-    .set({ categoryId })
+    .set({ categoryId, categoryLocked: categoryId !== null })
     .where(inArray(transactions.id, ids));
   revalidatePath("/transactions");
   revalidatePath("/dashboard");
@@ -82,8 +85,19 @@ export async function makeRule(
   merchant: string,
   categoryId: number,
   applyToHistory: boolean,
+  bounds: { minAmountCents?: number | null; maxAmountCents?: number | null } = {},
 ) {
-  await createRuleFromTransaction(merchant, categoryId, "merchant_contains");
+  const hasBounds =
+    bounds.minAmountCents != null || bounds.maxAmountCents != null;
+  // Amount-narrowed rules ("Costco under $50 -> Transportation") get a higher
+  // priority so they win over a broad merchant rule ("Costco -> Groceries").
+  await createRuleFromTransaction(
+    merchant,
+    categoryId,
+    "merchant_contains",
+    hasBounds ? 2 : 0,
+    bounds,
+  );
   let touched = 0;
   if (applyToHistory) {
     touched = await applyRulesToHistory({ onlyUncategorized: false });
@@ -91,6 +105,15 @@ export async function makeRule(
   revalidatePath("/transactions");
   revalidatePath("/dashboard");
   return touched;
+}
+
+export async function setReimbursable(txId: number, reimbursable: boolean) {
+  await db
+    .update(transactions)
+    .set({ reimbursable })
+    .where(eq(transactions.id, txId));
+  revalidatePath("/transactions");
+  revalidatePath("/dashboard");
 }
 
 /**
@@ -155,6 +178,8 @@ export async function updateTransaction(form: FormData) {
       date: parsedDate,
       notes,
       categoryId,
+      // An explicit edit of the category locks it against later rule re-runs.
+      categoryLocked: categoryId !== null,
     })
     .where(eq(transactions.id, id));
 

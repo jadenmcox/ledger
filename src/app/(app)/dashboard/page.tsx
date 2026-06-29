@@ -77,7 +77,15 @@ export default async function DashboardPage() {
   // Per-category vendor rollup: categoryId -> (merchant -> {total, count}). Powers
   // the expandable Planned-vs-actual rows (totals combined by vendor).
   const merchantAgg = new Map<number, Map<string, { total: number; count: number }>>();
+  // Reimbursable charges/paybacks wash out: kept off both spent and income.
+  let reimbursablePaid = 0;
+  let reimbursableReceived = 0;
   for (const t of txThisMonth) {
+    if (t.reimbursable) {
+      if (t.amountCents < 0) reimbursablePaid += Math.abs(t.amountCents);
+      else reimbursableReceived += t.amountCents;
+      continue;
+    }
     const cat = t.categoryId ? catById.get(t.categoryId) : null;
     if (cat?.classification === "income") {
       income += t.amountCents;
@@ -310,6 +318,32 @@ export default async function DashboardPage() {
               income={income}
             />
 
+            {/* REIMBURSEMENTS — kept off spent & income; show what's owed back */}
+            {(reimbursablePaid > 0 || reimbursableReceived > 0) && (
+              <Card className="p-5 md:px-7 flex flex-wrap items-center justify-between gap-x-8 gap-y-3">
+                <div className="flex items-center gap-3">
+                  <CategoryGlyph icon="repeat" color="var(--blue)" size={34} />
+                  <div>
+                    <div className="text-sm font-medium tracking-tight">
+                      Reimbursements
+                    </div>
+                    <div className="text-[11px] text-foreground-faint">
+                      not counted in spending or income
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-6 md:gap-8 mono tabular">
+                  <ReconStat label="paid out" value={formatCents(reimbursablePaid)} />
+                  <ReconStat label="back" value={formatCents(reimbursableReceived)} />
+                  <ReconStat
+                    label="still owed"
+                    value={formatCents(Math.max(0, reimbursablePaid - reimbursableReceived))}
+                    emphasize
+                  />
+                </div>
+              </Card>
+            )}
+
             {/* OVERSPENDING FLAGS */}
             {overspending.length > 0 && (
               <Section
@@ -467,6 +501,33 @@ function Section({
       </div>
       {children}
     </section>
+  );
+}
+
+function ReconStat({
+  label,
+  value,
+  emphasize = false,
+}: {
+  label: string;
+  value: string;
+  emphasize?: boolean;
+}) {
+  return (
+    <div className="text-right">
+      <div className="text-[10px] uppercase tracking-[0.18em] text-foreground-faint">
+        {label}
+      </div>
+      <div
+        className={
+          emphasize
+            ? "text-base font-medium text-blue-deep"
+            : "text-base text-foreground-muted"
+        }
+      >
+        {value}
+      </div>
+    </div>
   );
 }
 

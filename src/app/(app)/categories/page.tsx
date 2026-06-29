@@ -38,6 +38,7 @@ export default async function CategoriesPage() {
   const spendByCategory: Record<number, number> = {};
   const txByCategory: Record<number, CategoryTx[]> = {};
   for (const t of txThisMonth) {
+    if (t.reimbursable) continue;
     if (!t.categoryId) continue;
     const c = catById.get(t.categoryId);
     if (!c) continue;
