@@ -10,7 +10,6 @@ import {
   ProgressBar,
   SectionHeader,
   Stat,
-  HeroStat,
 } from "@/components/ui";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { formatCents, formatCentsCompact, parseDollarsToCents } from "@/lib/utils";
@@ -20,6 +19,7 @@ import { Check, ArrowRight, ChevronRight, Tag } from "lucide-react";
 import type { BudgetFramework, Classification } from "@/db/schema";
 import { bulkSetMonthlyLimits, setBudgetFramework } from "./actions";
 import { SmartFillLimits, type SmartFillRow } from "./smart-fill";
+import { BudgetHero, type PlanSlice } from "./budget-hero";
 import type { CategoryTx } from "../categories/client";
 
 type CatRow = {
@@ -197,33 +197,49 @@ export function BudgetClient({
     });
   };
 
+  // Plan slices for the hero donut: categories with a real limit set, excluding
+  // income, biggest first. Each slice carries spent so the center can show
+  // progress against the plan.
+  const planSlices: PlanSlice[] = categories
+    .filter(
+      (c) =>
+        c.classification !== "income" &&
+        c.monthlyLimitCents != null &&
+        c.monthlyLimitCents > 0,
+    )
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      value: c.monthlyLimitCents as number,
+      spent: c.spent,
+      color: c.color,
+      icon: c.icon,
+    }))
+    .sort((a, b) => b.value - a.value);
+
   return (
     <div className="space-y-10 md:space-y-14">
-      {/* GLANCE */}
+      {/* HERO — interactive plan donut, mirroring the dashboard */}
+      <BudgetHero
+        slices={planSlices}
+        spent={spend}
+        planned={totalLimit}
+        daysLeft={daysLeft}
+      />
+
+      {/* GLANCE — calendar progress + supporting numbers */}
       <div className="grid grid-cols-1 md:grid-cols-[1.4fr_1fr] gap-8 md:gap-12 items-start">
         <div>
-          <HeroStat
-            label="Spent so far"
-            value={formatCents(spend)}
-            tone="blush"
-            hint={
-              totalLimit > 0
-                ? `of ${formatCentsCompact(totalLimit)} planned · ${daysLeft} days left`
-                : `${daysLeft} days left this month`
-            }
+          <Label>Calendar progress</Label>
+          <ProgressBar
+            value={dayOfMonth}
+            max={daysInMonth}
+            color="var(--sage-deep)"
+            warnAt={1.1}
           />
-          <div className="mt-5">
-            <Label>Calendar progress</Label>
-            <ProgressBar
-              value={dayOfMonth}
-              max={daysInMonth}
-              color="var(--sage-deep)"
-              warnAt={1.1}
-            />
-            <div className="flex items-center justify-between text-[11px] text-foreground-faint mt-1.5 mono tabular">
-              <span>Day {dayOfMonth} of {daysInMonth}</span>
-              <span>{calendarPct.toFixed(0)}%</span>
-            </div>
+          <div className="flex items-center justify-between text-[11px] text-foreground-faint mt-1.5 mono tabular">
+            <span>Day {dayOfMonth} of {daysInMonth}</span>
+            <span>{calendarPct.toFixed(0)}%</span>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-px bg-border rounded-2xl overflow-hidden border border-border">
