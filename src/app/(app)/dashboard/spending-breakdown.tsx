@@ -188,7 +188,7 @@ function MiniStat({
       >
         {label}
       </div>
-      <div className={cn("display text-[1.55rem] leading-none text-foreground md:text-[1.75rem]")}>
+      <div className={cn("display text-[1.75rem] leading-none text-foreground md:text-[2rem]")}>
         {value}
       </div>
     </div>
