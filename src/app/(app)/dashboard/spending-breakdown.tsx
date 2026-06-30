@@ -57,23 +57,23 @@ export function SpendingHero({
         </div>
       ) : (
         <>
-          <div className="flex flex-col items-center gap-6 md:flex-row md:items-center md:gap-8 lg:gap-10">
+          <div className="flex flex-col items-center gap-6 md:flex-row md:items-center md:gap-14 lg:gap-20">
             {/* LEFT — interactive donut */}
             <div
               className="relative shrink-0"
-              style={{ width: 280, height: 280 }}
+              style={{ width: 330, height: 330 }}
               onMouseLeave={() => setActive(null)}
             >
               <DonutChart
                 data={donutData}
-                size={280}
-                thickness={46}
+                size={330}
+                thickness={52}
                 formatValue={formatCents}
                 showTooltip={false}
                 onActiveChange={setActive}
                 onSliceClick={(d) => d.href && router.push(d.href)}
               />
-              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-10 text-center">
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-12 text-center">
                 {active ? (
                   <>
                     <span
@@ -82,7 +82,7 @@ export function SpendingHero({
                     >
                       {active.name}
                     </span>
-                    <span className="display text-[1.9rem] leading-none">
+                    <span className="display text-[2.1rem] leading-none">
                       {formatCents(active.value)}
                     </span>
                     <span className="mt-1 text-[11px] text-foreground-faint">
@@ -94,7 +94,7 @@ export function SpendingHero({
                     <span className="mb-0.5 text-[10px] uppercase tracking-[0.28em] text-foreground-faint">
                       spent
                     </span>
-                    <span className="display text-[2rem] leading-none">
+                    <span className="display text-[2.2rem] leading-none">
                       {formatCents(consumption)}
                     </span>
                   </>
@@ -103,27 +103,27 @@ export function SpendingHero({
             </div>
 
             {/* RIGHT — numbers */}
-            <div className="flex min-w-0 flex-1 flex-col justify-center gap-5">
+            <div className="flex min-w-0 flex-1 flex-col justify-center gap-6">
               {/* Primary */}
               <div>
                 <div
-                  className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.22em]"
+                  className="mb-2 text-[10px] font-semibold uppercase tracking-[0.22em]"
                   style={{ color: "var(--blush-deep)" }}
                 >
                   Total spent
                 </div>
-                <div className="display text-[2.8rem] leading-none text-foreground md:text-[3.2rem]">
+                <div className="display text-[3.4rem] leading-none text-foreground md:text-[4rem]">
                   {formatCents(consumption)}
                 </div>
                 {incomeSharePct !== null && (
-                  <div className="mt-1.5 text-[13px] text-foreground-faint">
+                  <div className="mt-2 text-[14px] text-foreground-faint">
                     {incomeSharePct}% of income
                   </div>
                 )}
               </div>
 
               {/* Secondary: saved + income */}
-              <div className="flex gap-8">
+              <div className="flex gap-10">
                 <MiniStat
                   label="Saved"
                   value={formatCents(saved)}
