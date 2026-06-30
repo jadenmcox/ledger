@@ -15,6 +15,7 @@ import { and, asc, eq, gte, lte } from "drizzle-orm";
 import type { ReactNode } from "react";
 import {
   Container,
+  PageHeader,
   Card,
   EmptyState,
   Pill,
@@ -281,17 +282,11 @@ export default async function DashboardPage() {
 
   return (
     <div>
-      <div className="px-5 md:px-12 pt-5 md:pt-8 pb-3 md:pb-5 relative">
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h1 className="display text-[2rem] md:text-[2.5rem] leading-[0.95]">
-            {format(now, "MMMM yyyy")}
-          </h1>
-          <span className="text-foreground-faint text-[10px] tracking-[0.25em] uppercase inline-flex items-center gap-2">
-            <span className="size-1 rounded-full bg-blush drift" />
-            {format(now, "EEE · MMM d")} · {daysLeft} days left
-          </span>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow={`${format(now, "EEE · MMM d").toUpperCase()} · ${daysLeft} ${daysLeft === 1 ? "DAY" : "DAYS"} LEFT`}
+        title={format(now, "MMMM yyyy")}
+        subtitle="Where your money went this month, what's planned, and what's coming up."
+      />
       <Container className="pb-32 md:pb-16">
         {allAccounts.length === 0 ? (
           <EmptyState
@@ -317,32 +312,6 @@ export default async function DashboardPage() {
               saved={saved}
               income={income}
             />
-
-            {/* REIMBURSEMENTS — kept off spent & income; show what's owed back */}
-            {(reimbursablePaid > 0 || reimbursableReceived > 0) && (
-              <Card className="p-5 md:px-7 flex flex-wrap items-center justify-between gap-x-8 gap-y-3">
-                <div className="flex items-center gap-3">
-                  <CategoryGlyph icon="repeat" color="var(--blue)" size={34} />
-                  <div>
-                    <div className="text-sm font-medium tracking-tight">
-                      Reimbursements
-                    </div>
-                    <div className="text-[11px] text-foreground-faint">
-                      not counted in spending or income
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-6 md:gap-8 mono tabular">
-                  <ReconStat label="paid out" value={formatCents(reimbursablePaid)} />
-                  <ReconStat label="back" value={formatCents(reimbursableReceived)} />
-                  <ReconStat
-                    label="still owed"
-                    value={formatCents(Math.max(0, reimbursablePaid - reimbursableReceived))}
-                    emphasize
-                  />
-                </div>
-              </Card>
-            )}
 
             {/* OVERSPENDING FLAGS */}
             {overspending.length > 0 && (
@@ -464,6 +433,33 @@ export default async function DashboardPage() {
                       </div>
                     </div>
                   ))}
+                </Card>
+              </Section>
+            )}
+
+            {/* REIMBURSEMENTS — a side ledger kept off spent & income; shown
+                last since it's not part of the month's actual flow */}
+            {(reimbursablePaid > 0 || reimbursableReceived > 0) && (
+              <Section
+                title="Reimbursements"
+                hint="not counted in spending or income"
+              >
+                <Card className="p-5 md:px-7 flex flex-wrap items-center justify-between gap-x-8 gap-y-3">
+                  <div className="flex items-center gap-3">
+                    <CategoryGlyph icon="repeat" color="var(--blue)" size={34} />
+                    <div className="text-sm text-foreground-muted tracking-tight">
+                      What you&apos;ve fronted and what&apos;s owed back.
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-6 md:gap-8 mono tabular">
+                    <ReconStat label="paid out" value={formatCents(reimbursablePaid)} />
+                    <ReconStat label="back" value={formatCents(reimbursableReceived)} />
+                    <ReconStat
+                      label="still owed"
+                      value={formatCents(Math.max(0, reimbursablePaid - reimbursableReceived))}
+                      emphasize
+                    />
+                  </div>
                 </Card>
               </Section>
             )}
