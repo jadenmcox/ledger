@@ -10,7 +10,7 @@ import {
   parseCsv,
   type ColumnMap,
 } from "@/lib/csv-import";
-import { applyRules, getRules } from "@/lib/categorize";
+import { applyRules, getRules, checkReimbursable, getReimbursableRules } from "@/lib/categorize";
 import {
   applyMerchantRules,
   getMerchantRules,
@@ -42,6 +42,7 @@ export async function runImport(args: {
   if (acct.length === 0) throw new Error("Account not found");
 
   const rules = await getRules();
+  const reimbRules = await getReimbursableRules();
   const merchantRules = await getMerchantRules();
 
   const [importRow] = await db
@@ -76,6 +77,7 @@ export async function runImport(args: {
           applyMerchantRules(m.merchantRaw, merchantRules) ??
           cleanMerchant(m.merchantRaw),
         categoryId: matchedCategoryId,
+        reimbursable: m.amountCents < 0 ? checkReimbursable(m.merchantRaw, reimbRules, m.amountCents) : false,
         source: "csv",
         dedupeHash: hash,
         importId: importRow.id,

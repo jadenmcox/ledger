@@ -134,6 +134,22 @@ export const categoryRules = sqliteTable("category_rules", {
     .default(sql`(unixepoch())`),
 });
 
+// Rules that auto-mark matching transactions as reimbursable.
+// maxAmountCents: only apply when |amountCents| ≤ this (null = no limit).
+export const reimbursableRules = sqliteTable("reimbursable_rules", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  matchType: text("match_type", {
+    enum: ["merchant_contains", "merchant_exact", "regex"],
+  }).notNull(),
+  pattern: text("pattern").notNull(),
+  maxAmountCents: integer("max_amount_cents"),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});
+
+export type ReimbursableRule = typeof reimbursableRules.$inferSelect;
+
 export const merchantRules = sqliteTable("merchant_rules", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   matchType: text("match_type", {

@@ -11,7 +11,7 @@ import {
 } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { plaid } from "./plaid";
-import { applyRules, getRules } from "./categorize";
+import { applyRules, getRules, checkReimbursable, getReimbursableRules } from "./categorize";
 import {
   applyMerchantRules,
   getMerchantRules,
@@ -274,6 +274,7 @@ export async function applyTransactionsDelta(
   removed: RemovedTransaction[],
 ): Promise<{ backfilled: number }> {
   const rules = await getRules();
+  const reimbRules = await getReimbursableRules();
   const renameRules = await getMerchantRules();
   const userCategories = await db.select().from(categories);
   let backfilled = 0;
@@ -364,6 +365,7 @@ export async function applyTransactionsDelta(
         merchantRaw: merchant,
         merchantClean: applyMerchantRules(merchant, renameRules),
         categoryId,
+        reimbursable: cents < 0 ? checkReimbursable(merchant, reimbRules, cents) : false,
         source: "plaid",
         externalId: t.transaction_id,
         dedupeHash: hash,

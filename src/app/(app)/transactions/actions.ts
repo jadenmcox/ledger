@@ -6,6 +6,7 @@ import { eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import {
   applyRulesToHistory,
+  applyReimbursableRulesToHistory,
   createRuleFromTransaction,
 } from "@/lib/categorize";
 import {
@@ -129,6 +130,7 @@ export async function recategorizeAll(): Promise<{
   const backfilled = results.reduce((s, r) => s + (r.backfilled ?? 0), 0);
   const errors = results.map((r) => r.error).filter((e): e is string => !!e);
   const ruleTouched = await applyRulesToHistory({ onlyUncategorized: true });
+  await applyReimbursableRulesToHistory();
   revalidatePath("/transactions");
   revalidatePath("/dashboard");
   return { touched: backfilled + ruleTouched, errors };

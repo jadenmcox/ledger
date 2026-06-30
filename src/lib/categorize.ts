@@ -1,8 +1,10 @@
 import { db } from "@/db";
 import {
   categoryRules,
+  reimbursableRules,
   transactions,
   type CategoryRule,
+  type ReimbursableRule,
 } from "@/db/schema";
 import { and, desc, eq, isNull } from "drizzle-orm";
 
@@ -128,4 +130,45 @@ export async function createRuleFromTransaction(
     .values({ pattern, matchType, categoryId, priority, minAmountCents, maxAmountCents })
     .returning();
   return r.id;
+}
+
+// ---------------------------------------------------------------------------
+// Reimbursable rules
+// ---------------------------------------------------------------------------
+
+export async function getReimbursableRules(): Promise<ReimbursableRule[]> {
+  return db.select().from(reimbursableRules);
+}
+
+export function checkReimbursable(
+  merchant: string,
+  rules: ReimbursableRule[],
+  amountCents: number,
+): boolean {
+  const abs = Math.abs(amountCents);
+  for (const r of rules) {
+    if (r.maxAmountCents != null && abs > r.maxAmountCents) continue;
+    if (!ruleMatches(r as unknown as CategoryRule, merchant, amountCents)) continue;
+    return true;
+  }
+  return false;
+}
+
+export async function applyReimbursableRulesToHistory(): Promise<number> {
+  const rules = await getReimbursableRules();
+  if (rules.length === 0) return 0;
+  const txs = await db.select().from(transactions);
+  let updated = 0;
+  for (const t of txs) {
+    if (t.amountCents >= 0) continue; // only outflows
+    const shouldReimburse = checkReimbursable(t.merchantRaw, rules, t.amountCents);
+    if (shouldReimburse && !t.reimbursable) {
+      await db
+        .update(transactions)
+        .set({ reimbursable: true })
+        .where(eq(transactions.id, t.id));
+      updated++;
+    }
+  }
+  return updated;
 }
