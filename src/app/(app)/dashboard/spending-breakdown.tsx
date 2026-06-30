@@ -121,30 +121,41 @@ export function SpendingHero({
                 </div>
               </div>
 
-              {/* Legend — icon chip per slice, clickable for real categories */}
-              <div className="flex flex-wrap justify-center gap-x-4 gap-y-2.5">
+              {/* Legend — ranked list (biggest first): name + amount + share.
+                  Rows for real categories link to their transactions. */}
+              <div className="flex w-full flex-col">
                 {slices.map((s, i) => {
                   const href = hrefFor(s.id);
+                  const pct =
+                    consumption > 0
+                      ? Math.round((s.value / consumption) * 100)
+                      : 0;
                   const inner = (
-                    <span className="flex items-center gap-2 text-[13px] tracking-tight">
+                    <div className="flex items-center gap-2.5 py-1.5">
                       <CategoryGlyph icon={s.icon} color={s.color} size={22} />
-                      <span className="truncate text-foreground-muted">
+                      <span className="min-w-0 flex-1 truncate text-[13px] tracking-tight text-foreground-muted">
                         {s.name}
                       </span>
-                    </span>
+                      <span className="mono tabular shrink-0 text-[13px] text-foreground">
+                        {formatCents(s.value)}
+                      </span>
+                      <span className="w-9 shrink-0 text-right text-[11px] text-foreground-faint">
+                        {pct}%
+                      </span>
+                    </div>
                   );
                   return href ? (
                     <Link
                       key={s.id}
                       href={href}
-                      className="rounded-lg px-1 py-0.5 transition-colors hover:text-foreground"
+                      className="-mx-2 rounded-lg px-2 transition-colors hover:bg-surface-2/60"
                     >
                       {inner}
                     </Link>
                   ) : (
-                    <span key={`x-${i}`} className="px-1 py-0.5">
+                    <div key={`x-${i}`} className="-mx-2 px-2">
                       {inner}
-                    </span>
+                    </div>
                   );
                 })}
               </div>
