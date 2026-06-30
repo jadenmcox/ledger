@@ -46,8 +46,13 @@ export function SpendingHero({
     active && consumption > 0
       ? Math.round((active.value / consumption) * 100)
       : 0;
-  const incomeSharePct =
-    income > 0 ? Math.round((consumption / income) * 100) : null;
+  // "What's left" = income not yet spent this month. Drives the flow bar and the
+  // headline remaining figure. Goes negative (and red) when spending tops income.
+  const remaining = income - consumption;
+  const over = remaining < 0;
+  const spentShare = income > 0 ? consumption / income : 0;
+  const pctLeft =
+    income > 0 ? Math.max(0, Math.round((remaining / income) * 100)) : null;
 
   return (
     <section className="rise overflow-hidden rounded-[28px] border border-border bg-surface/85 p-6 backdrop-blur-sm shadow-[0_30px_70px_-40px_rgba(34,28,74,0.45)] md:p-8">
@@ -104,7 +109,7 @@ export function SpendingHero({
 
             {/* RIGHT — numbers */}
             <div className="flex min-w-0 flex-1 flex-col justify-center gap-6">
-              {/* Primary */}
+              {/* Primary — total spent */}
               <div>
                 <div
                   className="mb-2 text-[10px] font-semibold uppercase tracking-[0.22em]"
@@ -115,12 +120,47 @@ export function SpendingHero({
                 <div className="display text-[3.4rem] leading-none text-foreground md:text-[4rem]">
                   {formatCents(consumption)}
                 </div>
-                {incomeSharePct !== null && (
-                  <div className="mt-2 text-[14px] text-foreground-faint">
-                    {incomeSharePct}% of income
-                  </div>
-                )}
               </div>
+
+              {/* Flow bar — how much of income is spent vs. left this month */}
+              {income > 0 && (
+                <div className="space-y-2.5">
+                  <div
+                    className="h-2.5 w-full overflow-hidden rounded-full"
+                    style={{ background: "var(--surface-2)" }}
+                  >
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${Math.min(100, Math.round(spentShare * 100))}%`,
+                        background: over
+                          ? "var(--blush-deep)"
+                          : "var(--blush)",
+                      }}
+                    />
+                  </div>
+                  <div className="flex items-baseline justify-between gap-3 text-[14px]">
+                    <span className="text-foreground-muted">
+                      <span
+                        className="display text-[1.05rem]"
+                        style={{
+                          color: over
+                            ? "var(--blush-deep)"
+                            : "var(--blue-deep)",
+                        }}
+                      >
+                        {formatCents(Math.abs(remaining))}
+                      </span>{" "}
+                      {over ? "over income" : "left to spend"}
+                    </span>
+                    {pctLeft !== null && (
+                      <span className="shrink-0 text-foreground-faint">
+                        {over ? "0" : pctLeft}% of income
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Secondary: saved + income */}
               <div className="flex gap-10">

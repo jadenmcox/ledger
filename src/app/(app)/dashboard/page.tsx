@@ -28,22 +28,53 @@ import {
   format,
   getDaysInMonth,
   getDate,
+  parse,
+  isValid,
+  isSameMonth,
+  subMonths,
+  addMonths,
 } from "date-fns";
 import Link from "next/link";
-import { ArrowRight, Repeat, TrendingUp } from "lucide-react";
+import {
+  ArrowRight,
+  ChevronLeft,
+  ChevronRight,
+  Repeat,
+  TrendingUp,
+} from "lucide-react";
 import { SavingsGoalsSection } from "./savings-goals";
 
 export const dynamic = "force-dynamic";
 
 type Classification = "need" | "want" | "savings";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ m?: string }>;
+}) {
   const now = new Date();
-  const monthStart = startOfMonth(now);
-  const monthEnd = endOfMonth(now);
-  const daysInMonth = getDaysInMonth(now);
+  // ?m=YYYY-MM lets you page back through past months. Defaults to the current
+  // month; the future is never reachable (next is disabled on the live month).
+  const sp = await searchParams;
+  const parsedMonth =
+    sp.m && /^\d{4}-\d{2}$/.test(sp.m)
+      ? parse(`${sp.m}-01`, "yyyy-MM-dd", new Date())
+      : null;
+  const viewDate =
+    parsedMonth && isValid(parsedMonth) && parsedMonth <= now
+      ? parsedMonth
+      : now;
+  const isCurrentMonth = isSameMonth(viewDate, now);
+
+  const monthStart = startOfMonth(viewDate);
+  const monthEnd = endOfMonth(viewDate);
+  const daysInMonth = getDaysInMonth(viewDate);
   const dayOfMonth = getDate(now);
   const daysLeft = daysInMonth - dayOfMonth;
+
+  const prevMonthParam = format(subMonths(monthStart, 1), "yyyy-MM");
+  const nextMonthParam = format(addMonths(monthStart, 1), "yyyy-MM");
 
   const [
     txThisMonth,
@@ -210,17 +241,16 @@ export default async function DashboardPage() {
   // Upcoming recurring bills between tomorrow and end-of-month (for "Coming up").
   const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
 
-  // Planned vs Actual rows. Include every non-income, non-archived category
-  // that has a limit OR has spend this month. That mirrors the user's sheet:
-  // the rows in their Expenses/Spend block are the named categories they care
-  // about, plus anything that actually saw money move.
+  // Planned vs Actual rows. Only categories that actually saw money move this
+  // month — a planned limit with zero spend is noise on this view (the limit is
+  // still editable over on /budget). Income and archived categories never show.
   type Row = { category: Category; planned: number; actual: number; difference: number };
   const rows: Row[] = allCategories
     .filter(
       (c) =>
         c.classification !== "income" &&
         !c.isArchived &&
-        ((c.monthlyLimitCents ?? 0) > 0 || (spendByCategory.get(c.id) ?? 0) > 0),
+        (spendByCategory.get(c.id) ?? 0) > 0,
     )
     .map((c) => {
       const planned = c.monthlyLimitCents ?? 0;
@@ -283,9 +313,44 @@ export default async function DashboardPage() {
   return (
     <div>
       <PageHeader
-        eyebrow={`${format(now, "EEE · MMM d").toUpperCase()} · ${daysLeft} ${daysLeft === 1 ? "DAY" : "DAYS"} LEFT`}
-        title={format(now, "MMMM yyyy")}
-        subtitle="Where your money went this month, what's planned, and what's coming up."
+        eyebrow={
+          isCurrentMonth
+            ? `${format(now, "EEE · MMM d").toUpperCase()} · ${daysLeft} ${daysLeft === 1 ? "DAY" : "DAYS"} LEFT`
+            : `${format(monthStart, "MMM d").toUpperCase()} – ${format(monthEnd, "MMM d, yyyy").toUpperCase()}`
+        }
+        title={format(viewDate, "MMMM yyyy")}
+        subtitle={
+          isCurrentMonth
+            ? "Where your money went this month, what's planned, and what's coming up."
+            : "A look back at where your money went this month."
+        }
+        right={
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/dashboard?m=${prevMonthParam}`}
+              aria-label="Previous month"
+              className="flex size-10 items-center justify-center rounded-full border border-border bg-surface text-foreground-muted transition-colors hover:text-foreground hover:border-foreground-faint"
+            >
+              <ChevronLeft className="size-4" strokeWidth={2} />
+            </Link>
+            {isCurrentMonth ? (
+              <span
+                aria-disabled
+                className="flex size-10 items-center justify-center rounded-full border border-border/60 text-foreground-faint/40"
+              >
+                <ChevronRight className="size-4" strokeWidth={2} />
+              </span>
+            ) : (
+              <Link
+                href={`/dashboard?m=${nextMonthParam}`}
+                aria-label="Next month"
+                className="flex size-10 items-center justify-center rounded-full border border-border bg-surface text-foreground-muted transition-colors hover:text-foreground hover:border-foreground-faint"
+              >
+                <ChevronRight className="size-4" strokeWidth={2} />
+              </Link>
+            )}
+          </div>
+        }
       />
       <Container className="pb-32 md:pb-16">
         {allAccounts.length === 0 ? (
@@ -359,7 +424,7 @@ export default async function DashboardPage() {
             {/* PLANNED vs ACTUAL TABLE */}
             <Section
               title="Planned vs actual"
-              hint="categories with a limit or any activity this month"
+              hint="categories with spending this month"
               right={
                 <Link
                   href="/budget"
