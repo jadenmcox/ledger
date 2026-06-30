@@ -61,17 +61,9 @@ export function SpendingHero({
           <Stat label="Income" value={formatCents(income)} accent="var(--sage-deep)" />
         </div>
 
-        {/* RIGHT — big interactive donut + icon legend */}
+        {/* RIGHT — big interactive donut + icon legend (no title; the donut's
+            center label already says what it is) */}
         <div className="flex flex-col items-center gap-6">
-          <div className="flex w-full items-baseline justify-between gap-3">
-            <h2 className="display text-lg tracking-tight md:text-xl">
-              Where your money went
-            </h2>
-            <span className="text-[11px] tracking-tight text-foreground-faint">
-              hover · click to open
-            </span>
-          </div>
-
           {consumption <= 0 ? (
             <div className="py-16 text-center text-sm text-foreground-faint">
               No spending recorded yet this month.
@@ -80,13 +72,13 @@ export function SpendingHero({
             <>
               <div
                 className="relative"
-                style={{ width: 300, height: 300 }}
+                style={{ width: 360, height: 360 }}
                 onMouseLeave={() => setActive(null)}
               >
                 <DonutChart
                   data={donutData}
-                  size={300}
-                  thickness={40}
+                  size={360}
+                  thickness={46}
                   formatValue={formatCents}
                   showTooltip={false}
                   onActiveChange={setActive}
@@ -101,7 +93,7 @@ export function SpendingHero({
                       >
                         {active.name}
                       </span>
-                      <span className="display text-[2rem] leading-none">
+                      <span className="display text-[2.4rem] leading-none">
                         {formatCents(active.value)}
                       </span>
                       <span className="mt-1.5 text-[11px] text-foreground-faint">
@@ -113,7 +105,7 @@ export function SpendingHero({
                       <span className="mb-1 text-[10px] uppercase tracking-[0.28em] text-foreground-faint">
                         spent
                       </span>
-                      <span className="display text-[2.3rem] leading-none">
+                      <span className="display text-[2.9rem] leading-none">
                         {formatCents(consumption)}
                       </span>
                     </>
@@ -121,44 +113,37 @@ export function SpendingHero({
                 </div>
               </div>
 
-              {/* Legend — ranked list (biggest first): name + amount + share.
-                  Rows for real categories link to their transactions. */}
-              <div className="flex w-full flex-col">
+              {/* Legend — simple icon + name chips, wrapped below the donut */}
+              <div className="flex flex-wrap justify-center gap-x-4 gap-y-2.5">
                 {slices.map((s, i) => {
                   const href = hrefFor(s.id);
-                  const pct =
-                    consumption > 0
-                      ? Math.round((s.value / consumption) * 100)
-                      : 0;
                   const inner = (
-                    <div className="flex items-center gap-2.5 py-1.5">
+                    <span className="flex items-center gap-2 text-[13px] tracking-tight">
                       <CategoryGlyph icon={s.icon} color={s.color} size={22} />
-                      <span className="min-w-0 flex-1 truncate text-[13px] tracking-tight text-foreground-muted">
+                      <span className="truncate text-foreground-muted">
                         {s.name}
                       </span>
-                      <span className="mono tabular shrink-0 text-[13px] text-foreground">
-                        {formatCents(s.value)}
-                      </span>
-                      <span className="w-9 shrink-0 text-right text-[11px] text-foreground-faint">
-                        {pct}%
-                      </span>
-                    </div>
+                    </span>
                   );
                   return href ? (
                     <Link
                       key={s.id}
                       href={href}
-                      className="-mx-2 rounded-lg px-2 transition-colors hover:bg-surface-2/60"
+                      className="rounded-lg px-1 py-0.5 transition-colors hover:text-foreground"
                     >
                       {inner}
                     </Link>
                   ) : (
-                    <div key={`x-${i}`} className="-mx-2 px-2">
+                    <span key={`x-${i}`} className="px-1 py-0.5">
                       {inner}
-                    </div>
+                    </span>
                   );
                 })}
               </div>
+
+              <span className="text-[11px] tracking-tight text-foreground-faint">
+                hover a slice · click to open
+              </span>
             </>
           )}
         </div>
@@ -196,8 +181,8 @@ function Stat({
         className={cn(
           "display leading-none text-foreground",
           dominant
-            ? "text-[2.4rem] md:text-[3rem]"
-            : "text-[1.8rem] md:text-[2.1rem]",
+            ? "text-[2.8rem] md:text-[3.5rem]"
+            : "text-[2rem] md:text-[2.4rem]",
         )}
       >
         {value}
