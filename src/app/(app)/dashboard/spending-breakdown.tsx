@@ -61,40 +61,40 @@ export function SpendingHero({
             {/* LEFT — interactive donut */}
             <div
               className="relative shrink-0"
-              style={{ width: 220, height: 220 }}
+              style={{ width: 280, height: 280 }}
               onMouseLeave={() => setActive(null)}
             >
               <DonutChart
                 data={donutData}
-                size={220}
-                thickness={38}
+                size={280}
+                thickness={46}
                 formatValue={formatCents}
                 showTooltip={false}
                 onActiveChange={setActive}
                 onSliceClick={(d) => d.href && router.push(d.href)}
               />
-              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-8 text-center">
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-10 text-center">
                 {active ? (
                   <>
                     <span
-                      className="mb-1 max-w-full truncate text-[9px] font-semibold uppercase tracking-[0.2em]"
+                      className="mb-1 max-w-full truncate text-[10px] font-semibold uppercase tracking-[0.2em]"
                       style={{ color: active.color }}
                     >
                       {active.name}
                     </span>
-                    <span className="display text-[1.65rem] leading-none">
+                    <span className="display text-[1.9rem] leading-none">
                       {formatCents(active.value)}
                     </span>
-                    <span className="mt-1 text-[10px] text-foreground-faint">
+                    <span className="mt-1 text-[11px] text-foreground-faint">
                       {activePct}%
                     </span>
                   </>
                 ) : (
                   <>
-                    <span className="mb-0.5 text-[9px] uppercase tracking-[0.28em] text-foreground-faint">
+                    <span className="mb-0.5 text-[10px] uppercase tracking-[0.28em] text-foreground-faint">
                       spent
                     </span>
-                    <span className="display text-[1.75rem] leading-none">
+                    <span className="display text-[2rem] leading-none">
                       {formatCents(consumption)}
                     </span>
                   </>
@@ -103,7 +103,7 @@ export function SpendingHero({
             </div>
 
             {/* RIGHT — numbers */}
-            <div className="flex min-w-0 flex-col justify-center gap-5">
+            <div className="flex min-w-0 flex-1 flex-col justify-center gap-5">
               {/* Primary */}
               <div>
                 <div
