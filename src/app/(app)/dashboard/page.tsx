@@ -22,6 +22,7 @@ import {
   Button,
 } from "@/components/ui";
 import { formatCents, formatCentsCompact } from "@/lib/utils";
+import { effectiveDate } from "@/lib/effective-month";
 import {
   startOfMonth,
   endOfMonth,
@@ -76,8 +77,13 @@ export default async function DashboardPage({
   const prevMonthParam = format(subMonths(monthStart, 1), "yyyy-MM");
   const nextMonthParam = format(addMonths(monthStart, 1), "yyyy-MM");
 
+  // Widen the fetch back through the previous month so late-month rent (paid on
+  // or after the 20th, which counts toward *this* month) is available to pull
+  // in. The window is then narrowed to this month by effective date below.
+  const windowStart = startOfMonth(subMonths(monthStart, 1));
+
   const [
-    txThisMonth,
+    txWindow,
     allCategories,
     allAccounts,
     schedules,
@@ -88,7 +94,7 @@ export default async function DashboardPage({
       .from(transactions)
       .where(
         and(
-          gte(transactions.date, monthStart),
+          gte(transactions.date, windowStart),
           lte(transactions.date, monthEnd),
           eq(transactions.isTransfer, false),
         ),
@@ -101,6 +107,15 @@ export default async function DashboardPage({
 
   const catById = new Map(allCategories.map((c) => [c.id, c]));
   const acctById = new Map(allAccounts.map((a) => [a.id, a]));
+
+  // Bucket by effective month: rent rolls forward from the prior month's tail,
+  // and this month's late rent rolls out to next month.
+  const txThisMonth = txWindow.filter((t) =>
+    isSameMonth(
+      effectiveDate(new Date(t.date), t.categoryId ? catById.get(t.categoryId)?.name : null),
+      viewDate,
+    ),
+  );
 
   let income = 0;
   let spend = 0;
