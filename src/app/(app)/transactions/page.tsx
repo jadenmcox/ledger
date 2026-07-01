@@ -23,7 +23,6 @@ export default async function TransactionsPage() {
   const monthEnd = endOfMonth(now);
   const catById = new Map(allCats.map((c) => [c.id, c]));
 
-  const spendByCat = new Map<number, number>();
   let thisMonthSpend = 0;
   let uncategorized = 0;
 
@@ -36,21 +35,8 @@ export default async function TransactionsPage() {
     if (t.amountCents >= 0) continue;
     const abs = Math.abs(t.amountCents);
     thisMonthSpend += abs;
-    if (!t.categoryId) {
-      uncategorized++;
-    } else {
-      spendByCat.set(t.categoryId, (spendByCat.get(t.categoryId) ?? 0) + abs);
-    }
+    if (!t.categoryId) uncategorized++;
   }
-
-  const heroSlices = Array.from(spendByCat.entries())
-    .map(([id, value]) => {
-      const cat = catById.get(id);
-      if (!cat) return null;
-      return { id, name: cat.name, value, color: cat.color, icon: cat.icon };
-    })
-    .filter((s): s is NonNullable<typeof s> => s !== null)
-    .sort((a, b) => b.value - a.value);
 
   return (
     <>
@@ -67,7 +53,6 @@ export default async function TransactionsPage() {
         {hasAccounts && (
           <div className="mb-10">
             <TransactionsHero
-              slices={heroSlices}
               totalSpend={thisMonthSpend}
               txCount={allTx.length}
               uncategorized={uncategorized}

@@ -97,21 +97,12 @@ export function CategoriesClient({
   const totalSpent = heroSlices.reduce((s, c) => s + c.value, 0);
   const limitsSet = nonIncome.filter((c) => c.monthlyLimitCents != null && c.monthlyLimitCents > 0).length;
 
-  const handleSliceClick = (id: number) => {
-    setExpanded(id);
-    setTimeout(() => {
-      document.getElementById(`cat-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 50);
-  };
-
   return (
     <div className="space-y-12">
       <CategoriesHero
-        slices={heroSlices}
         totalSpent={totalSpent}
         categoryCount={nonIncome.length}
         limitsSet={limitsSet}
-        onSliceClick={handleSliceClick}
       />
 
       {(adding || editing) && (

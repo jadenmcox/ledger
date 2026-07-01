@@ -1,8 +1,6 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { DonutChart, type DonutDatum } from "@/components/charts/DonutChart";
 import { formatCents, cn } from "@/lib/utils";
 
 export type AccountSlice = {
@@ -12,7 +10,10 @@ export type AccountSlice = {
   color: string;
 };
 
-
+// Accounts hero. Stats on the left; on the right, a ranked set of horizontal
+// balance bars (one per account, scaled to the largest) instead of a donut —
+// so you can actually compare which accounts hold the most at a glance. Click a
+// bar to open that account.
 export function AccountsHero({
   slices,
   totalAssets,
@@ -23,26 +24,14 @@ export function AccountsHero({
   totalDebt: number;
 }) {
   const router = useRouter();
-  const [active, setActive] = useState<AccountSlice | null>(null);
-
   const netWorth = totalAssets - totalDebt;
-
-  const donutData: DonutDatum[] = slices.map((s) => ({
-    name: s.name,
-    value: s.value,
-    color: s.color,
-    href: `/accounts/${s.id}`,
-  }));
-
-  const activePct =
-    active && totalAssets > 0
-      ? Math.round((active.value / totalAssets) * 100)
-      : 0;
+  const sorted = [...slices].sort((a, b) => b.value - a.value);
+  const max = sorted[0]?.value ?? 1;
 
   return (
     <section className="rise overflow-hidden rounded-[28px] border border-border bg-surface/85 p-6 backdrop-blur-sm shadow-[0_30px_70px_-40px_rgba(34,28,74,0.45)] md:p-9">
-      <div className="grid items-center gap-8 lg:grid-cols-[minmax(200px,0.85fr)_auto] lg:gap-14">
-        {/* LEFT */}
+      <div className="grid items-center gap-8 lg:grid-cols-[minmax(190px,0.8fr)_1.2fr] lg:gap-14">
+        {/* LEFT — headline numbers */}
         <div className="flex flex-col gap-6 md:gap-7">
           <Stat
             label="Total assets"
@@ -63,87 +52,59 @@ export function AccountsHero({
           />
         </div>
 
-        {/* RIGHT */}
-        <div className="flex flex-col items-center gap-6">
-          <div className="flex w-full items-baseline justify-between gap-3">
+        {/* RIGHT — ranked balance bars */}
+        <div className="flex flex-col gap-4">
+          <div className="flex items-baseline justify-between gap-3">
             <h2 className="display text-lg tracking-tight md:text-xl">
               Where your assets sit
             </h2>
             <span className="text-[11px] tracking-tight text-foreground-faint">
-              hover · click to open
+              click to open
             </span>
           </div>
 
-          {slices.length === 0 ? (
-            <div className="py-16 text-center text-sm text-foreground-faint">
+          {sorted.length === 0 ? (
+            <div className="py-12 text-center text-sm text-foreground-faint">
               No accounts with positive balances yet.
             </div>
           ) : (
-            <>
-              <div
-                className="relative"
-                style={{ width: 300, height: 300 }}
-                onMouseLeave={() => setActive(null)}
-              >
-                <DonutChart
-                  data={donutData}
-                  size={300}
-                  thickness={40}
-                  formatValue={formatCents}
-                  showTooltip={false}
-                  onActiveChange={(d) =>
-                    setActive(slices.find((s) => s.name === d.name) ?? null)
-                  }
-                  onSliceClick={(d) => d.href && router.push(d.href)}
-                />
-                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-12 text-center">
-                  {active ? (
-                    <>
-                      <span
-                        className="mb-1.5 max-w-full truncate text-[11px] font-semibold uppercase tracking-[0.18em]"
-                        style={{ color: active.color }}
-                      >
-                        {active.name}
-                      </span>
-                      <span className="display text-[2rem] leading-none">
-                        {formatCents(active.value)}
-                      </span>
-                      <span className="mt-1.5 text-[11px] text-foreground-faint">
-                        {activePct}% of assets
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="mb-1 text-[10px] uppercase tracking-[0.28em] text-foreground-faint">
-                        net worth
-                      </span>
-                      <span className="display text-[2.3rem] leading-none">
-                        {formatCents(netWorth, { signed: true })}
-                      </span>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Legend — colored dot + account name, click navigates */}
-              <div className="flex flex-wrap justify-center gap-x-4 gap-y-2.5">
-                {slices.map((s) => (
+            <div className="flex flex-col gap-3.5">
+              {sorted.map((s) => {
+                const pct = Math.max(4, Math.round((s.value / max) * 100));
+                const share =
+                  totalAssets > 0
+                    ? Math.round((s.value / totalAssets) * 100)
+                    : 0;
+                return (
                   <button
                     key={s.id}
                     onClick={() => router.push(`/accounts/${s.id}`)}
-                    className="rounded-lg px-1 py-0.5 transition-colors hover:text-foreground"
+                    className="group text-left"
                   >
-                    <span className="flex items-center gap-2 text-[13px] tracking-tight">
-                      <span
-                        className="size-2.5 rounded-full shrink-0"
-                        style={{ background: s.color }}
+                    <div className="mb-1.5 flex items-baseline justify-between gap-3">
+                      <span className="truncate text-[13px] tracking-tight text-foreground-muted transition-colors group-hover:text-foreground">
+                        {s.name}
+                      </span>
+                      <span className="shrink-0 text-[13px] tracking-tight text-foreground-faint">
+                        <span className="mono tabular text-foreground">
+                          {formatCents(s.value)}
+                        </span>{" "}
+                        · {share}%
+                      </span>
+                    </div>
+                    <div
+                      className="h-2.5 w-full overflow-hidden rounded-full"
+                      style={{ background: "var(--surface-2)" }}
+                    >
+                      <div
+                        className="h-full rounded-full transition-all group-hover:brightness-95"
+                        style={{ width: `${pct}%`, background: s.color }}
                       />
-                      <span className="truncate text-foreground-muted">{s.name}</span>
-                    </span>
+                    </div>
                   </button>
-                ))}
-              </div>
-            </>
+                );
+              })}
+            </div>
           )}
         </div>
       </div>
