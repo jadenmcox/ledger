@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { formatCents, cn } from "@/lib/utils";
+import { formatCents } from "@/lib/utils";
+import { HeroStat } from "@/components/hero-stat";
 
 export type AccountSlice = {
   id: number;
@@ -29,22 +30,22 @@ export function AccountsHero({
   const max = sorted[0]?.value ?? 1;
 
   return (
-    <section className="rise overflow-hidden rounded-[28px] border border-border bg-surface/85 p-6 backdrop-blur-sm shadow-[0_30px_70px_-40px_rgba(34,28,74,0.45)] md:p-9">
+    <section className="rise overflow-hidden rounded-[28px] border border-border bg-surface/85 p-6 backdrop-blur-sm shadow-[0_30px_70px_-40px_rgba(34,28,74,0.45)] md:p-8">
       <div className="grid items-center gap-8 lg:grid-cols-[minmax(190px,0.8fr)_1.2fr] lg:gap-14">
         {/* LEFT — headline numbers */}
         <div className="flex flex-col gap-6 md:gap-7">
-          <Stat
+          <HeroStat
             label="Total assets"
             value={formatCents(totalAssets)}
             accent="var(--blue-deep)"
             dominant
           />
-          <Stat
+          <HeroStat
             label="Total debt"
             value={formatCents(totalDebt)}
             accent="var(--blush-deep)"
           />
-          <Stat
+          <HeroStat
             label="Net worth"
             value={formatCents(netWorth, { signed: true })}
             accent={netWorth >= 0 ? "var(--sage-deep)" : "var(--blush-deep)"}
@@ -109,47 +110,5 @@ export function AccountsHero({
         </div>
       </div>
     </section>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  accent,
-  hint,
-  dominant = false,
-}: {
-  label: string;
-  value: string;
-  accent: string;
-  hint?: string;
-  dominant?: boolean;
-}) {
-  return (
-    <div className={cn("relative", dominant && "pl-4")}>
-      {dominant && (
-        <span
-          className="absolute left-0 top-1 bottom-1 w-[3px] rounded-full"
-          style={{ background: accent }}
-        />
-      )}
-      <div
-        className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.2em]"
-        style={{ color: accent }}
-      >
-        {label}
-      </div>
-      <div
-        className={cn(
-          "display leading-none text-foreground",
-          dominant ? "text-[2.4rem] md:text-[3rem]" : "text-[1.8rem] md:text-[2.1rem]",
-        )}
-      >
-        {value}
-      </div>
-      {hint && (
-        <div className="mt-1.5 text-[11px] text-foreground-faint">{hint}</div>
-      )}
-    </div>
   );
 }
