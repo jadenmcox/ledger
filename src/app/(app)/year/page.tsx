@@ -10,7 +10,8 @@ import {
   SectionHeader,
 } from "@/components/ui";
 import { formatCents, formatCentsCompact } from "@/lib/utils";
-import { startOfYear, endOfYear } from "date-fns";
+import { effectiveDate } from "@/lib/effective-month";
+import { startOfYear, endOfYear, startOfMonth, subMonths } from "date-fns";
 import { Heatmap } from "@/components/charts/Heatmap";
 import { YearStackedArea } from "./charts";
 import { YearHero } from "./year-hero";
@@ -36,6 +37,9 @@ export default async function YearPage() {
   const now = new Date();
   const yearStart = startOfYear(now);
   const yearEnd = endOfYear(now);
+  // Reach back through the prior December so its late-month rent (which rolls
+  // into January) is available; rows outside the year are dropped below.
+  const windowStart = startOfMonth(subMonths(yearStart, 1));
 
   const [allTx, allCats, allAccts] = await Promise.all([
     db
@@ -43,7 +47,7 @@ export default async function YearPage() {
       .from(transactions)
       .where(
         and(
-          gte(transactions.date, yearStart),
+          gte(transactions.date, windowStart),
           lte(transactions.date, yearEnd),
           eq(transactions.isTransfer, false),
         ),
@@ -66,7 +70,11 @@ export default async function YearPage() {
     if (!t.categoryId) continue;
     const cat = allCats.find((c) => c.id === t.categoryId);
     if (!cat) continue;
-    const month = new Date(t.date).getMonth();
+    // Bucket by effective month so late-month rent counts toward the month it
+    // covers. Rows whose effective month falls outside this year are dropped.
+    const eff = effectiveDate(new Date(t.date), cat.name);
+    if (eff.getFullYear() !== now.getFullYear()) continue;
+    const month = eff.getMonth();
     const arr = grid.get(t.categoryId) ?? Array(12).fill(0);
     if (cat.classification === "income") {
       arr[month] += t.amountCents;
