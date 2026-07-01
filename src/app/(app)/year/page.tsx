@@ -110,18 +110,6 @@ export default async function YearPage() {
     display: monthTotals[i] > 0 ? formatCentsCompact(monthTotals[i]) : undefined,
   }));
 
-  const heroSlices = rows
-    .filter((c) => c.classification !== "income")
-    .map((c) => ({
-      id: c.id,
-      name: c.name,
-      value: (grid.get(c.id) ?? []).reduce((s, v) => s + v, 0),
-      color: c.color,
-      icon: c.icon,
-    }))
-    .filter((s) => s.value > 0)
-    .sort((a, b) => b.value - a.value);
-
   return (
     <>
       <PageHeader
@@ -132,7 +120,6 @@ export default async function YearPage() {
       <Container>
         <div className="mb-10">
           <YearHero
-            slices={heroSlices}
             totalSpend={totalSpend}
             totalIncome={totalIncome}
             avgMonthlySpend={avgMonthlySpend}
