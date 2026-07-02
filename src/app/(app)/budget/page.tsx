@@ -16,7 +16,9 @@ import {
   startOfMonth,
   subMonths,
 } from "date-fns";
+import { isSameMonth } from "date-fns";
 import { computeOccurrences } from "@/lib/recurring-schedules";
+import { effectiveDate } from "@/lib/effective-month";
 import { BudgetClient } from "./client";
 import type { SmartFillRow } from "./smart-fill";
 import type { CategoryTx } from "../categories/client";
@@ -27,6 +29,9 @@ export default async function BudgetPage() {
   const now = new Date();
   const monthStart = startOfMonth(now);
   const monthEnd = endOfMonth(now);
+  // Reach back a month so late-month rent (paid on/after the 20th, counting
+  // toward this month) is fetched; narrowed by effective month below.
+  const windowStart = startOfMonth(subMonths(monthStart, 1));
   const daysInMonth = getDaysInMonth(now);
   const dayOfMonth = getDate(now);
   // Smart-fill basis: the 6 *complete* months before this one. The current
@@ -34,7 +39,7 @@ export default async function BudgetPage() {
   const histStart = startOfMonth(subMonths(now, 6));
   const histEnd = endOfMonth(subMonths(now, 1));
 
-  const [allCategories, txThisMonth, histTx, schedules, settingsRows] =
+  const [allCategories, txMonthWindow, histTx, schedules, settingsRows] =
     await Promise.all([
       db.select().from(categories),
       db
@@ -42,7 +47,7 @@ export default async function BudgetPage() {
         .from(transactions)
         .where(
           and(
-            gte(transactions.date, monthStart),
+            gte(transactions.date, windowStart),
             lte(transactions.date, monthEnd),
             eq(transactions.isTransfer, false),
           ),
@@ -71,6 +76,15 @@ export default async function BudgetPage() {
   const framework = settingsRows[0]?.framework ?? "custom";
 
   const catById = new Map(allCategories.map((c) => [c.id, c]));
+
+  // Narrow the fetched window to this month by effective month, so late-month
+  // rent counts toward the month it covers (matching the dashboard + Year).
+  const txThisMonth = txMonthWindow.filter((t) =>
+    isSameMonth(
+      effectiveDate(new Date(t.date), t.categoryId ? catById.get(t.categoryId)?.name : null),
+      now,
+    ),
+  );
 
   // Income + spend aggregates
   let income = 0;
