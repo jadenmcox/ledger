@@ -18,7 +18,7 @@ import Link from "next/link";
 import { Check, ArrowRight, ChevronRight, Tag } from "lucide-react";
 import type { BudgetFramework, Classification } from "@/db/schema";
 import { bulkSetMonthlyLimits, setBudgetFramework } from "./actions";
-import { SmartFillLimits, type SmartFillRow } from "./smart-fill";
+import { SmartFillBar, type SmartFillRow } from "./smart-fill";
 import { BudgetHero } from "./budget-hero";
 import type { CategoryTx } from "../categories/client";
 
@@ -197,6 +197,12 @@ export function BudgetClient({
     });
   };
 
+  // Smart-fill pushes suggested values straight into this editor's drafts; the
+  // single Save button below persists them. Reset drops back to saved limits.
+  const applySmartFill = (values: Record<number, string>) =>
+    setDrafts((prev) => ({ ...prev, ...values }));
+  const resetDrafts = () => setDrafts(initialDrafts);
+
   return (
     <div className="space-y-10 md:space-y-14">
       {/* HERO — slim headline strip (spent / planned / left) */}
@@ -299,14 +305,6 @@ export function BudgetClient({
         </div>
 
       </div>
-
-      {/* SMART-FILL — the one place to suggest limits from spending + framework */}
-      <SmartFillLimits
-        rows={smartFillRows}
-        framework={framework}
-        incomeBasis={incomeBasis}
-        basisMonths={basisMonths}
-      />
 
       {/* FORECASTING */}
       <div>
@@ -425,6 +423,15 @@ export function BudgetClient({
           Add or rename a category
           <ArrowRight className="size-3" strokeWidth={1.5} />
         </Link>
+        <SmartFillBar
+          rows={smartFillRows}
+          framework={framework}
+          incomeBasis={incomeBasis}
+          basisMonths={basisMonths}
+          onApply={applySmartFill}
+          onReset={resetDrafts}
+          disabled={pending}
+        />
         <div className="space-y-6">
           {classificationOrder.map((cls) => {
             const rows = byClass[cls];
