@@ -19,6 +19,7 @@ import {
 import { isSameMonth } from "date-fns";
 import { computeOccurrences } from "@/lib/recurring-schedules";
 import { effectiveDate } from "@/lib/effective-month";
+import { refundCreditDates } from "@/lib/refunds";
 import { BudgetClient } from "./client";
 import type { SmartFillRow } from "./smart-fill";
 import type { CategoryTx } from "../categories/client";
@@ -27,11 +28,7 @@ export const dynamic = "force-dynamic";
 
 export default async function BudgetPage() {
   const now = new Date();
-  const monthStart = startOfMonth(now);
   const monthEnd = endOfMonth(now);
-  // Reach back a month so late-month rent (paid on/after the 20th, counting
-  // toward this month) is fetched; narrowed by effective month below.
-  const windowStart = startOfMonth(subMonths(monthStart, 1));
   const daysInMonth = getDaysInMonth(now);
   const dayOfMonth = getDate(now);
   // Smart-fill basis: the 6 *complete* months before this one. The current
@@ -39,19 +36,16 @@ export default async function BudgetPage() {
   const histStart = startOfMonth(subMonths(now, 6));
   const histEnd = endOfMonth(subMonths(now, 1));
 
-  const [allCategories, txMonthWindow, histTx, schedules, settingsRows] =
+  const [allCategories, allTx, histTx, schedules, settingsRows] =
     await Promise.all([
       db.select().from(categories),
+      // Full non-transfer history: a refund can credit back to a purchase in
+      // any earlier month, so a single-month window isn't enough. Narrowed to
+      // this month (refund- and rent-aware) in memory below.
       db
         .select()
         .from(transactions)
-        .where(
-          and(
-            gte(transactions.date, windowStart),
-            lte(transactions.date, monthEnd),
-            eq(transactions.isTransfer, false),
-          ),
-        ),
+        .where(eq(transactions.isTransfer, false)),
       db
         .select({
           date: transactions.date,
@@ -77,19 +71,31 @@ export default async function BudgetPage() {
 
   const catById = new Map(allCategories.map((c) => [c.id, c]));
 
-  // Narrow the fetched window to this month by effective month, so late-month
-  // rent counts toward the month it covers (matching the dashboard + Year).
-  const txThisMonth = txMonthWindow.filter((t) =>
-    isSameMonth(
-      effectiveDate(new Date(t.date), t.categoryId ? catById.get(t.categoryId)?.name : null),
-      now,
-    ),
-  );
+  const isSpendingCat = (categoryId: number | null): boolean => {
+    if (categoryId == null) return false;
+    const c = catById.get(categoryId);
+    return !!c && c.classification !== "income";
+  };
+  // Refunds credit back to the month of the purchase they offset (matched by
+  // merchant); rent still rolls forward. Narrow full history to this month by
+  // that effective/credit month, matching the dashboard + Year.
+  const refundCredit = refundCreditDates(allTx, isSpendingCat);
+  const monthKeyOf = (t: (typeof allTx)[number]): Date => {
+    const isRefund =
+      t.amountCents > 0 && !t.reimbursable && isSpendingCat(t.categoryId);
+    const base = isRefund ? refundCredit.get(t.id) ?? t.date : t.date;
+    return effectiveDate(
+      new Date(base),
+      t.categoryId ? catById.get(t.categoryId)?.name : null,
+    );
+  };
+  const txThisMonth = allTx.filter((t) => isSameMonth(monthKeyOf(t), now));
 
-  // Income + spend aggregates
+  // Income + spend aggregates. Refunds net back out of spend in the month of
+  // the purchase they offset; a category is clamped at zero if more was
+  // refunded than bought this month.
   let income = 0;
-  let spend = 0;
-  const spendByClassification = { need: 0, want: 0, savings: 0 };
+  let uncategorizedSpend = 0;
   const spendByCategory = new Map<number, number>();
   // Per-category drill-down: the actual transactions behind each row's spend.
   const txByCategory: Record<number, CategoryTx[]> = {};
@@ -109,16 +115,31 @@ export default async function BudgetPage() {
       if (t.amountCents > 0) income += t.amountCents;
       continue;
     }
-    if (t.amountCents > 0) continue;
-    const abs = Math.abs(t.amountCents);
-    spend += abs;
+    if (t.amountCents === 0) continue;
+    // Purchase adds to spend; a refund (positive) nets back out.
+    const delta = t.amountCents < 0 ? Math.abs(t.amountCents) : -t.amountCents;
     if (cat) {
-      spendByCategory.set(cat.id, (spendByCategory.get(cat.id) ?? 0) + abs);
-      if (cat.classification === "need") spendByClassification.need += abs;
-      if (cat.classification === "want") spendByClassification.want += abs;
-      if (cat.classification === "savings") spendByClassification.savings += abs;
+      spendByCategory.set(cat.id, (spendByCategory.get(cat.id) ?? 0) + delta);
+    } else if (delta > 0) {
+      uncategorizedSpend += delta;
     }
   }
+  // A category can't net below zero for the month (more refunded than bought).
+  for (const [id, v] of spendByCategory) {
+    if (v < 0) spendByCategory.set(id, 0);
+  }
+  const spendByClassification = { need: 0, want: 0, savings: 0 };
+  for (const [id, v] of spendByCategory) {
+    const c = catById.get(id);
+    if (c?.classification === "need") spendByClassification.need += v;
+    else if (c?.classification === "want") spendByClassification.want += v;
+    else if (c?.classification === "savings") spendByClassification.savings += v;
+  }
+  const spend =
+    spendByClassification.need +
+    spendByClassification.want +
+    spendByClassification.savings +
+    uncategorizedSpend;
   // Newest first within each category, matching the /categories drill-down.
   for (const id in txByCategory) {
     txByCategory[id].sort(
