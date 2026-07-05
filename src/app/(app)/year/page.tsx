@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { accounts, categories, transactions, type Account } from "@/db/schema";
-import { and, eq, gte, lte } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   Container,
   PageHeader,
@@ -11,7 +11,7 @@ import {
 } from "@/components/ui";
 import { formatCents, formatCentsCompact } from "@/lib/utils";
 import { effectiveDate } from "@/lib/effective-month";
-import { startOfYear, endOfYear, startOfMonth, subMonths } from "date-fns";
+import { refundCreditDates } from "@/lib/refunds";
 import { Heatmap } from "@/components/charts/Heatmap";
 import { YearStackedArea } from "./charts";
 import { YearHero } from "./year-hero";
@@ -35,44 +35,49 @@ const MONTHS = [
 
 export default async function YearPage() {
   const now = new Date();
-  const yearStart = startOfYear(now);
-  const yearEnd = endOfYear(now);
-  // Reach back through the prior December so its late-month rent (which rolls
-  // into January) is available; rows outside the year are dropped below.
-  const windowStart = startOfMonth(subMonths(yearStart, 1));
 
   const [allTx, allCats, allAccts] = await Promise.all([
+    // Full non-transfer history: rent rolls in from the prior December and a
+    // refund can credit back to a purchase in any earlier month. Rows whose
+    // effective month falls outside this year are dropped below.
     db
       .select()
       .from(transactions)
-      .where(
-        and(
-          gte(transactions.date, windowStart),
-          lte(transactions.date, yearEnd),
-          eq(transactions.isTransfer, false),
-        ),
-      ),
+      .where(eq(transactions.isTransfer, false)),
     db.select().from(categories),
     db.select().from(accounts),
   ]);
 
-  // Aggregate
+  // A refund credits back to the month of the purchase it offsets (matched by
+  // merchant), netting out of that month's spend rather than counting as spend
+  // on its own date; rent still rolls forward.
+  const catById = new Map(allCats.map((c) => [c.id, c]));
+  const isSpendingCat = (categoryId: number | null): boolean => {
+    if (categoryId == null) return false;
+    const c = catById.get(categoryId);
+    return !!c && c.classification !== "income";
+  };
+  const refundCredit = refundCreditDates(allTx, isSpendingCat);
+  const monthKeyOf = (t: (typeof allTx)[number]): Date => {
+    const isRefund =
+      t.amountCents > 0 && !t.reimbursable && isSpendingCat(t.categoryId);
+    const base = isRefund ? refundCredit.get(t.id) ?? t.date : t.date;
+    return effectiveDate(
+      new Date(base),
+      t.categoryId ? catById.get(t.categoryId)?.name : null,
+    );
+  };
+
+  // Net grid: purchases add, refunds subtract, per category × month.
   const grid = new Map<number, number[]>();
   let totalIncome = 0;
-  let totalSpend = 0;
-  const monthTotals = Array(12).fill(0);
-  const monthByClassification = Array.from({ length: 12 }, () => ({
-    need: 0,
-    want: 0,
-    savings: 0,
-  }));
   for (const t of allTx) {
+    // Reimbursable charges/paybacks wash out — keep them off spend + income.
+    if (t.reimbursable) continue;
     if (!t.categoryId) continue;
-    const cat = allCats.find((c) => c.id === t.categoryId);
+    const cat = catById.get(t.categoryId);
     if (!cat) continue;
-    // Bucket by effective month so late-month rent counts toward the month it
-    // covers. Rows whose effective month falls outside this year are dropped.
-    const eff = effectiveDate(new Date(t.date), cat.name);
+    const eff = monthKeyOf(t);
     if (eff.getFullYear() !== now.getFullYear()) continue;
     const month = eff.getMonth();
     const arr = grid.get(t.categoryId) ?? Array(12).fill(0);
@@ -80,18 +85,34 @@ export default async function YearPage() {
       arr[month] += t.amountCents;
       totalIncome += t.amountCents;
     } else {
-      const abs = Math.abs(t.amountCents);
-      arr[month] += abs;
-      totalSpend += abs;
-      monthTotals[month] += abs;
-      if (cat.classification === "need")
-        monthByClassification[month].need += abs;
-      if (cat.classification === "want")
-        monthByClassification[month].want += abs;
-      if (cat.classification === "savings")
-        monthByClassification[month].savings += abs;
+      arr[month] += t.amountCents < 0 ? Math.abs(t.amountCents) : -t.amountCents;
     }
     grid.set(t.categoryId, arr);
+  }
+
+  // Clamp each spending cell at zero (a month can't net negative), then derive
+  // the per-month and per-classification totals from the netted grid.
+  let totalSpend = 0;
+  const monthTotals = Array(12).fill(0);
+  const monthByClassification = Array.from({ length: 12 }, () => ({
+    need: 0,
+    want: 0,
+    savings: 0,
+  }));
+  for (const [catId, arr] of grid) {
+    const cat = catById.get(catId);
+    if (!cat || cat.classification === "income") continue;
+    for (let m = 0; m < 12; m++) {
+      if (arr[m] < 0) arr[m] = 0;
+      const v = arr[m];
+      if (v <= 0) continue;
+      totalSpend += v;
+      monthTotals[m] += v;
+      if (cat.classification === "need") monthByClassification[m].need += v;
+      else if (cat.classification === "want") monthByClassification[m].want += v;
+      else if (cat.classification === "savings")
+        monthByClassification[m].savings += v;
+    }
   }
 
   const rows = allCats
