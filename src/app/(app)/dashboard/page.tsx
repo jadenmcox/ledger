@@ -11,7 +11,7 @@ import { SpendingHero, type SpendingSlice } from "./spending-breakdown";
 import { PlannedActual } from "./planned-actual";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { computeOccurrences } from "@/lib/recurring-schedules";
-import { and, asc, eq, gte, lte } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import type { ReactNode } from "react";
 import {
   Container,
@@ -23,6 +23,7 @@ import {
 } from "@/components/ui";
 import { formatCents, formatCentsCompact } from "@/lib/utils";
 import { effectiveDate } from "@/lib/effective-month";
+import { refundCreditDates } from "@/lib/refunds";
 import {
   startOfMonth,
   endOfMonth,
@@ -80,25 +81,20 @@ export default async function DashboardPage({
   // Widen the fetch back through the previous month so late-month rent (paid on
   // or after the 20th, which counts toward *this* month) is available to pull
   // in. The window is then narrowed to this month by effective date below.
-  const windowStart = startOfMonth(subMonths(monthStart, 1));
-
   const [
-    txWindow,
+    allTx,
     allCategories,
     allAccounts,
     schedules,
     goals,
   ] = await Promise.all([
+    // Full non-transfer history: rent rolls in from the prior month and a refund
+    // can credit back to a purchase in any earlier month, so a single-month
+    // window isn't enough. Bucketing to this month happens in memory below.
     db
       .select()
       .from(transactions)
-      .where(
-        and(
-          gte(transactions.date, windowStart),
-          lte(transactions.date, monthEnd),
-          eq(transactions.isTransfer, false),
-        ),
-      ),
+      .where(eq(transactions.isTransfer, false)),
     db.select().from(categories),
     db.select().from(accounts),
     db.select().from(recurringSchedules).where(eq(recurringSchedules.isActive, true)),
@@ -108,26 +104,39 @@ export default async function DashboardPage({
   const catById = new Map(allCategories.map((c) => [c.id, c]));
   const acctById = new Map(allAccounts.map((a) => [a.id, a]));
 
-  // Bucket by effective month: rent rolls forward from the prior month's tail,
-  // and this month's late rent rolls out to next month.
-  const txThisMonth = txWindow.filter((t) =>
-    isSameMonth(
-      effectiveDate(new Date(t.date), t.categoryId ? catById.get(t.categoryId)?.name : null),
-      viewDate,
-    ),
-  );
+  const isSpendingCat = (categoryId: number | null): boolean => {
+    if (categoryId == null) return false;
+    const c = catById.get(categoryId);
+    return !!c && c.classification !== "income";
+  };
+  // A refund credits back to the month of the purchase it offsets (matched by
+  // merchant), so a return reduces the month you actually spent.
+  const refundCredit = refundCreditDates(allTx, isSpendingCat);
+
+  // Which month a transaction counts toward. Refunds follow their matched
+  // purchase's month; everything else uses its own effective month (rent roll).
+  const monthKeyOf = (t: (typeof allTx)[number]): Date => {
+    const isRefund =
+      t.amountCents > 0 && !t.reimbursable && isSpendingCat(t.categoryId);
+    const base = isRefund ? refundCredit.get(t.id) ?? t.date : t.date;
+    return effectiveDate(
+      new Date(base),
+      t.categoryId ? catById.get(t.categoryId)?.name : null,
+    );
+  };
 
   let income = 0;
-  let spend = 0;
+  // Net spend per category: purchases add, refunds subtract. Clamped below.
   const spendByCategory = new Map<number, number>();
-  const spendByClassification = { need: 0, want: 0, savings: 0 };
+  let uncategorizedSpend = 0;
   // Per-category vendor rollup: categoryId -> (merchant -> {total, count}). Powers
   // the expandable Planned-vs-actual rows (totals combined by vendor).
   const merchantAgg = new Map<number, Map<string, { total: number; count: number }>>();
   // Reimbursable charges/paybacks wash out: kept off both spent and income.
   let reimbursablePaid = 0;
   let reimbursableReceived = 0;
-  for (const t of txThisMonth) {
+  for (const t of allTx) {
+    if (!isSameMonth(monthKeyOf(t), viewDate)) continue;
     if (t.reimbursable) {
       if (t.amountCents < 0) reimbursablePaid += Math.abs(t.amountCents);
       else reimbursableReceived += t.amountCents;
@@ -138,25 +147,39 @@ export default async function DashboardPage({
       income += t.amountCents;
       continue;
     }
-    if (t.amountCents > 0) continue;
-    const abs = Math.abs(t.amountCents);
-    spend += abs;
+    if (t.amountCents === 0) continue;
+    // Purchase adds to spend; a refund (positive) nets back out of it.
+    const delta = t.amountCents < 0 ? Math.abs(t.amountCents) : -t.amountCents;
     if (cat) {
-      spendByCategory.set(cat.id, (spendByCategory.get(cat.id) || 0) + abs);
-      if (cat.classification === "need") spendByClassification.need += abs;
-      else if (cat.classification === "want") spendByClassification.want += abs;
-      else if (cat.classification === "savings") spendByClassification.savings += abs;
+      spendByCategory.set(cat.id, (spendByCategory.get(cat.id) || 0) + delta);
 
       const merchant = (t.merchantClean || t.merchantRaw || "—").trim();
       if (!merchantAgg.has(cat.id)) merchantAgg.set(cat.id, new Map());
       const inner = merchantAgg.get(cat.id)!;
       const cur = inner.get(merchant) || { total: 0, count: 0 };
-      cur.total += abs;
+      cur.total += delta;
       cur.count += 1;
       inner.set(merchant, cur);
+    } else if (delta > 0) {
+      // Uncategorized outflow. (Refunds without a category are left alone.)
+      uncategorizedSpend += delta;
     }
   }
-  // Flatten to a serializable record, biggest vendor first, for the client.
+
+  // A category can't net below zero for the month (more refunded than bought).
+  for (const [id, v] of spendByCategory) {
+    if (v < 0) spendByCategory.set(id, 0);
+  }
+
+  const spendByClassification = { need: 0, want: 0, savings: 0 };
+  for (const [id, v] of spendByCategory) {
+    const c = catById.get(id);
+    if (c?.classification === "need") spendByClassification.need += v;
+    else if (c?.classification === "want") spendByClassification.want += v;
+    else if (c?.classification === "savings") spendByClassification.savings += v;
+  }
+
+  // Flatten the vendor rollup, biggest first, dropping fully-refunded vendors.
   const merchantsByCategory: Record<
     number,
     { merchant: string; total: number; count: number }[]
@@ -164,6 +187,7 @@ export default async function DashboardPage({
   for (const [catId, inner] of merchantAgg) {
     merchantsByCategory[catId] = [...inner.entries()]
       .map(([merchant, v]) => ({ merchant, total: v.total, count: v.count }))
+      .filter((v) => v.total > 0)
       .sort((a, b) => b.total - a.total);
   }
 
@@ -172,15 +196,22 @@ export default async function DashboardPage({
   // it on its own. Consumption is everything else that went out this month
   // (needs, wants, and any uncategorized outflow).
   const saved = spendByClassification.savings;
+  const spend =
+    spendByClassification.need +
+    spendByClassification.want +
+    saved +
+    uncategorizedSpend;
   const consumption = spend - saved;
 
   // Spending categories (needs + wants), biggest first, for the overspend
-  // flags below. Savings categories are excluded so a big contribution never
-  // reads as overspending. spendByCategory excludes income (skipped above) and
-  // transfers (filtered in the query).
+  // flags below and the donut. Savings categories are excluded so a big
+  // contribution never reads as overspending; now-empty (fully refunded)
+  // categories drop out too.
   const spendingCategories = [...spendByCategory.entries()]
     .map(([id, value]) => ({ category: catById.get(id)!, value }))
-    .filter((x) => x.category && x.category.classification !== "savings")
+    .filter(
+      (x) => x.category && x.category.classification !== "savings" && x.value > 0,
+    )
     .sort((a, b) => b.value - a.value);
 
   // Slices for the "Where your money went" donut + ranked list. Show the top
@@ -188,8 +219,6 @@ export default async function DashboardPage({
   // "Uncategorized" slice for outflow that has no category so the slices sum to
   // the "Spent this month" headline (consumption).
   const TOP_N = 8;
-  const categorized = spendingCategories.reduce((s, x) => s + x.value, 0);
-  const uncategorizedSpend = Math.max(0, consumption - categorized);
   const top = spendingCategories.slice(0, TOP_N);
   const rest = spendingCategories.slice(TOP_N);
   const spendingSlices: SpendingSlice[] = [
