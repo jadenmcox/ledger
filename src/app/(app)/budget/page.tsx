@@ -19,7 +19,7 @@ import {
 import { isSameMonth } from "date-fns";
 import { computeOccurrences } from "@/lib/recurring-schedules";
 import { effectiveDate } from "@/lib/effective-month";
-import { refundCreditDates } from "@/lib/refunds";
+import { refundMatches } from "@/lib/refunds";
 import { BudgetClient } from "./client";
 import type { SmartFillRow } from "./smart-fill";
 import type { CategoryTx } from "../categories/client";
@@ -79,11 +79,11 @@ export default async function BudgetPage() {
   // Refunds credit back to the month of the purchase they offset (matched by
   // merchant); rent still rolls forward. Narrow full history to this month by
   // that effective/credit month, matching the dashboard + Year.
-  const refundCredit = refundCreditDates(allTx, isSpendingCat);
+  const refundMatch = refundMatches(allTx, isSpendingCat);
   const monthKeyOf = (t: (typeof allTx)[number]): Date => {
     const isRefund =
       t.amountCents > 0 && !t.reimbursable && isSpendingCat(t.categoryId);
-    const base = isRefund ? refundCredit.get(t.id) ?? t.date : t.date;
+    const base = isRefund ? refundMatch.get(t.id)?.date ?? t.date : t.date;
     return effectiveDate(
       new Date(base),
       t.categoryId ? catById.get(t.categoryId)?.name : null,

@@ -23,7 +23,7 @@ import {
 } from "@/components/ui";
 import { formatCents, formatCentsCompact } from "@/lib/utils";
 import { effectiveDate } from "@/lib/effective-month";
-import { refundCreditDates } from "@/lib/refunds";
+import { refundMatches } from "@/lib/refunds";
 import {
   startOfMonth,
   endOfMonth,
@@ -109,16 +109,16 @@ export default async function DashboardPage({
     const c = catById.get(categoryId);
     return !!c && c.classification !== "income";
   };
-  // A refund credits back to the month of the purchase it offsets (matched by
-  // merchant), so a return reduces the month you actually spent.
-  const refundCredit = refundCreditDates(allTx, isSpendingCat);
+  // A refund credits back to the purchase it offsets (matched by merchant), so
+  // a return reduces the month — and the vendor line — you actually spent on.
+  const refundMatch = refundMatches(allTx, isSpendingCat);
 
   // Which month a transaction counts toward. Refunds follow their matched
   // purchase's month; everything else uses its own effective month (rent roll).
   const monthKeyOf = (t: (typeof allTx)[number]): Date => {
     const isRefund =
       t.amountCents > 0 && !t.reimbursable && isSpendingCat(t.categoryId);
-    const base = isRefund ? refundCredit.get(t.id) ?? t.date : t.date;
+    const base = isRefund ? refundMatch.get(t.id)?.date ?? t.date : t.date;
     return effectiveDate(
       new Date(base),
       t.categoryId ? catById.get(t.categoryId)?.name : null,
@@ -153,12 +153,20 @@ export default async function DashboardPage({
     if (cat) {
       spendByCategory.set(cat.id, (spendByCategory.get(cat.id) || 0) + delta);
 
-      const merchant = (t.merchantClean || t.merchantRaw || "—").trim();
+      // A refund nets against the vendor of the purchase it offsets (not its own
+      // descriptor), so the by-vendor rollup still sums to the category total.
+      const isRefund = t.amountCents > 0;
+      const merchant = (
+        (isRefund ? refundMatch.get(t.id)?.merchant : null) ||
+        t.merchantClean ||
+        t.merchantRaw ||
+        "—"
+      ).trim();
       if (!merchantAgg.has(cat.id)) merchantAgg.set(cat.id, new Map());
       const inner = merchantAgg.get(cat.id)!;
       const cur = inner.get(merchant) || { total: 0, count: 0 };
       cur.total += delta;
-      cur.count += 1;
+      if (!isRefund) cur.count += 1;
       inner.set(merchant, cur);
     } else if (delta > 0) {
       // Uncategorized outflow. (Refunds without a category are left alone.)
