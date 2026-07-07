@@ -46,11 +46,17 @@ export function SpendingHero({
     active && consumption > 0
       ? Math.round((active.value / consumption) * 100)
       : 0;
-  // "What's left" = income not yet spent this month. Drives the flow bar and the
-  // headline remaining figure. Goes negative (and red) when spending tops income.
-  const remaining = income - consumption;
+  // "What's left" = income not yet committed this month. Money moved to savings
+  // is already allocated, so it counts against income alongside consumption — a
+  // dollar saved is not a dollar still free to spend. Goes negative (and red)
+  // when consumption + savings tops income. The flow bar shows both segments:
+  // consumption (blush) and savings (blue), with the remainder left empty.
+  const committed = consumption + saved;
+  const remaining = income - committed;
   const over = remaining < 0;
-  const spentShare = income > 0 ? consumption / income : 0;
+  const consumptionShare = income > 0 ? Math.min(1, consumption / income) : 0;
+  const savedShare =
+    income > 0 ? Math.max(0, Math.min(1 - consumptionShare, saved / income)) : 0;
   const pctLeft =
     income > 0 ? Math.max(0, Math.round((remaining / income) * 100)) : null;
 
@@ -126,16 +132,21 @@ export function SpendingHero({
               {income > 0 && (
                 <div className="space-y-2.5">
                   <div
-                    className="h-2.5 w-full overflow-hidden rounded-full"
+                    className="flex h-2.5 w-full overflow-hidden rounded-full"
                     style={{ background: "var(--surface-2)" }}
                   >
                     <div
-                      className="h-full rounded-full transition-all"
+                      className="h-full transition-all"
                       style={{
-                        width: `${Math.min(100, Math.round(spentShare * 100))}%`,
-                        background: over
-                          ? "var(--blush-deep)"
-                          : "var(--blush)",
+                        width: `${consumptionShare * 100}%`,
+                        background: over ? "var(--blush-deep)" : "var(--blush)",
+                      }}
+                    />
+                    <div
+                      className="h-full transition-all"
+                      style={{
+                        width: `${savedShare * 100}%`,
+                        background: "var(--blue)",
                       }}
                     />
                   </div>
