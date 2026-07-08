@@ -48,17 +48,28 @@ export function SpendingHero({
       : 0;
   // "What's left" = income not yet committed this month. Money moved to savings
   // is already allocated, so it counts against income alongside consumption — a
-  // dollar saved is not a dollar still free to spend. Goes negative (and red)
-  // when consumption + savings tops income. The flow bar shows both segments:
-  // consumption (blush) and savings (blue), with the remainder left empty.
+  // dollar saved is not a dollar still free to spend.
+  //
+  // When `remaining` goes negative there are two very different causes, and
+  // conflating them reads as a false alarm:
+  //   - consumption alone tops income  => genuine overspending (red).
+  //   - savings pushed it over         => you invested out of existing cash,
+  //     which is not a problem (neutral). Say so plainly instead.
   const committed = consumption + saved;
   const remaining = income - committed;
-  const over = remaining < 0;
-  const consumptionShare = income > 0 ? Math.min(1, consumption / income) : 0;
-  const savedShare =
-    income > 0 ? Math.max(0, Math.min(1 - consumptionShare, saved / income)) : 0;
-  const pctLeft =
-    income > 0 ? Math.max(0, Math.round((remaining / income) * 100)) : null;
+  const overspent = consumption > income;
+  const fromReserves = remaining < 0 && !overspent;
+
+  // Scale the flow bar to whichever is larger, income or what was committed, so
+  // savings that exceed income actually *look* like they exceed it rather than
+  // silently clamping to a full-looking bar. When committed tops income we mark
+  // where income ran out; everything past the tick came from reserves.
+  const scaleBase = Math.max(income, committed);
+  const consumptionShare = scaleBase > 0 ? consumption / scaleBase : 0;
+  const savedShare = scaleBase > 0 ? saved / scaleBase : 0;
+  const incomeMarker =
+    scaleBase > 0 && committed > income ? income / scaleBase : null;
+  const spentPct = income > 0 ? Math.round((consumption / income) * 100) : null;
 
   return (
     <section className="rise overflow-hidden rounded-[28px] border border-border bg-surface/85 p-6 backdrop-blur-sm shadow-[0_30px_70px_-40px_rgba(34,28,74,0.45)] md:p-8">
@@ -128,45 +139,64 @@ export function SpendingHero({
                 </div>
               </div>
 
-              {/* Flow bar — how much of income is spent vs. left this month */}
+              {/* Flow bar — spent vs. saved vs. what's left, against income */}
               {income > 0 && (
                 <div className="space-y-2.5">
-                  <div
-                    className="flex h-2.5 w-full overflow-hidden rounded-full"
-                    style={{ background: "var(--surface-2)" }}
-                  >
+                  <div className="relative">
                     <div
-                      className="h-full transition-all"
-                      style={{
-                        width: `${consumptionShare * 100}%`,
-                        background: over ? "var(--blush-deep)" : "var(--blush)",
-                      }}
-                    />
-                    <div
-                      className="h-full transition-all"
-                      style={{
-                        width: `${savedShare * 100}%`,
-                        background: "var(--blue)",
-                      }}
-                    />
+                      className="flex h-2.5 w-full overflow-hidden rounded-full"
+                      style={{ background: "var(--surface-2)" }}
+                    >
+                      <div
+                        className="h-full transition-all"
+                        style={{
+                          width: `${consumptionShare * 100}%`,
+                          background: overspent
+                            ? "var(--blush-deep)"
+                            : "var(--blush)",
+                        }}
+                      />
+                      <div
+                        className="h-full transition-all"
+                        style={{
+                          width: `${savedShare * 100}%`,
+                          background: "var(--blue)",
+                        }}
+                      />
+                    </div>
+                    {/* Where income ran out — anything past this came from reserves */}
+                    {incomeMarker !== null && (
+                      <div
+                        title="income"
+                        className="absolute top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full"
+                        style={{
+                          left: `${incomeMarker * 100}%`,
+                          background: "var(--foreground)",
+                        }}
+                      />
+                    )}
                   </div>
                   <div className="flex items-baseline justify-between gap-3 text-[14px]">
                     <span className="text-foreground-muted">
                       <span
                         className="display text-[1.05rem]"
                         style={{
-                          color: over
+                          color: overspent
                             ? "var(--blush-deep)"
                             : "var(--blue-deep)",
                         }}
                       >
                         {formatCents(Math.abs(remaining))}
                       </span>{" "}
-                      {over ? "over income" : "left to spend"}
+                      {remaining >= 0
+                        ? "left to spend"
+                        : overspent
+                          ? "over income"
+                          : "drawn from reserves"}
                     </span>
-                    {pctLeft !== null && (
+                    {spentPct !== null && (
                       <span className="shrink-0 text-foreground-faint">
-                        {over ? "0" : pctLeft}% of income
+                        {spentPct}% of income spent
                       </span>
                     )}
                   </div>
