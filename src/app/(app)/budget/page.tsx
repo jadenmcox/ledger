@@ -188,10 +188,25 @@ export default async function BudgetPage() {
     (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
   );
 
-  // Paycheck fallback for "expected income" if user hasn't been paid yet this month.
-  const paycheckCat = allCategories.find((c) => c.name === "Paycheck");
-  const expectedIncome = paycheckCat?.monthlyLimitCents ?? 0;
-  const incomeBasis = Math.max(income, expectedIncome);
+  // Expected monthly income for the planner. Derived from recurring paycheck
+  // schedules (their occurrences across the whole month), so it counts every
+  // scheduled check regardless of today's date — being paid on the 15th/30th
+  // never makes it read as "no income yet" — and one-off income like a bonus
+  // is excluded because it isn't a schedule. A manual override wins when set.
+  const monthStart = startOfMonth(now);
+  const incomeSchedules = schedules.filter((s) => s.amountCents > 0);
+  let derivedIncome = 0;
+  let paycheckCount = 0;
+  for (const s of incomeSchedules) {
+    const occs = computeOccurrences(s, monthStart, monthEnd).length;
+    derivedIncome += occs * s.amountCents;
+    paycheckCount += occs;
+  }
+  const incomeOverride = settingsRows[0]?.expectedIncomeOverrideCents ?? null;
+  const expectedIncome = incomeOverride ?? derivedIncome;
+  // Smart-fill scaling still needs a basis before any schedule/override exists;
+  // fall back to income actually received this month.
+  const incomeBasis = expectedIncome > 0 ? expectedIncome : income;
 
   const totalLimit = allCategories.reduce(
     (s, c) =>
@@ -200,6 +215,10 @@ export default async function BudgetPage() {
         : s,
     0,
   );
+
+  // Zero-based reconciliation: every expected dollar should be assigned to a
+  // category limit. Positive => still to allocate; negative => over-allocated.
+  const toAllocate = expectedIncome - totalLimit;
 
   const calendarPct = (dayOfMonth / daysInMonth) * 100;
 
@@ -319,6 +338,11 @@ export default async function BudgetPage() {
           framework={framework}
           income={income}
           incomeBasis={incomeBasis}
+          expectedIncome={expectedIncome}
+          derivedIncome={derivedIncome}
+          incomeOverride={incomeOverride}
+          paycheckCount={paycheckCount}
+          toAllocate={toAllocate}
           spend={spend}
           spendByClassification={spendByClassification}
           totalLimit={totalLimit}

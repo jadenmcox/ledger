@@ -15,9 +15,13 @@ import { CategoryGlyph } from "@/components/category-glyph";
 import { formatCents, formatCentsCompact, parseDollarsToCents } from "@/lib/utils";
 import { format } from "date-fns";
 import Link from "next/link";
-import { Check, ArrowRight, ChevronRight, Tag } from "lucide-react";
+import { Check, ArrowRight, ChevronRight, Tag, Pencil, X } from "lucide-react";
 import type { BudgetFramework, Classification } from "@/db/schema";
-import { bulkSetMonthlyLimits, setBudgetFramework } from "./actions";
+import {
+  bulkSetMonthlyLimits,
+  setBudgetFramework,
+  setExpectedIncomeOverride,
+} from "./actions";
 import { SmartFillBar, type SmartFillRow } from "./smart-fill";
 import { BudgetHero } from "./budget-hero";
 import type { CategoryTx } from "../categories/client";
@@ -85,6 +89,11 @@ export function BudgetClient({
   spend,
   spendByClassification,
   totalLimit,
+  expectedIncome,
+  derivedIncome,
+  incomeOverride,
+  paycheckCount,
+  toAllocate,
   upcomingTotal,
   upcomingList,
   dayOfMonth,
@@ -98,6 +107,11 @@ export function BudgetClient({
   framework: BudgetFramework;
   income: number;
   incomeBasis: number;
+  expectedIncome: number;
+  derivedIncome: number;
+  incomeOverride: number | null;
+  paycheckCount: number;
+  toAllocate: number;
   spend: number;
   spendByClassification: { need: number; want: number; savings: number };
   totalLimit: number;
@@ -116,6 +130,28 @@ export function BudgetClient({
   const [pending, startTransition] = useTransition();
   // Which category row in the "Every limit" list is expanded to show its tx.
   const [expanded, setExpanded] = useState<number | null>(null);
+
+  // Expected-income override editor (the pencil on the "Ready to allocate"
+  // panel). Draft is dollars-as-string; empty/clear falls back to paychecks.
+  const [editingIncome, setEditingIncome] = useState(false);
+  const [incomeDraft, setIncomeDraft] = useState("");
+  const openIncomeEditor = () => {
+    setIncomeDraft(expectedIncome > 0 ? (expectedIncome / 100).toFixed(0) : "");
+    setEditingIncome(true);
+  };
+  const saveIncomeOverride = () => {
+    const cents = incomeDraft.trim() === "" ? null : parseDollarsToCents(incomeDraft);
+    startTransition(async () => {
+      await setExpectedIncomeOverride(cents);
+      setEditingIncome(false);
+    });
+  };
+  const resetIncomeToPaychecks = () => {
+    startTransition(async () => {
+      await setExpectedIncomeOverride(null);
+      setEditingIncome(false);
+    });
+  };
 
   // Local-edited limits for the edit-all view (dollars as strings, persisted on save).
   const initialDrafts = useMemo(() => {
@@ -203,10 +239,138 @@ export function BudgetClient({
     setDrafts((prev) => ({ ...prev, ...values }));
   const resetDrafts = () => setDrafts(initialDrafts);
 
+  // "Ready to allocate" reconciliation state.
+  const noIncome = expectedIncome <= 0;
+  const overAllocated = toAllocate < 0;
+  const fullyAllocated = !noIncome && Math.abs(toAllocate) < 100; // within $1
+  const allocateColor = overAllocated
+    ? "var(--blush-deep)"
+    : fullyAllocated
+      ? "var(--blue-deep)"
+      : "var(--foreground)";
+  const allocateLabel = noIncome
+    ? "set your expected income to plan"
+    : overAllocated
+      ? "over-allocated"
+      : fullyAllocated
+        ? "every dollar assigned"
+        : "still to allocate — give it a job";
+  const incomeNote =
+    incomeOverride != null
+      ? "custom"
+      : paycheckCount > 0
+        ? `${paycheckCount} paycheck${paycheckCount === 1 ? "" : "s"}`
+        : "no paychecks scheduled";
+  const assignedCount = categories.filter(
+    (c) => c.classification !== "income" && c.monthlyLimitCents != null,
+  ).length;
+
   return (
     <div className="space-y-10 md:space-y-14">
       {/* HERO — slim headline strip (spent / planned / left) */}
       <BudgetHero spent={spend} planned={totalLimit} daysLeft={daysLeft} />
+
+      {/* READY TO ALLOCATE — zero-based reconciliation: expected income minus
+          what's assigned to category limits, driven toward $0. */}
+      <Card className="p-5 md:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+          <div className="min-w-0">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-foreground-faint">
+              Ready to allocate
+            </div>
+            <div className="mt-2 flex items-baseline gap-3">
+              <span
+                className="display text-[2.6rem] leading-none md:text-[3rem]"
+                style={{ color: allocateColor }}
+              >
+                {noIncome ? "—" : formatCents(Math.abs(toAllocate))}
+              </span>
+              <span className="text-sm text-foreground-muted">
+                {allocateLabel}
+              </span>
+            </div>
+          </div>
+          {fullyAllocated && (
+            <Pill tone="savings">
+              <Check className="mr-1 size-3" strokeWidth={2.5} /> balanced
+            </Pill>
+          )}
+        </div>
+
+        {/* Reconciliation lines */}
+        <div className="mt-5 space-y-3 border-t border-border pt-4 text-sm">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-foreground-muted">Expected income</span>
+            {editingIncome ? (
+              <div className="flex items-center gap-2">
+                <div className="w-28">
+                  <Input
+                    autoFocus
+                    inputMode="numeric"
+                    value={incomeDraft}
+                    onChange={(e) => setIncomeDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") saveIncomeOverride();
+                      if (e.key === "Escape") setEditingIncome(false);
+                    }}
+                    placeholder="0"
+                  />
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={saveIncomeOverride}
+                  disabled={pending}
+                >
+                  Save
+                </Button>
+                {incomeOverride != null && (
+                  <button
+                    onClick={resetIncomeToPaychecks}
+                    className="text-xs text-foreground-muted hover:text-foreground"
+                  >
+                    use paychecks
+                  </button>
+                )}
+                <button
+                  onClick={() => setEditingIncome(false)}
+                  aria-label="Cancel"
+                  className="text-foreground-faint hover:text-foreground"
+                >
+                  <X className="size-4" strokeWidth={1.5} />
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2.5">
+                <span className="mono tabular">{formatCents(expectedIncome)}</span>
+                <span className="text-[11px] text-foreground-faint">
+                  {incomeNote}
+                </span>
+                <button
+                  onClick={openIncomeEditor}
+                  aria-label="Edit expected income"
+                  className="text-foreground-faint transition-colors hover:text-foreground"
+                >
+                  <Pencil className="size-3.5" strokeWidth={1.5} />
+                </button>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-foreground-muted">
+              Assigned to categories
+            </span>
+            <span className="mono tabular flex items-center gap-2.5 text-foreground-muted">
+              {assignedCount > 0 && (
+                <span className="text-[11px] text-foreground-faint">
+                  {assignedCount} {assignedCount === 1 ? "category" : "categories"}
+                </span>
+              )}
+              −{formatCents(totalLimit)}
+            </span>
+          </div>
+        </div>
+      </Card>
 
       {/* GLANCE — calendar progress + supporting numbers */}
       <div className="grid grid-cols-1 md:grid-cols-[1.4fr_1fr] gap-8 md:gap-12 items-start">
