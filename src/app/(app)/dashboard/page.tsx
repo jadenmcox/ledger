@@ -21,7 +21,7 @@ import {
   Pill,
   Button,
 } from "@/components/ui";
-import { formatCents, formatCentsCompact } from "@/lib/utils";
+import { formatCents, formatCentsCompact, cn } from "@/lib/utils";
 import { effectiveDate } from "@/lib/effective-month";
 import { refundMatches } from "@/lib/refunds";
 import {
@@ -39,10 +39,12 @@ import {
 import Link from "next/link";
 import {
   ArrowRight,
+  Check,
   ChevronLeft,
   ChevronRight,
   Repeat,
   TrendingUp,
+  TriangleAlert,
 } from "lucide-react";
 import { SavingsGoalsSection } from "./savings-goals";
 
@@ -210,6 +212,14 @@ export default async function DashboardPage({
     saved +
     uncategorizedSpend;
   const consumption = spend - saved;
+
+  // "Every dollar" reconciliation: income, top to bottom, minus what got spent
+  // and saved, leaves the unallocated remainder. Positive => income still
+  // waiting for a job; negative => allocations were funded from reserves.
+  // `uncategorizedSpend` is the slice of spend with no bucket yet — money that
+  // moved but isn't accounted for anywhere.
+  const leftover = income - consumption - saved;
+  const overspent = consumption > income;
 
   // Spending categories (needs + wants), biggest first, for the overspend
   // flags below and the donut. Savings categories are excluded so a big
@@ -430,6 +440,97 @@ export default async function DashboardPage({
               income={income}
             />
 
+            {/* EVERY DOLLAR — reconcile income into spent + saved + leftover,
+                and flag any spending that hasn't landed in a bucket yet. */}
+            {(income > 0 || consumption > 0) && (
+              <Section
+                title="Every dollar this month"
+                hint="where your money landed, top to bottom"
+              >
+                <Card className="overflow-hidden">
+                  <div className="divide-y divide-border">
+                    <LedgerRow label="Income" amount={income} sign="+" />
+                    <LedgerRow
+                      label="Spent"
+                      sub="everyday needs & wants"
+                      amount={consumption}
+                      sign="−"
+                      color="var(--blush-deep)"
+                    />
+                    <LedgerRow
+                      label="Saved"
+                      sub="moved to savings & investments"
+                      amount={saved}
+                      sign="−"
+                      color="var(--blue-deep)"
+                    />
+                    <LedgerRow
+                      label={
+                        leftover >= 0
+                          ? "Left to allocate"
+                          : overspent
+                            ? "Over income"
+                            : "From reserves"
+                      }
+                      amount={Math.abs(leftover)}
+                      sign=""
+                      emphasize
+                      note={
+                        leftover >= 0
+                          ? leftover < 100
+                            ? "every dollar has a home"
+                            : "give this a job"
+                          : overspent
+                            ? "spent more than you earned"
+                            : "you dipped into savings"
+                      }
+                      color={
+                        leftover < 0
+                          ? overspent
+                            ? "var(--blush-deep)"
+                            : "var(--blue-deep)"
+                          : "var(--foreground)"
+                      }
+                    />
+                  </div>
+                  {/* Unaccounted check — is every spent dollar in a bucket? */}
+                  <div className="flex items-center gap-2.5 border-t border-border bg-surface-2/40 px-5 py-3.5">
+                    {uncategorizedSpend > 0 ? (
+                      <>
+                        <TriangleAlert
+                          className="size-4 shrink-0 text-blush-deep"
+                          strokeWidth={2}
+                        />
+                        <span className="text-sm text-foreground-muted">
+                          <span className="mono tabular text-blush-deep">
+                            {formatCents(uncategorizedSpend)}
+                          </span>{" "}
+                          spent with no category yet
+                        </span>
+                        <Link
+                          href="/transactions?cat=uncategorized"
+                          className="ml-auto inline-flex shrink-0 items-center gap-1 text-xs tracking-tight text-blush-deep hover:underline"
+                        >
+                          give it a bucket
+                          <ArrowRight className="size-3" strokeWidth={1.5} />
+                        </Link>
+                      </>
+                    ) : (
+                      <>
+                        <Check
+                          className="size-4 shrink-0 text-blue-deep"
+                          strokeWidth={2.5}
+                        />
+                        <span className="text-sm text-foreground-muted">
+                          Every dollar you spent is in a bucket.
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </Card>
+              </Section>
+            )}
+
             {/* OVERSPENDING FLAGS */}
             {overspending.length > 0 && (
               <Section
@@ -614,6 +715,62 @@ function Section({
       </div>
       {children}
     </section>
+  );
+}
+
+// One line of the "Every dollar" reconciliation ledger.
+function LedgerRow({
+  label,
+  sub,
+  amount,
+  sign,
+  color,
+  note,
+  emphasize = false,
+}: {
+  label: string;
+  sub?: string;
+  amount: number;
+  sign: string;
+  color?: string;
+  note?: string;
+  emphasize?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-3 px-5 py-3.5",
+        emphasize && "bg-surface-2/40",
+      )}
+    >
+      <div className="min-w-0 flex-1">
+        <div
+          className={cn(
+            "tracking-tight",
+            emphasize
+              ? "text-sm font-medium text-foreground"
+              : "text-sm text-foreground-muted",
+          )}
+        >
+          {label}
+        </div>
+        {sub && (
+          <div className="mt-0.5 text-[11px] text-foreground-faint">{sub}</div>
+        )}
+      </div>
+      {note && (
+        <span className="shrink-0 text-[11px] tracking-tight text-foreground-faint">
+          {note}
+        </span>
+      )}
+      <div
+        className="mono tabular shrink-0 text-sm"
+        style={{ color: color ?? "var(--foreground)" }}
+      >
+        {amount === 0 ? "" : sign}
+        {formatCents(amount)}
+      </div>
+    </div>
   );
 }
 
