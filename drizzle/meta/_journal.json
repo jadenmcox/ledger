@@ -36,6 +36,13 @@
       "when": 1782733639925,
       "tag": "0004_long_ikaris",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1783596278283,
+      "tag": "0005_short_the_twelve",
+      "breakpoints": true
     }
   ]
 }

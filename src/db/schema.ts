@@ -274,6 +274,11 @@ export const budgetSettings = sqliteTable("budget_settings", {
   framework: text("framework", { enum: budgetFrameworks })
     .notNull()
     .default("custom"),
+  // Manual override for the "expected monthly income" the zero-based planner
+  // allocates against. Null => derive it from recurring paycheck schedules.
+  // Keeps pay-timing (paid on the 15th/30th) and one-off bonuses from ever
+  // distorting the plan's baseline.
+  expectedIncomeOverrideCents: integer("expected_income_override_cents"),
   updatedAt: integer("updated_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(unixepoch())`),

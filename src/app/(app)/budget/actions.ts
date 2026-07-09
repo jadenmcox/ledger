@@ -23,6 +23,28 @@ export async function setBudgetFramework(framework: BudgetFramework) {
   revalidatePath("/dashboard");
 }
 
+// Set (or clear, with null) the manual expected-income override the zero-based
+// planner allocates against. Null falls back to the recurring-paycheck derived
+// value.
+export async function setExpectedIncomeOverride(cents: number | null) {
+  const value =
+    cents == null || !Number.isFinite(cents) || cents < 0
+      ? null
+      : Math.round(cents);
+  const existing = await db.select().from(budgetSettings).limit(1);
+  if (existing.length === 0) {
+    await db
+      .insert(budgetSettings)
+      .values({ expectedIncomeOverrideCents: value });
+  } else {
+    await db
+      .update(budgetSettings)
+      .set({ expectedIncomeOverrideCents: value, updatedAt: sql`(unixepoch())` })
+      .where(eq(budgetSettings.id, existing[0].id));
+  }
+  revalidatePath("/budget");
+}
+
 export async function bulkSetMonthlyLimits(
   updates: { id: number; limitCents: number | null }[],
 ) {
