@@ -176,29 +176,45 @@ export function SpendingHero({
                       />
                     )}
                   </div>
-                  <div className="flex items-baseline justify-between gap-3 text-[14px]">
-                    <span className="text-foreground-muted">
+
+                  {/* Segment labels — the spent share sits on the red segment it
+                      describes, and the income tick is named, so the "44%" and
+                      the picture share one reference point instead of two. */}
+                  <div className="relative h-3 text-[10px] font-medium tracking-tight">
+                    <span
+                      className="absolute left-0 top-0 whitespace-nowrap"
+                      style={{ color: "var(--blush-deep)" }}
+                    >
+                      {spentPct}% spent
+                    </span>
+                    {incomeMarker !== null && (
                       <span
-                        className="display text-[1.05rem]"
+                        className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-foreground-faint"
                         style={{
-                          color: overspent
-                            ? "var(--blush-deep)"
-                            : "var(--blue-deep)",
+                          left: `${Math.min(96, Math.max(8, incomeMarker * 100))}%`,
                         }}
                       >
-                        {formatCents(Math.abs(remaining))}
-                      </span>{" "}
-                      {remaining >= 0
-                        ? "left to spend"
-                        : overspent
-                          ? "over income"
-                          : "drawn from reserves"}
-                    </span>
-                    {spentPct !== null && (
-                      <span className="shrink-0 text-foreground-faint">
-                        {spentPct}% of income spent
+                        income
                       </span>
                     )}
+                  </div>
+
+                  <div className="text-[14px] text-foreground-muted">
+                    <span
+                      className="display text-[1.05rem]"
+                      style={{
+                        color: overspent
+                          ? "var(--blush-deep)"
+                          : "var(--blue-deep)",
+                      }}
+                    >
+                      {formatCents(Math.abs(remaining))}
+                    </span>{" "}
+                    {remaining >= 0
+                      ? "left to spend"
+                      : overspent
+                        ? "over income"
+                        : "drawn from reserves"}
                   </div>
                 </div>
               )}
