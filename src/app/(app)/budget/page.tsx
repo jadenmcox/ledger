@@ -17,7 +17,10 @@ import {
   subMonths,
 } from "date-fns";
 import { isSameMonth } from "date-fns";
-import { computeOccurrences } from "@/lib/recurring-schedules";
+import {
+  computeOccurrences,
+  expectedMonthlyIncome,
+} from "@/lib/recurring-schedules";
 import { effectiveDate } from "@/lib/effective-month";
 import { refundMatches } from "@/lib/refunds";
 import { BudgetClient } from "./client";
@@ -194,14 +197,11 @@ export default async function BudgetPage() {
   // never makes it read as "no income yet" — and one-off income like a bonus
   // is excluded because it isn't a schedule. A manual override wins when set.
   const monthStart = startOfMonth(now);
-  const incomeSchedules = schedules.filter((s) => s.amountCents > 0);
-  let derivedIncome = 0;
-  let paycheckCount = 0;
-  for (const s of incomeSchedules) {
-    const occs = computeOccurrences(s, monthStart, monthEnd).length;
-    derivedIncome += occs * s.amountCents;
-    paycheckCount += occs;
-  }
+  const { cents: derivedIncome, paycheckCount } = expectedMonthlyIncome(
+    schedules,
+    monthStart,
+    monthEnd,
+  );
   const incomeOverride = settingsRows[0]?.expectedIncomeOverrideCents ?? null;
   const expectedIncome = incomeOverride ?? derivedIncome;
   // Smart-fill scaling still needs a basis before any schedule/override exists;

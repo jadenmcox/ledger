@@ -10,7 +10,10 @@ import {
 import { SpendingHero, type SpendingSlice } from "./spending-breakdown";
 import { PlannedActual } from "./planned-actual";
 import { CategoryGlyph } from "@/components/category-glyph";
-import { computeOccurrences } from "@/lib/recurring-schedules";
+import {
+  computeOccurrences,
+  expectedMonthlyIncome,
+} from "@/lib/recurring-schedules";
 import { asc, eq } from "drizzle-orm";
 import type { ReactNode } from "react";
 import {
@@ -213,13 +216,28 @@ export default async function DashboardPage({
     uncategorizedSpend;
   const consumption = spend - saved;
 
+  // For the *current* month the picture is mid-flight: if you're paid on the
+  // 15th/30th, income received so far can be $0 even though you'll earn a full
+  // paycheck, which would make the reconciliation scream "over income". So for
+  // the live month we reconcile against EXPECTED income (recurring paychecks)
+  // once it exceeds what's landed. Past months always use actual income —
+  // that's real history, never a forecast.
+  const { cents: expectedIncome } = expectedMonthlyIncome(
+    schedules,
+    monthStart,
+    monthEnd,
+  );
+  const incomeReceived = income;
+  const usingExpectedIncome = isCurrentMonth && expectedIncome > incomeReceived;
+  const incomeBasis = usingExpectedIncome ? expectedIncome : incomeReceived;
+
   // "Every dollar" reconciliation: income, top to bottom, minus what got spent
   // and saved, leaves the unallocated remainder. Positive => income still
   // waiting for a job; negative => allocations were funded from reserves.
   // `uncategorizedSpend` is the slice of spend with no bucket yet — money that
   // moved but isn't accounted for anywhere.
-  const leftover = income - consumption - saved;
-  const overspent = consumption > income;
+  const leftover = incomeBasis - consumption - saved;
+  const overspent = consumption > incomeBasis;
 
   // Spending categories (needs + wants), biggest first, for the overspend
   // flags below and the donut. Savings categories are excluded so a big
@@ -437,19 +455,29 @@ export default async function DashboardPage({
               slices={spendingSlices}
               consumption={consumption}
               saved={saved}
-              income={income}
+              income={incomeBasis}
+              incomeIsExpected={usingExpectedIncome}
             />
 
             {/* EVERY DOLLAR — reconcile income into spent + saved + leftover,
                 and flag any spending that hasn't landed in a bucket yet. */}
-            {(income > 0 || consumption > 0) && (
+            {(incomeBasis > 0 || consumption > 0) && (
               <Section
                 title="Every dollar this month"
                 hint="where your money landed, top to bottom"
               >
                 <Card className="overflow-hidden">
                   <div className="divide-y divide-border">
-                    <LedgerRow label="Income" amount={income} sign="+" />
+                    <LedgerRow
+                      label={usingExpectedIncome ? "Expected income" : "Income"}
+                      sub={
+                        usingExpectedIncome
+                          ? `${formatCents(incomeReceived)} received so far this month`
+                          : undefined
+                      }
+                      amount={incomeBasis}
+                      sign="+"
+                    />
                     <LedgerRow
                       label="Spent"
                       sub="everyday needs & wants"

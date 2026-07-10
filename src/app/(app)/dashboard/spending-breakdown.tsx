@@ -28,11 +28,15 @@ export function SpendingHero({
   consumption,
   saved,
   income,
+  incomeIsExpected = false,
 }: {
   slices: SpendingSlice[];
   consumption: number;
   saved: number;
   income: number;
+  // Current month before payday: `income` is the expected monthly figure, not
+  // what's landed yet. Label it so the flow bar reads as a forecast.
+  incomeIsExpected?: boolean;
 }) {
   const router = useRouter();
   const [active, setActive] = useState<DonutDatum | null>(null);
@@ -227,7 +231,7 @@ export function SpendingHero({
                   accent="var(--blue-deep)"
                 />
                 <MiniStat
-                  label="Income"
+                  label={incomeIsExpected ? "Income (expected)" : "Income"}
                   value={formatCents(income)}
                   accent="var(--sage-deep)"
                 />

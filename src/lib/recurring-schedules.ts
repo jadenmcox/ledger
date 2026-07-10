@@ -66,6 +66,28 @@ export function computeOccurrences(
 }
 
 /**
+ * Expected income for a given month: the sum of every recurring *income*
+ * schedule's occurrences across the whole month. Day-independent, so being
+ * paid on the 15th/30th never reads as "no income yet" earlier in the month,
+ * and one-off income (a bonus) is excluded because it isn't a schedule.
+ */
+export function expectedMonthlyIncome(
+  schedules: RecurringSchedule[],
+  monthStart: Date,
+  monthEnd: Date,
+): { cents: number; paycheckCount: number } {
+  let cents = 0;
+  let paycheckCount = 0;
+  for (const s of schedules) {
+    if (s.amountCents <= 0) continue;
+    const n = computeOccurrences(s, monthStart, monthEnd).length;
+    cents += n * s.amountCents;
+    paycheckCount += n;
+  }
+  return { cents, paycheckCount };
+}
+
+/**
  * For each active schedule, create any missing transactions between
  * `lastCreatedDate` (or startDate) and today. Idempotent — relies on
  * the strict dedupe hash (account|date|amount) to skip dupes.
