@@ -238,6 +238,10 @@ export default async function DashboardPage({
   const incomeReceived = income;
   const usingExpectedIncome = isCurrentMonth && expectedIncome > incomeReceived;
   const incomeBasis = usingExpectedIncome ? expectedIncome : incomeReceived;
+  // Live month with no income known yet (nothing received, no expected figure
+  // set): we simply can't reconcile, so don't cry "over income." Show a neutral
+  // "income not in yet" instead of implying overspending.
+  const noIncomeYet = isCurrentMonth && incomeBasis === 0;
 
   // "Every dollar" reconciliation: income, top to bottom, minus what got spent
   // and saved, leaves the unallocated remainder. Positive => income still
@@ -502,30 +506,36 @@ export default async function DashboardPage({
                     />
                     <LedgerRow
                       label={
-                        leftover >= 0
-                          ? "Left to allocate"
-                          : overspent
-                            ? "Over income"
-                            : "From reserves"
+                        noIncomeYet
+                          ? "Income not in yet"
+                          : leftover >= 0
+                            ? "Left to allocate"
+                            : overspent
+                              ? "Over income"
+                              : "From reserves"
                       }
                       amount={Math.abs(leftover)}
                       sign=""
                       emphasize
                       note={
-                        leftover >= 0
-                          ? leftover < 100
-                            ? "every dollar has a home"
-                            : "give this a job"
-                          : overspent
-                            ? "spent more than you earned"
-                            : "you dipped into savings"
+                        noIncomeYet
+                          ? "out so far — your paycheck hasn't landed"
+                          : leftover >= 0
+                            ? leftover < 100
+                              ? "every dollar has a home"
+                              : "give this a job"
+                            : overspent
+                              ? "spent more than you earned"
+                              : "you dipped into savings"
                       }
                       color={
-                        leftover < 0
-                          ? overspent
-                            ? "var(--blush-deep)"
-                            : "var(--blue-deep)"
-                          : "var(--foreground)"
+                        noIncomeYet
+                          ? "var(--foreground)"
+                          : leftover < 0
+                            ? overspent
+                              ? "var(--blush-deep)"
+                              : "var(--blue-deep)"
+                            : "var(--foreground)"
                       }
                     />
                   </div>
