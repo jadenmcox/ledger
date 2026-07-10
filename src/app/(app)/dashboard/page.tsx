@@ -1,6 +1,7 @@
 import { db } from "@/db";
 import {
   accounts,
+  budgetSettings,
   categories,
   recurringSchedules,
   savingsGoals,
@@ -92,6 +93,7 @@ export default async function DashboardPage({
     allAccounts,
     schedules,
     goals,
+    settingsRows,
   ] = await Promise.all([
     // Full non-transfer history: rent rolls in from the prior month and a refund
     // can credit back to a purchase in any earlier month, so a single-month
@@ -104,6 +106,7 @@ export default async function DashboardPage({
     db.select().from(accounts),
     db.select().from(recurringSchedules).where(eq(recurringSchedules.isActive, true)),
     db.select().from(savingsGoals).where(eq(savingsGoals.isArchived, false)).orderBy(asc(savingsGoals.sortOrder), asc(savingsGoals.id)),
+    db.select().from(budgetSettings).limit(1),
   ]);
 
   const catById = new Map(allCategories.map((c) => [c.id, c]));
@@ -222,11 +225,16 @@ export default async function DashboardPage({
   // the live month we reconcile against EXPECTED income (recurring paychecks)
   // once it exceeds what's landed. Past months always use actual income —
   // that's real history, never a forecast.
-  const { cents: expectedIncome } = expectedMonthlyIncome(
+  // Expected income = the manual override (set on /budget) if present, else
+  // derived from recurring paycheck schedules. Same source of truth the budget
+  // planner uses, so both pages agree.
+  const { cents: derivedExpected } = expectedMonthlyIncome(
     schedules,
     monthStart,
     monthEnd,
   );
+  const incomeOverride = settingsRows[0]?.expectedIncomeOverrideCents ?? null;
+  const expectedIncome = incomeOverride ?? derivedExpected;
   const incomeReceived = income;
   const usingExpectedIncome = isCurrentMonth && expectedIncome > incomeReceived;
   const incomeBasis = usingExpectedIncome ? expectedIncome : incomeReceived;
