@@ -12,6 +12,7 @@ import {
   CalendarRange,
   CalendarClock,
   PiggyBank,
+  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -30,6 +31,7 @@ const items: NavItem[] = [
   { href: "/accounts", label: "Accounts", icon: Wallet, group: "setup" },
   { href: "/recurring", label: "Recurring", icon: CalendarClock, group: "setup" },
   { href: "/categories", label: "Categories", icon: Tag, group: "setup" },
+  { href: "/rules", label: "Rules", icon: Zap, group: "setup" },
 ];
 
 // First 5 items shown in mobile bottom nav (all of them, conveniently)
