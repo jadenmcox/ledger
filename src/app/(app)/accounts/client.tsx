@@ -233,7 +233,8 @@ function AccountList({
                   <div className="mono tabular text-sm md:text-base shrink-0 text-right">
                     {formatCents(a.currentBalanceCents)}
                   </div>
-                  <div className="hidden md:flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {/* Always visible on touch screens; hover-revealed on desktop. */}
+                  <div className="flex items-center gap-1 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                     <button
                       onClick={() => onEdit(a)}
                       className="size-8 inline-flex items-center justify-center text-foreground-faint hover:text-foreground rounded-md hover:bg-surface-2"

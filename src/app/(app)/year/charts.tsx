@@ -23,4 +23,26 @@ export function YearStackedArea({
   );
 }
 
+export function NetWorthArea({
+  data,
+}: {
+  data: Array<{ x: string; networth: number }>;
+}) {
+  return (
+    <AreaChart
+      data={data}
+      series={[{ key: "networth", name: "Net worth", color: "var(--blue)" }]}
+      height={240}
+      formatValue={(v) => formatCentsCompact(Math.round(v * 100))}
+      formatX={(v) => {
+        const d = new Date(String(v) + "T00:00:00");
+        return d.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        });
+      }}
+    />
+  );
+}
+
 export { formatCents };

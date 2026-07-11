@@ -1,41 +1,79 @@
 import { db } from "@/db";
 import { accounts, categories, transactions } from "@/db/schema";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { Container, PageHeader, EmptyState, Button } from "@/components/ui";
 import { TransactionsClient, TransactionsHeaderActions } from "./client";
 import Link from "next/link";
 import { TransactionsHero } from "./transactions-hero";
-import { startOfMonth, endOfMonth, format } from "date-fns";
+import { format, isSameDay } from "date-fns";
+import { createMonthBucketer, monthConsumption } from "@/lib/month-bucket";
 
 export const dynamic = "force-dynamic";
 
-export default async function TransactionsPage() {
-  const [allTx, allCats, allAccts] = await Promise.all([
-    db.select().from(transactions).orderBy(desc(transactions.date)).limit(500),
+// Page size for the list; ?n= loads more in steps of this.
+const PAGE = 500;
+const MAX_N = 5000;
+
+export default async function TransactionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ n?: string }>;
+}) {
+  const sp = await searchParams;
+  const requested = Number(sp.n);
+  const limit =
+    Number.isFinite(requested) && requested > PAGE
+      ? Math.min(Math.floor(requested), MAX_N)
+      : PAGE;
+
+  const [txPlusOne, heroTx, allCats, allAccts] = await Promise.all([
+    // One extra row tells us whether a "Load more" is worth showing.
+    db
+      .select()
+      .from(transactions)
+      .orderBy(desc(transactions.date))
+      .limit(limit + 1),
+    // Slim full history for the hero's "spent this month": the shared
+    // month-bucketer needs every row so refunds credit the right month and
+    // late-month rent rolls forward, exactly like the dashboard headline.
+    db
+      .select({
+        id: transactions.id,
+        date: transactions.date,
+        amountCents: transactions.amountCents,
+        merchantRaw: transactions.merchantRaw,
+        merchantClean: transactions.merchantClean,
+        categoryId: transactions.categoryId,
+        isTransfer: transactions.isTransfer,
+        reimbursable: transactions.reimbursable,
+      })
+      .from(transactions)
+      .where(eq(transactions.isTransfer, false)),
     db.select().from(categories),
     db.select().from(accounts),
   ]);
 
+  const hasMore = txPlusOne.length > limit;
+  const allTx = hasMore ? txPlusOne.slice(0, limit) : txPlusOne;
   const hasAccounts = allAccts.length > 0;
 
   const now = new Date();
-  const monthStart = startOfMonth(now);
-  const monthEnd = endOfMonth(now);
-  const catById = new Map(allCats.map((c) => [c.id, c]));
+  const thisMonthSpend = monthConsumption(heroTx, allCats, now);
+  const uncategorized = allTx.filter(
+    (t) => !t.categoryId && !t.isTransfer && t.amountCents < 0,
+  ).length;
 
-  let thisMonthSpend = 0;
-  let uncategorized = 0;
-
+  // Refund provenance for the visible rows: a matched refund gets a small
+  // "credits <merchant> · <date>" note so the netting isn't invisible magic.
+  const { refundMatch } = createMonthBucketer(heroTx, allCats);
+  const refundNotes: Record<number, string> = {};
   for (const t of allTx) {
-    const d = new Date(t.date);
-    if (d < monthStart || d > monthEnd) continue;
-    const cat = t.categoryId ? catById.get(t.categoryId) : null;
-    if (cat?.classification === "income") continue;
-    if (t.isTransfer || t.reimbursable) continue;
-    if (t.amountCents >= 0) continue;
-    const abs = Math.abs(t.amountCents);
-    thisMonthSpend += abs;
-    if (!t.categoryId) uncategorized++;
+    const m = refundMatch.get(t.id);
+    if (!m) continue;
+    const own = (t.merchantClean || t.merchantRaw).trim();
+    const unmatched = m.merchant === own && isSameDay(new Date(m.date), new Date(t.date));
+    if (unmatched) continue;
+    refundNotes[t.id] = `credits ${m.merchant} · ${format(new Date(m.date), "MMM d")}`;
   }
 
   return (
@@ -75,6 +113,9 @@ export default async function TransactionsPage() {
             initial={allTx}
             categories={allCats}
             accounts={allAccts}
+            refundNotes={refundNotes}
+            hasMore={hasMore}
+            nextN={limit + PAGE}
           />
         )}
       </Container>

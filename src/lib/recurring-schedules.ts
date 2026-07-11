@@ -92,20 +92,35 @@ export function expectedMonthlyIncome(
  * `lastCreatedDate` (or startDate) and today. Idempotent — relies on
  * the strict dedupe hash (account|date|amount) to skip dupes.
  */
+// Tolerates a database that hasn't run the is_forecast_only migration yet
+// (drizzle/0006) — a plain select() lists every schema column, so it 500s
+// until the column exists. This runs on the dashboard and budget page on
+// every request, so callers get an empty list instead of a crash.
+export async function getActiveSchedules(): Promise<RecurringSchedule[]> {
+  try {
+    return await db
+      .select()
+      .from(recurringSchedules)
+      .where(eq(recurringSchedules.isActive, true));
+  } catch {
+    return [];
+  }
+}
+
 export async function backfillRecurring(now: Date = new Date()): Promise<{
   created: number;
   scheduled: number;
 }> {
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const active = await db
-    .select()
-    .from(recurringSchedules)
-    .where(eq(recurringSchedules.isActive, true));
+  const active = await getActiveSchedules();
 
   let created = 0;
   let scheduled = 0;
 
   for (const s of active) {
+    // Forecast-only schedules shape expected income and upcoming bills but
+    // never materialize transactions (the real ones arrive via Plaid/CSV).
+    if (s.isForecastOnly) continue;
     const since = s.lastCreatedDate
       ? addDays(parseISO(s.lastCreatedDate), 1)
       : parseISO(s.startDate);

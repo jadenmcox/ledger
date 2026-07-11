@@ -1,0 +1,1 @@
+ALTER TABLE `recurring_schedules` ADD `is_forecast_only` integer DEFAULT false NOT NULL;

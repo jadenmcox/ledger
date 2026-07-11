@@ -3,7 +3,6 @@ import {
   accounts,
   budgetSettings,
   categories,
-  recurringSchedules,
   savingsGoals,
   transactions,
   type Category,
@@ -14,6 +13,7 @@ import { CategoryGlyph } from "@/components/category-glyph";
 import {
   computeOccurrences,
   expectedMonthlyIncome,
+  getActiveSchedules,
 } from "@/lib/recurring-schedules";
 import { asc, eq } from "drizzle-orm";
 import type { ReactNode } from "react";
@@ -26,8 +26,7 @@ import {
   Button,
 } from "@/components/ui";
 import { formatCents, formatCentsCompact, cn } from "@/lib/utils";
-import { effectiveDate } from "@/lib/effective-month";
-import { refundMatches } from "@/lib/refunds";
+import { createMonthBucketer } from "@/lib/month-bucket";
 import {
   startOfMonth,
   endOfMonth,
@@ -87,11 +86,13 @@ export default async function DashboardPage({
   // Widen the fetch back through the previous month so late-month rent (paid on
   // or after the 20th, which counts toward *this* month) is available to pull
   // in. The window is then narrowed to this month by effective date below.
+  // Kicked off alongside the rest so a pre-migration prod DB (missing
+  // is_forecast_only) can't 500 this page — see getActiveSchedules.
+  const schedulesPromise = getActiveSchedules();
   const [
     allTx,
     allCategories,
     allAccounts,
-    schedules,
     goals,
     settingsRows,
   ] = await Promise.all([
@@ -104,34 +105,19 @@ export default async function DashboardPage({
       .where(eq(transactions.isTransfer, false)),
     db.select().from(categories),
     db.select().from(accounts),
-    db.select().from(recurringSchedules).where(eq(recurringSchedules.isActive, true)),
     db.select().from(savingsGoals).where(eq(savingsGoals.isArchived, false)).orderBy(asc(savingsGoals.sortOrder), asc(savingsGoals.id)),
     db.select().from(budgetSettings).limit(1),
   ]);
+  const schedules = await schedulesPromise;
 
   const catById = new Map(allCategories.map((c) => [c.id, c]));
   const acctById = new Map(allAccounts.map((a) => [a.id, a]));
 
-  const isSpendingCat = (categoryId: number | null): boolean => {
-    if (categoryId == null) return false;
-    const c = catById.get(categoryId);
-    return !!c && c.classification !== "income";
-  };
-  // A refund credits back to the purchase it offsets (matched by merchant), so
-  // a return reduces the month — and the vendor line — you actually spent on.
-  const refundMatch = refundMatches(allTx, isSpendingCat);
-
-  // Which month a transaction counts toward. Refunds follow their matched
-  // purchase's month; everything else uses its own effective month (rent roll).
-  const monthKeyOf = (t: (typeof allTx)[number]): Date => {
-    const isRefund =
-      t.amountCents > 0 && !t.reimbursable && isSpendingCat(t.categoryId);
-    const base = isRefund ? refundMatch.get(t.id)?.date ?? t.date : t.date;
-    return effectiveDate(
-      new Date(base),
-      t.categoryId ? catById.get(t.categoryId)?.name : null,
-    );
-  };
+  // Shared refund-aware, rent-aware month bucketing (same on every page).
+  const { monthKeyOf, refundMatch } = createMonthBucketer(
+    allTx,
+    allCategories,
+  );
 
   let income = 0;
   // Net spend per category: purchases add, refunds subtract. Clamped below.
@@ -469,6 +455,16 @@ export default async function DashboardPage({
               saved={saved}
               income={incomeBasis}
               incomeIsExpected={usingExpectedIncome}
+              isCurrentMonth={isCurrentMonth}
+              dayOfMonth={dayOfMonth}
+              daysInMonth={daysInMonth}
+              incomeReceived={incomeReceived}
+              upcoming={upcomingBills.map((b) => ({
+                merchant: b.merchant,
+                amountCents: b.amountCents,
+                date: b.date.toISOString(),
+              }))}
+              prevMonthHref={`/dashboard?m=${prevMonthParam}`}
             />
 
             {/* EVERY DOLLAR — reconcile income into spent + saved + leftover,
@@ -509,7 +505,9 @@ export default async function DashboardPage({
                         noIncomeYet
                           ? "Income not in yet"
                           : leftover >= 0
-                            ? "Left to allocate"
+                            ? isCurrentMonth
+                              ? "Left to allocate"
+                              : "Left over"
                             : overspent
                               ? "Over income"
                               : "From reserves"
@@ -521,9 +519,13 @@ export default async function DashboardPage({
                         noIncomeYet
                           ? "out so far — your paycheck hasn't landed"
                           : leftover >= 0
-                            ? leftover < 100
-                              ? "every dollar has a home"
-                              : "give this a job"
+                            ? isCurrentMonth
+                              ? leftover < 100
+                                ? "every dollar has a home"
+                                : "give this a job"
+                              : leftover < 100
+                                ? "every dollar found a home"
+                                : "stayed in your accounts"
                             : overspent
                               ? "spent more than you earned"
                               : "you dipped into savings"

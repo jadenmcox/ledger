@@ -116,3 +116,18 @@ function cleanMerchant(raw: string) {
     .trim();
 }
 
+
+// Undo a CSV import: remove every transaction the batch created, then the
+// batch record itself. Rows later detached from the batch (importId nulled)
+// are untouched.
+export async function deleteImportBatch(importId: number): Promise<number> {
+  const deleted = await db
+    .delete(transactions)
+    .where(eq(transactions.importId, importId))
+    .returning({ id: transactions.id });
+  await db.delete(imports).where(eq(imports.id, importId));
+  revalidatePath("/import");
+  revalidatePath("/transactions");
+  revalidatePath("/dashboard");
+  return deleted.length;
+}

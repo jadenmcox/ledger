@@ -230,6 +230,12 @@ export const recurringSchedules = sqliteTable("recurring_schedules", {
   endDate: text("end_date"), // YYYY-MM-DD, optional
   lastCreatedDate: text("last_created_date"), // YYYY-MM-DD, set as backfill runs
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  // Forecast-only schedules feed expected income and upcoming-bill forecasts
+  // but never create transactions. Lets a paycheck schedule drive the budget
+  // baseline while the real deposits arrive via Plaid/CSV without duplicates.
+  isForecastOnly: integer("is_forecast_only", { mode: "boolean" })
+    .notNull()
+    .default(false),
   notes: text("notes"),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()

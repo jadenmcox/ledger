@@ -2,7 +2,7 @@ import { db } from "@/db";
 import {
   budgetSettings,
   categories,
-  recurringSchedules,
+  savingsGoals,
   transactions,
 } from "@/db/schema";
 import type { Classification } from "@/db/schema";
@@ -20,9 +20,9 @@ import { isSameMonth } from "date-fns";
 import {
   computeOccurrences,
   expectedMonthlyIncome,
+  getActiveSchedules,
 } from "@/lib/recurring-schedules";
-import { effectiveDate } from "@/lib/effective-month";
-import { refundMatches } from "@/lib/refunds";
+import { createMonthBucketer } from "@/lib/month-bucket";
 import { BudgetClient } from "./client";
 import type { SmartFillRow } from "./smart-fill";
 import type { CategoryTx } from "../categories/client";
@@ -39,7 +39,10 @@ export default async function BudgetPage() {
   const histStart = startOfMonth(subMonths(now, 6));
   const histEnd = endOfMonth(subMonths(now, 1));
 
-  const [allCategories, allTx, histTx, schedules, settingsRows] =
+  // Kicked off alongside the rest so a pre-migration prod DB (missing
+  // is_forecast_only) can't 500 this page — see getActiveSchedules.
+  const schedulesPromise = getActiveSchedules();
+  const [allCategories, allTx, histTx, settingsRows, goals] =
     await Promise.all([
       db.select().from(categories),
       // Full non-transfer history: a refund can credit back to a purchase in
@@ -63,35 +66,20 @@ export default async function BudgetPage() {
             eq(transactions.isTransfer, false),
           ),
         ),
+      db.select().from(budgetSettings).limit(1),
       db
         .select()
-        .from(recurringSchedules)
-        .where(eq(recurringSchedules.isActive, true)),
-      db.select().from(budgetSettings).limit(1),
+        .from(savingsGoals)
+        .where(eq(savingsGoals.isArchived, false)),
     ]);
+  const schedules = await schedulesPromise;
 
   const framework = settingsRows[0]?.framework ?? "custom";
 
   const catById = new Map(allCategories.map((c) => [c.id, c]));
 
-  const isSpendingCat = (categoryId: number | null): boolean => {
-    if (categoryId == null) return false;
-    const c = catById.get(categoryId);
-    return !!c && c.classification !== "income";
-  };
-  // Refunds credit back to the month of the purchase they offset (matched by
-  // merchant); rent still rolls forward. Narrow full history to this month by
-  // that effective/credit month, matching the dashboard + Year.
-  const refundMatch = refundMatches(allTx, isSpendingCat);
-  const monthKeyOf = (t: (typeof allTx)[number]): Date => {
-    const isRefund =
-      t.amountCents > 0 && !t.reimbursable && isSpendingCat(t.categoryId);
-    const base = isRefund ? refundMatch.get(t.id)?.date ?? t.date : t.date;
-    return effectiveDate(
-      new Date(base),
-      t.categoryId ? catById.get(t.categoryId)?.name : null,
-    );
-  };
+  // Shared refund-aware, rent-aware month bucketing (same on every page).
+  const { monthKeyOf } = createMonthBucketer(allTx, allCategories);
   const txThisMonth = allTx.filter((t) => isSameMonth(monthKeyOf(t), now));
 
   // Income + spend aggregates. Refunds net back out of spend in the month of
@@ -220,6 +208,20 @@ export default async function BudgetPage() {
   // category limit. Positive => still to allocate; negative => over-allocated.
   const toAllocate = expectedIncome - totalLimit;
 
+  // What the savings goals say should move to savings each month, to compare
+  // against the savings-class limits actually assigned.
+  const goalsMonthlyTarget = goals.reduce(
+    (s, g) => s + g.monthlyTargetCents,
+    0,
+  );
+  const savingsLimitTotal = allCategories.reduce(
+    (s, c) =>
+      c.classification === "savings" && !c.isArchived && c.monthlyLimitCents
+        ? s + c.monthlyLimitCents
+        : s,
+    0,
+  );
+
   const calendarPct = (dayOfMonth / daysInMonth) * 100;
 
   // Plain-data shape for the client component.
@@ -343,6 +345,8 @@ export default async function BudgetPage() {
           incomeOverride={incomeOverride}
           paycheckCount={paycheckCount}
           toAllocate={toAllocate}
+          goalsMonthlyTarget={goalsMonthlyTarget}
+          savingsLimitTotal={savingsLimitTotal}
           spend={spend}
           spendByClassification={spendByClassification}
           totalLimit={totalLimit}
