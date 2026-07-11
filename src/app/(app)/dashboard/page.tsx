@@ -453,6 +453,16 @@ export default async function DashboardPage({
               saved={saved}
               income={incomeBasis}
               incomeIsExpected={usingExpectedIncome}
+              isCurrentMonth={isCurrentMonth}
+              dayOfMonth={dayOfMonth}
+              daysInMonth={daysInMonth}
+              incomeReceived={incomeReceived}
+              upcoming={upcomingBills.map((b) => ({
+                merchant: b.merchant,
+                amountCents: b.amountCents,
+                date: b.date.toISOString(),
+              }))}
+              prevMonthHref={`/dashboard?m=${prevMonthParam}`}
             />
 
             {/* EVERY DOLLAR — reconcile income into spent + saved + leftover,
@@ -493,7 +503,9 @@ export default async function DashboardPage({
                         noIncomeYet
                           ? "Income not in yet"
                           : leftover >= 0
-                            ? "Left to allocate"
+                            ? isCurrentMonth
+                              ? "Left to allocate"
+                              : "Left over"
                             : overspent
                               ? "Over income"
                               : "From reserves"
@@ -505,9 +517,13 @@ export default async function DashboardPage({
                         noIncomeYet
                           ? "out so far — your paycheck hasn't landed"
                           : leftover >= 0
-                            ? leftover < 100
-                              ? "every dollar has a home"
-                              : "give this a job"
+                            ? isCurrentMonth
+                              ? leftover < 100
+                                ? "every dollar has a home"
+                                : "give this a job"
+                              : leftover < 100
+                                ? "every dollar found a home"
+                                : "stayed in your accounts"
                             : overspent
                               ? "spent more than you earned"
                               : "you dipped into savings"

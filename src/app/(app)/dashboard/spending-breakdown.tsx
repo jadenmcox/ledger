@@ -23,12 +23,24 @@ function hrefFor(id: SpendingSlice["id"]): string | null {
   return null;
 }
 
+export type UpcomingBill = {
+  merchant: string;
+  amountCents: number;
+  date: string; // ISO
+};
+
 export function SpendingHero({
   slices,
   consumption,
   saved,
   income,
   incomeIsExpected = false,
+  isCurrentMonth = true,
+  dayOfMonth = 1,
+  daysInMonth = 30,
+  incomeReceived = 0,
+  upcoming = [],
+  prevMonthHref,
 }: {
   slices: SpendingSlice[];
   consumption: number;
@@ -37,6 +49,14 @@ export function SpendingHero({
   // Current month before payday: `income` is the expected monthly figure, not
   // what's landed yet. Label it so the flow bar reads as a forecast.
   incomeIsExpected?: boolean;
+  isCurrentMonth?: boolean;
+  dayOfMonth?: number;
+  daysInMonth?: number;
+  incomeReceived?: number;
+  // Feeds the fresh-month empty state so the hero is useful before any
+  // spending lands.
+  upcoming?: UpcomingBill[];
+  prevMonthHref?: string;
 }) {
   const router = useRouter();
   const [active, setActive] = useState<DonutDatum | null>(null);
@@ -78,9 +98,62 @@ export function SpendingHero({
   return (
     <section className="rise overflow-hidden rounded-[28px] border border-border bg-surface/85 p-6 backdrop-blur-sm shadow-[0_30px_70px_-40px_rgba(34,28,74,0.45)] md:p-8">
       {consumption <= 0 ? (
-        <div className="py-16 text-center text-sm text-foreground-faint">
-          No spending recorded yet this month.
-        </div>
+        !isCurrentMonth ? (
+          <div className="py-16 text-center text-sm text-foreground-faint">
+            No spending recorded this month.
+          </div>
+        ) : (
+          // Fresh-month state: nothing spent yet, so show what the month
+          // holds instead of a big empty box.
+          <div className="mx-auto max-w-md py-10 text-center md:py-14">
+            <div className="mb-2 text-[11px] uppercase tracking-[0.28em] text-foreground-faint">
+              Fresh month
+            </div>
+            <div className="display text-2xl md:text-3xl">
+              Nothing spent yet.
+            </div>
+            {income > 0 && (
+              <p className="mt-3 text-sm text-foreground-muted">
+                <span className="mono tabular">{formatCents(incomeReceived)}</span>{" "}
+                of{" "}
+                <span className="mono tabular">{formatCents(income)}</span>{" "}
+                expected income has landed.
+              </p>
+            )}
+            {upcoming.length > 0 && (
+              <div className="mt-6 space-y-2 text-left">
+                <div className="text-[10px] uppercase tracking-[0.22em] text-foreground-faint text-center">
+                  Coming up
+                </div>
+                {upcoming.slice(0, 3).map((b, i) => (
+                  <div
+                    key={`${b.merchant}-${i}`}
+                    className="flex items-baseline justify-between gap-3 rounded-xl bg-surface-2/50 px-4 py-2.5 text-sm"
+                  >
+                    <span className="truncate tracking-tight">{b.merchant}</span>
+                    <span className="shrink-0 text-[11px] text-foreground-faint">
+                      {new Date(b.date).toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </span>
+                    <span className="mono tabular shrink-0">
+                      {formatCents(b.amountCents)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {prevMonthHref && (
+              <Link
+                href={prevMonthHref}
+                className="mt-6 inline-block text-xs tracking-tight text-foreground-muted underline-offset-4 hover:text-foreground hover:underline"
+              >
+                See how last month ended →
+              </Link>
+            )}
+          </div>
+        )
       ) : (
         <>
           <div className="flex flex-col items-center gap-6 md:flex-row md:items-center md:gap-14 lg:gap-20">
@@ -215,11 +288,25 @@ export function SpendingHero({
                       {formatCents(Math.abs(remaining))}
                     </span>{" "}
                     {remaining >= 0
-                      ? "left to spend"
+                      ? isCurrentMonth
+                        ? "left to spend"
+                        : "left unspent"
                       : overspent
-                        ? "over income"
+                        ? isCurrentMonth
+                          ? "over income"
+                          : "spent over income"
                         : "drawn from reserves"}
                   </div>
+
+                  {/* Pace — calendar burned vs income spent, live month only */}
+                  {isCurrentMonth && spentPct !== null && (
+                    <PaceLine
+                      spentPct={spentPct}
+                      calendarPct={Math.round((dayOfMonth / daysInMonth) * 100)}
+                      dayOfMonth={dayOfMonth}
+                      daysInMonth={daysInMonth}
+                    />
+                  )}
                 </div>
               )}
 
@@ -269,6 +356,40 @@ export function SpendingHero({
         </>
       )}
     </section>
+  );
+}
+
+// One honest sentence about pace: percent of income spent vs percent of the
+// month gone. Within 5 points either way reads as "on pace" — day-to-day
+// noise shouldn't flip the verdict.
+function PaceLine({
+  spentPct,
+  calendarPct,
+  dayOfMonth,
+  daysInMonth,
+}: {
+  spentPct: number;
+  calendarPct: number;
+  dayOfMonth: number;
+  daysInMonth: number;
+}) {
+  const delta = spentPct - calendarPct;
+  const verdict =
+    delta > 5 ? "running hot" : delta < -5 ? "ahead of the game" : "on pace";
+  const color =
+    delta > 5
+      ? "var(--blush-deep)"
+      : delta < -5
+        ? "var(--blue-deep)"
+        : "var(--foreground-muted)";
+  return (
+    <div className="text-[11px] tracking-tight text-foreground-faint">
+      Day {dayOfMonth} of {daysInMonth} — {calendarPct}% of the month gone,{" "}
+      {spentPct}% of income spent.{" "}
+      <span className="font-medium" style={{ color }}>
+        You&apos;re {verdict}.
+      </span>
+    </div>
   );
 }
 
