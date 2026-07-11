@@ -222,8 +222,8 @@ export function RulesClient({
         )}
         {merchantRules.length === 0 ? (
           <Card className="p-6 text-sm text-foreground-faint">
-            None yet — edit a transaction's merchant and leave “apply this name
-            to similar transactions” checked.
+            None yet — edit a transaction&apos;s merchant and leave “apply this
+            name to similar transactions” checked.
           </Card>
         ) : (
           <Card className="divide-y divide-border">

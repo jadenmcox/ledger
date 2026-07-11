@@ -402,7 +402,7 @@ function ScheduleForm({
             <div>
               <Label htmlFor="startDate2">Anchored to</Label>
               <div className="h-11 flex items-center text-xs text-foreground-faint">
-                the start date's weekday
+                the start date&apos;s weekday
               </div>
             </div>
           )}
