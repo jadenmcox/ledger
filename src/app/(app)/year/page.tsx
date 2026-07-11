@@ -1,6 +1,14 @@
 import { db } from "@/db";
-import { accounts, categories, transactions, type Account } from "@/db/schema";
+import {
+  accounts,
+  balanceSnapshots,
+  categories,
+  transactions,
+  type Account,
+} from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { format, subDays } from "date-fns";
+import Link from "next/link";
 import {
   Container,
   PageHeader,
@@ -12,7 +20,7 @@ import {
 import { formatCents, formatCentsCompact } from "@/lib/utils";
 import { createMonthBucketer } from "@/lib/month-bucket";
 import { Heatmap } from "@/components/charts/Heatmap";
-import { YearStackedArea } from "./charts";
+import { NetWorthArea, YearStackedArea } from "./charts";
 import { YearHero } from "./year-hero";
 
 export const dynamic = "force-dynamic";
@@ -35,7 +43,7 @@ const MONTHS = [
 export default async function YearPage() {
   const now = new Date();
 
-  const [allTx, allCats, allAccts] = await Promise.all([
+  const [allTx, allCats, allAccts, allSnaps] = await Promise.all([
     // Full non-transfer history: rent rolls in from the prior December and a
     // refund can credit back to a purchase in any earlier month. Rows whose
     // effective month falls outside this year are dropped below.
@@ -45,6 +53,7 @@ export default async function YearPage() {
       .where(eq(transactions.isTransfer, false)),
     db.select().from(categories),
     db.select().from(accounts),
+    db.select().from(balanceSnapshots),
   ]);
 
   // Shared refund-aware, rent-aware month bucketing (same on every page).
@@ -180,7 +189,17 @@ export default async function YearPage() {
                         key={m}
                         className={`text-right font-normal p-3 ${i === now.getMonth() ? "text-blush-deep" : "text-foreground-faint"}`}
                       >
-                        {m}
+                        {i <= now.getMonth() ? (
+                          <Link
+                            href={`/dashboard?m=${now.getFullYear()}-${String(i + 1).padStart(2, "0")}`}
+                            className="hover:text-foreground hover:underline underline-offset-4"
+                            title={`Open ${m} on the dashboard`}
+                          >
+                            {m}
+                          </Link>
+                        ) : (
+                          m
+                        )}
                       </th>
                     ))}
                     <th className="text-right font-normal p-3 border-l border-border">
@@ -250,8 +269,71 @@ export default async function YearPage() {
         )}
 
         <NetWorth accounts={allAccts} />
+        <NetWorthTrend accounts={allAccts} snaps={allSnaps} />
       </Container>
     </>
+  );
+}
+
+// Net worth over the last 180 days, summed from per-account balance
+// snapshots (Plaid sync and manual balance edits both write them). Each
+// account carries its last-known balance forward; an account with no
+// snapshots yet contributes its current balance as a flat line.
+function NetWorthTrend({
+  accounts: accts,
+  snaps,
+}: {
+  accounts: Account[];
+  snaps: { accountId: number; date: string; balanceCents: number }[];
+}) {
+  const active = accts.filter((a) => a.isActive);
+  if (active.length === 0 || snaps.length === 0) return null;
+
+  const byAccount = new Map<number, { date: string; balanceCents: number }[]>();
+  for (const s of snaps) {
+    if (!byAccount.has(s.accountId)) byAccount.set(s.accountId, []);
+    byAccount.get(s.accountId)!.push(s);
+  }
+  for (const list of byAccount.values()) {
+    list.sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  const days: string[] = [];
+  for (let i = 179; i >= 0; i--) {
+    days.push(format(subDays(new Date(), i), "yyyy-MM-dd"));
+  }
+
+  const data = days.map((d) => {
+    let total = 0;
+    for (const a of active) {
+      const list = byAccount.get(a.id);
+      if (!list || list.length === 0) {
+        total += a.currentBalanceCents;
+        continue;
+      }
+      // Latest snapshot on or before this day; before the first snapshot,
+      // use the first (better a flat lead-in than a fake zero-jump).
+      let bal = list[0].balanceCents;
+      for (const s of list) {
+        if (s.date <= d) bal = s.balanceCents;
+        else break;
+      }
+      total += bal;
+    }
+    return { x: d, networth: total / 100 };
+  });
+
+  return (
+    <div className="mt-12">
+      <SectionHeader
+        title="Net worth "
+        italic="trend"
+        hint="last 180 days, from balance snapshots"
+      />
+      <Card className="p-6 md:p-8">
+        <NetWorthArea data={data} />
+      </Card>
+    </div>
   );
 }
 
