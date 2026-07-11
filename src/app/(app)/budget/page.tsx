@@ -21,8 +21,7 @@ import {
   computeOccurrences,
   expectedMonthlyIncome,
 } from "@/lib/recurring-schedules";
-import { effectiveDate } from "@/lib/effective-month";
-import { refundMatches } from "@/lib/refunds";
+import { createMonthBucketer } from "@/lib/month-bucket";
 import { BudgetClient } from "./client";
 import type { SmartFillRow } from "./smart-fill";
 import type { CategoryTx } from "../categories/client";
@@ -74,24 +73,8 @@ export default async function BudgetPage() {
 
   const catById = new Map(allCategories.map((c) => [c.id, c]));
 
-  const isSpendingCat = (categoryId: number | null): boolean => {
-    if (categoryId == null) return false;
-    const c = catById.get(categoryId);
-    return !!c && c.classification !== "income";
-  };
-  // Refunds credit back to the month of the purchase they offset (matched by
-  // merchant); rent still rolls forward. Narrow full history to this month by
-  // that effective/credit month, matching the dashboard + Year.
-  const refundMatch = refundMatches(allTx, isSpendingCat);
-  const monthKeyOf = (t: (typeof allTx)[number]): Date => {
-    const isRefund =
-      t.amountCents > 0 && !t.reimbursable && isSpendingCat(t.categoryId);
-    const base = isRefund ? refundMatch.get(t.id)?.date ?? t.date : t.date;
-    return effectiveDate(
-      new Date(base),
-      t.categoryId ? catById.get(t.categoryId)?.name : null,
-    );
-  };
+  // Shared refund-aware, rent-aware month bucketing (same on every page).
+  const { monthKeyOf } = createMonthBucketer(allTx, allCategories);
   const txThisMonth = allTx.filter((t) => isSameMonth(monthKeyOf(t), now));
 
   // Income + spend aggregates. Refunds net back out of spend in the month of

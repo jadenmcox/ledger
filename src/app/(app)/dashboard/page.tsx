@@ -26,8 +26,7 @@ import {
   Button,
 } from "@/components/ui";
 import { formatCents, formatCentsCompact, cn } from "@/lib/utils";
-import { effectiveDate } from "@/lib/effective-month";
-import { refundMatches } from "@/lib/refunds";
+import { createMonthBucketer } from "@/lib/month-bucket";
 import {
   startOfMonth,
   endOfMonth,
@@ -112,26 +111,11 @@ export default async function DashboardPage({
   const catById = new Map(allCategories.map((c) => [c.id, c]));
   const acctById = new Map(allAccounts.map((a) => [a.id, a]));
 
-  const isSpendingCat = (categoryId: number | null): boolean => {
-    if (categoryId == null) return false;
-    const c = catById.get(categoryId);
-    return !!c && c.classification !== "income";
-  };
-  // A refund credits back to the purchase it offsets (matched by merchant), so
-  // a return reduces the month — and the vendor line — you actually spent on.
-  const refundMatch = refundMatches(allTx, isSpendingCat);
-
-  // Which month a transaction counts toward. Refunds follow their matched
-  // purchase's month; everything else uses its own effective month (rent roll).
-  const monthKeyOf = (t: (typeof allTx)[number]): Date => {
-    const isRefund =
-      t.amountCents > 0 && !t.reimbursable && isSpendingCat(t.categoryId);
-    const base = isRefund ? refundMatch.get(t.id)?.date ?? t.date : t.date;
-    return effectiveDate(
-      new Date(base),
-      t.categoryId ? catById.get(t.categoryId)?.name : null,
-    );
-  };
+  // Shared refund-aware, rent-aware month bucketing (same on every page).
+  const { monthKeyOf, refundMatch, isSpendingCat } = createMonthBucketer(
+    allTx,
+    allCategories,
+  );
 
   let income = 0;
   // Net spend per category: purchases add, refunds subtract. Clamped below.

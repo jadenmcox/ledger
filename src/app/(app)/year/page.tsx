@@ -10,8 +10,7 @@ import {
   SectionHeader,
 } from "@/components/ui";
 import { formatCents, formatCentsCompact } from "@/lib/utils";
-import { effectiveDate } from "@/lib/effective-month";
-import { refundMatches } from "@/lib/refunds";
+import { createMonthBucketer } from "@/lib/month-bucket";
 import { Heatmap } from "@/components/charts/Heatmap";
 import { YearStackedArea } from "./charts";
 import { YearHero } from "./year-hero";
@@ -48,25 +47,9 @@ export default async function YearPage() {
     db.select().from(accounts),
   ]);
 
-  // A refund credits back to the month of the purchase it offsets (matched by
-  // merchant), netting out of that month's spend rather than counting as spend
-  // on its own date; rent still rolls forward.
+  // Shared refund-aware, rent-aware month bucketing (same on every page).
   const catById = new Map(allCats.map((c) => [c.id, c]));
-  const isSpendingCat = (categoryId: number | null): boolean => {
-    if (categoryId == null) return false;
-    const c = catById.get(categoryId);
-    return !!c && c.classification !== "income";
-  };
-  const refundMatch = refundMatches(allTx, isSpendingCat);
-  const monthKeyOf = (t: (typeof allTx)[number]): Date => {
-    const isRefund =
-      t.amountCents > 0 && !t.reimbursable && isSpendingCat(t.categoryId);
-    const base = isRefund ? refundMatch.get(t.id)?.date ?? t.date : t.date;
-    return effectiveDate(
-      new Date(base),
-      t.categoryId ? catById.get(t.categoryId)?.name : null,
-    );
-  };
+  const { monthKeyOf } = createMonthBucketer(allTx, allCats);
 
   // Net grid: purchases add, refunds subtract, per category × month.
   const grid = new Map<number, number[]>();
