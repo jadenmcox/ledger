@@ -1,19 +1,28 @@
 import { db } from "@/db";
-import { accounts, categories, transactions } from "@/db/schema";
+import { accounts, categories, imports, transactions } from "@/db/schema";
 import { Container, PageHeader, EmptyState, Button } from "@/components/ui";
 import { ImportClient } from "./client";
-import { eq, count } from "drizzle-orm";
+import { desc, eq, count } from "drizzle-orm";
 import Link from "next/link";
 import { ImportHero } from "./import-hero";
+import { RecentImports } from "./recent-imports";
 
 export const dynamic = "force-dynamic";
 
 export default async function ImportPage() {
-  const [active, [{ txCount }], [{ catCount }]] = await Promise.all([
-    db.select().from(accounts).where(eq(accounts.isActive, true)),
-    db.select({ txCount: count() }).from(transactions),
-    db.select({ catCount: count() }).from(categories),
-  ]);
+  const [active, [{ txCount }], [{ catCount }], recentImports] =
+    await Promise.all([
+      db.select().from(accounts).where(eq(accounts.isActive, true)),
+      db.select({ txCount: count() }).from(transactions),
+      db.select({ catCount: count() }).from(categories),
+      db
+        .select()
+        .from(imports)
+        .orderBy(desc(imports.importedAt))
+        .limit(10),
+    ]);
+
+  const acctNameById = new Map(active.map((a) => [a.id, a.name]));
 
   return (
     <>
@@ -42,7 +51,20 @@ export default async function ImportPage() {
             }
           />
         ) : (
-          <ImportClient accounts={active} />
+          <>
+            <ImportClient accounts={active} />
+            <RecentImports
+              batches={recentImports.map((b) => ({
+                id: b.id,
+                filename: b.filename,
+                accountName: b.accountId
+                  ? acctNameById.get(b.accountId) ?? null
+                  : null,
+                rowCount: b.rowCount,
+                importedAt: b.importedAt.toISOString(),
+              }))}
+            />
+          </>
         )}
       </Container>
     </>
