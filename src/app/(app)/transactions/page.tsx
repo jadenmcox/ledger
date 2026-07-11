@@ -5,14 +5,34 @@ import { Container, PageHeader, EmptyState, Button } from "@/components/ui";
 import { TransactionsClient, TransactionsHeaderActions } from "./client";
 import Link from "next/link";
 import { TransactionsHero } from "./transactions-hero";
-import { format } from "date-fns";
-import { monthConsumption } from "@/lib/month-bucket";
+import { format, isSameDay } from "date-fns";
+import { createMonthBucketer, monthConsumption } from "@/lib/month-bucket";
 
 export const dynamic = "force-dynamic";
 
-export default async function TransactionsPage() {
-  const [allTx, heroTx, allCats, allAccts] = await Promise.all([
-    db.select().from(transactions).orderBy(desc(transactions.date)).limit(500),
+// Page size for the list; ?n= loads more in steps of this.
+const PAGE = 500;
+const MAX_N = 5000;
+
+export default async function TransactionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ n?: string }>;
+}) {
+  const sp = await searchParams;
+  const requested = Number(sp.n);
+  const limit =
+    Number.isFinite(requested) && requested > PAGE
+      ? Math.min(Math.floor(requested), MAX_N)
+      : PAGE;
+
+  const [txPlusOne, heroTx, allCats, allAccts] = await Promise.all([
+    // One extra row tells us whether a "Load more" is worth showing.
+    db
+      .select()
+      .from(transactions)
+      .orderBy(desc(transactions.date))
+      .limit(limit + 1),
     // Slim full history for the hero's "spent this month": the shared
     // month-bucketer needs every row so refunds credit the right month and
     // late-month rent rolls forward, exactly like the dashboard headline.
@@ -33,6 +53,8 @@ export default async function TransactionsPage() {
     db.select().from(accounts),
   ]);
 
+  const hasMore = txPlusOne.length > limit;
+  const allTx = hasMore ? txPlusOne.slice(0, limit) : txPlusOne;
   const hasAccounts = allAccts.length > 0;
 
   const now = new Date();
@@ -40,6 +62,19 @@ export default async function TransactionsPage() {
   const uncategorized = allTx.filter(
     (t) => !t.categoryId && !t.isTransfer && t.amountCents < 0,
   ).length;
+
+  // Refund provenance for the visible rows: a matched refund gets a small
+  // "credits <merchant> · <date>" note so the netting isn't invisible magic.
+  const { refundMatch } = createMonthBucketer(heroTx, allCats);
+  const refundNotes: Record<number, string> = {};
+  for (const t of allTx) {
+    const m = refundMatch.get(t.id);
+    if (!m) continue;
+    const own = (t.merchantClean || t.merchantRaw).trim();
+    const unmatched = m.merchant === own && isSameDay(new Date(m.date), new Date(t.date));
+    if (unmatched) continue;
+    refundNotes[t.id] = `credits ${m.merchant} · ${format(new Date(m.date), "MMM d")}`;
+  }
 
   return (
     <>
@@ -78,6 +113,9 @@ export default async function TransactionsPage() {
             initial={allTx}
             categories={allCats}
             accounts={allAccts}
+            refundNotes={refundNotes}
+            hasMore={hasMore}
+            nextN={limit + PAGE}
           />
         )}
       </Container>

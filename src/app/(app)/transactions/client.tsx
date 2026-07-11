@@ -18,8 +18,9 @@ import {
   updateTransaction,
   createManualTransaction,
   recategorizeAll,
+  bulkSetCategory,
 } from "./actions";
-import { Search, Zap, ArrowRightLeft, Trash2, Pencil, Plus, Upload, Sparkles, Receipt } from "lucide-react";
+import { Search, Zap, ArrowRightLeft, Trash2, Pencil, Plus, Upload, Sparkles, Receipt, Tag } from "lucide-react";
 
 function guessPatternFromRaw(raw: string): string {
   const cleaned = raw
@@ -58,7 +59,13 @@ export function TransactionsHeaderActions() {
   );
 }
 
-function RecategorizeBanner({ count }: { count: number }) {
+function RecategorizeBanner({
+  count,
+  onTriage,
+}: {
+  count: number;
+  onTriage: () => void;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [done, setDone] = useState<number | null>(null);
@@ -112,6 +119,9 @@ function RecategorizeBanner({ count }: { count: number }) {
       >
         {pending ? "Working…" : done !== null ? "Run again" : "Recategorize"}
       </Button>
+      <Button size="sm" variant="outline" onClick={onTriage}>
+        One by one
+      </Button>
     </Card>
   );
 }
@@ -120,16 +130,27 @@ export function TransactionsClient({
   initial,
   categories,
   accounts,
+  refundNotes = {},
+  hasMore = false,
+  nextN = 1000,
 }: {
   initial: Transaction[];
   categories: Category[];
   accounts: Account[];
+  refundNotes?: Record<number, string>;
+  hasMore?: boolean;
+  nextN?: number;
 }) {
   const [search, setSearch] = useState("");
   const [accountFilter, setAccountFilter] = useState<number | "all">("all");
   const [catFilter, setCatFilter] = useState<number | "all" | "uncategorized">(
     "all",
   );
+  const [monthFilter, setMonthFilter] = useState<string>("all");
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [selectMode, setSelectMode] = useState(false);
+  const [bulkPicking, setBulkPicking] = useState(false);
+  const [triaging, setTriaging] = useState(false);
   const [adding, setAdding] = useState(false);
   const searchParams = useSearchParams();
   useEffect(() => {
@@ -150,10 +171,18 @@ export function TransactionsClient({
     [accounts],
   );
 
-  const uncategorizedCount = useMemo(
-    () => initial.filter((t) => !t.categoryId && !t.isTransfer).length,
+  const uncategorizedTx = useMemo(
+    () => initial.filter((t) => !t.categoryId && !t.isTransfer),
     [initial],
   );
+  const uncategorizedCount = uncategorizedTx.length;
+
+  // Months present in the loaded window, newest first, for the month filter.
+  const months = useMemo(() => {
+    const seen = new Set<string>();
+    for (const t of initial) seen.add(format(new Date(t.date), "yyyy-MM"));
+    return [...seen].sort().reverse();
+  }, [initial]);
 
   const filtered = initial.filter((t) => {
     if (accountFilter !== "all" && t.accountId !== accountFilter) return false;
@@ -163,12 +192,32 @@ export function TransactionsClient({
       t.categoryId !== catFilter
     )
       return false;
+    if (
+      monthFilter !== "all" &&
+      format(new Date(t.date), "yyyy-MM") !== monthFilter
+    )
+      return false;
     if (search) {
       const q = search.toLowerCase();
-      if (!t.merchantRaw.toLowerCase().includes(q)) return false;
+      // Search what you see: the cleaned-up name — plus the raw descriptor
+      // and your notes.
+      const hay = `${t.merchantClean ?? ""} ${t.merchantRaw} ${t.notes ?? ""}`;
+      if (!hay.toLowerCase().includes(q)) return false;
     }
     return true;
   });
+
+  const toggleSelected = (id: number) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelected(new Set());
+  };
 
   // Group by day
   const groups: Record<string, Transaction[]> = {};
@@ -180,7 +229,10 @@ export function TransactionsClient({
   return (
     <div className="space-y-6">
       {uncategorizedCount > 0 && (
-        <RecategorizeBanner count={uncategorizedCount} />
+        <RecategorizeBanner
+          count={uncategorizedCount}
+          onTriage={() => setTriaging(true)}
+        />
       )}
       <Card className="p-3 md:p-5 sticky top-0 md:top-3 z-10">
         <div className="flex flex-col md:flex-row gap-3 md:gap-4 md:items-center">
@@ -192,11 +244,23 @@ export function TransactionsClient({
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search merchant..."
+              placeholder="Search merchant or notes..."
               className="bg-transparent border-none outline-none text-sm flex-1 min-w-0 placeholder:text-foreground-faint"
             />
           </div>
-          <div className="flex gap-2 md:gap-3 min-w-0">
+          <div className="flex gap-2 md:gap-3 min-w-0 flex-wrap">
+            <select
+              value={monthFilter}
+              onChange={(e) => setMonthFilter(e.target.value)}
+              className="h-9 flex-1 min-w-0 md:flex-initial bg-surface-2 border border-border-strong rounded-md px-2 md:px-3 text-xs"
+            >
+              <option value="all">All months</option>
+              {months.map((m) => (
+                <option key={m} value={m}>
+                  {format(new Date(m + "-01T00:00:00"), "MMMM yyyy")}
+                </option>
+              ))}
+            </select>
             <select
               value={accountFilter}
               onChange={(e) =>
@@ -231,6 +295,17 @@ export function TransactionsClient({
                 </option>
               ))}
             </select>
+            <button
+              onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+              className={cn(
+                "h-9 px-3 rounded-md border text-xs tracking-tight transition-colors shrink-0",
+                selectMode
+                  ? "border-blush bg-blush-tint text-blush-deep font-medium"
+                  : "border-border-strong bg-surface-2 text-foreground-muted hover:text-foreground",
+              )}
+            >
+              {selectMode ? "Done" : "Select"}
+            </button>
           </div>
         </div>
       </Card>
@@ -261,6 +336,10 @@ export function TransactionsClient({
                   cat={t.categoryId ? catById.get(t.categoryId) : undefined}
                   acct={acctById.get(t.accountId)}
                   categories={categories}
+                  refundNote={refundNotes[t.id]}
+                  selectMode={selectMode}
+                  isSelected={selected.has(t.id)}
+                  onToggleSelect={() => toggleSelected(t.id)}
                 />
               ))}
             </Card>
@@ -272,6 +351,53 @@ export function TransactionsClient({
         <div className="text-foreground-faint text-sm text-center py-12">
           No transactions match these filters.
         </div>
+      )}
+
+      {hasMore && (
+        <div className="flex justify-center pt-2">
+          <Link href={`/transactions?n=${nextN}`}>
+            <Button variant="outline" size="sm">
+              Load older transactions
+            </Button>
+          </Link>
+        </div>
+      )}
+
+      {selectMode && selected.size > 0 && (
+        <div className="fixed bottom-20 md:bottom-6 inset-x-4 z-40 flex justify-center">
+          <Card className="px-4 py-3 flex items-center gap-4 shadow-[0_12px_36px_-12px] shadow-foreground/25">
+            <span className="text-sm tracking-tight">
+              <span className="font-medium">{selected.size}</span> selected
+            </span>
+            <Button size="sm" variant="primary" onClick={() => setBulkPicking(true)}>
+              Categorize
+            </Button>
+            <Button size="sm" variant="ghost" onClick={exitSelectMode}>
+              Cancel
+            </Button>
+          </Card>
+        </div>
+      )}
+
+      {bulkPicking && (
+        <BulkCategorySheet
+          count={selected.size}
+          categories={categories}
+          onDone={() => {
+            setBulkPicking(false);
+            exitSelectMode();
+          }}
+          onClose={() => setBulkPicking(false)}
+          ids={[...selected]}
+        />
+      )}
+
+      {triaging && (
+        <TriageSheet
+          txs={uncategorizedTx}
+          categories={categories}
+          onClose={() => setTriaging(false)}
+        />
       )}
 
       {adding && (
@@ -424,14 +550,23 @@ function Row({
   cat,
   acct,
   categories,
+  refundNote,
+  selectMode = false,
+  isSelected = false,
+  onToggleSelect,
 }: {
   tx: Transaction;
   cat: Category | undefined;
   acct: Account | undefined;
   categories: Category[];
+  refundNote?: string;
+  selectMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: () => void;
 }) {
   const [picking, setPicking] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
   const [, startTransition] = useTransition();
 
   const color = cat?.color ?? "var(--foreground-faint)";
@@ -440,8 +575,29 @@ function Row({
       className={cn(
         "relative pl-4 md:pl-5 pr-4 md:pr-5 py-3.5 flex items-center gap-3 md:gap-3.5 group",
         tx.isTransfer && "opacity-50",
+        selectMode && "cursor-pointer",
+        isSelected && "bg-blush-tint/30",
       )}
+      onClick={() => {
+        if (selectMode) {
+          onToggleSelect?.();
+          return;
+        }
+        // Desktop has hover actions; on touch screens the row itself opens
+        // the action sheet (there is no hover).
+        if (window.matchMedia("(min-width: 768px)").matches) return;
+        setActionsOpen(true);
+      }}
     >
+      {selectMode && (
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={() => onToggleSelect?.()}
+          onClick={(e) => e.stopPropagation()}
+          className="accent-blush-deep size-4 shrink-0"
+        />
+      )}
       <CategoryGlyph icon={cat?.icon} color={color} size={36} />
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2">
@@ -453,7 +609,10 @@ function Row({
         </div>
         <div className="flex items-baseline gap-2 mt-1 md:mt-0.5">
           <button
-            onClick={() => setPicking(true)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setPicking(true);
+            }}
             className="text-[11px] text-foreground-faint hover:text-blush-deep transition-colors tracking-tight"
           >
             {cat?.name ?? "— uncategorized —"}
@@ -461,6 +620,11 @@ function Row({
           {acct && (
             <span className="text-[10px] text-foreground-faint truncate">
               · {acct.name}
+            </span>
+          )}
+          {refundNote && (
+            <span className="text-[10px] text-blue-deep truncate shrink-0">
+              · {refundNote}
             </span>
           )}
         </div>
@@ -522,22 +686,141 @@ function Row({
         </button>
       </div>
 
-      {picking && (
-        <CategoryPicker
-          tx={tx}
-          categories={categories}
-          onClose={() => setPicking(false)}
-        />
-      )}
-
-      {editing && (
-        <EditTxModal
-          tx={tx}
-          categories={categories}
-          onClose={() => setEditing(false)}
-        />
+      {(picking || editing || actionsOpen) && (
+        // The row itself is tappable (opens the action sheet on mobile), and
+        // these dialogs are its DOM children — keep their clicks from
+        // bubbling back up and re-opening the sheet.
+        <div onClick={(e) => e.stopPropagation()}>
+          {picking && (
+            <CategoryPicker
+              tx={tx}
+              categories={categories}
+              onClose={() => setPicking(false)}
+            />
+          )}
+          {editing && (
+            <EditTxModal
+              tx={tx}
+              categories={categories}
+              onClose={() => setEditing(false)}
+            />
+          )}
+          {actionsOpen && (
+            <MobileActionsSheet
+              tx={tx}
+              cat={cat}
+              onClose={() => setActionsOpen(false)}
+              onEdit={() => {
+                setActionsOpen(false);
+                setEditing(true);
+              }}
+              onPick={() => {
+                setActionsOpen(false);
+                setPicking(true);
+              }}
+            />
+          )}
+        </div>
       )}
     </div>
+  );
+}
+
+// Touch-screen stand-in for the desktop hover buttons: tap a row, act on it.
+function MobileActionsSheet({
+  tx,
+  cat,
+  onClose,
+  onEdit,
+  onPick,
+}: {
+  tx: Transaction;
+  cat: Category | undefined;
+  onClose: () => void;
+  onEdit: () => void;
+  onPick: () => void;
+}) {
+  const [, startTransition] = useTransition();
+  const item = (
+    icon: React.ReactNode,
+    label: string,
+    onClick: () => void,
+    danger = false,
+  ) => (
+    <button
+      onClick={onClick}
+      className={cn(
+        "w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm text-left hover:bg-surface-2 transition-colors",
+        danger ? "text-blush-deep" : "text-foreground",
+      )}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+  return (
+    <Sheet open onClose={onClose}>
+      <Label>Transaction</Label>
+      <div className="flex items-baseline justify-between gap-3 mt-1 mb-4">
+        <h3 className="serif text-xl truncate">
+          {tx.merchantClean || tx.merchantRaw}
+        </h3>
+        <span className="mono tabular text-sm shrink-0">
+          {formatCents(tx.amountCents, { signed: tx.amountCents > 0 })}
+        </span>
+      </div>
+      <div className="space-y-0.5">
+        {item(
+          <Pencil className="size-4 text-foreground-faint" strokeWidth={1.5} />,
+          "Edit details",
+          onEdit,
+        )}
+        {item(
+          <Tag className="size-4 text-foreground-faint" strokeWidth={1.5} />,
+          cat ? `Category: ${cat.name}` : "Give it a category",
+          onPick,
+        )}
+        {item(
+          <ArrowRightLeft
+            className={cn(
+              "size-4",
+              tx.isTransfer ? "text-blush-deep" : "text-foreground-faint",
+            )}
+            strokeWidth={1.5}
+          />,
+          tx.isTransfer ? "Not a transfer" : "Mark as transfer",
+          () => {
+            startTransition(() => setIsTransfer(tx.id, !tx.isTransfer));
+            onClose();
+          },
+        )}
+        {item(
+          <Receipt
+            className={cn(
+              "size-4",
+              tx.reimbursable ? "text-blue-deep" : "text-foreground-faint",
+            )}
+            strokeWidth={1.5}
+          />,
+          tx.reimbursable ? "Not reimbursable" : "Reimbursable",
+          () => {
+            startTransition(() => setReimbursable(tx.id, !tx.reimbursable));
+            onClose();
+          },
+        )}
+        {item(
+          <Trash2 className="size-4" strokeWidth={1.5} />,
+          "Delete",
+          () => {
+            if (confirm("Delete this transaction?")) {
+              startTransition(() => deleteTransaction(tx.id));
+              onClose();
+            }
+          },
+          true,
+        )}
+      </div>
+    </Sheet>
   );
 }
 
@@ -700,6 +983,187 @@ function EditTxModal({
               </Button>
             </div>
           </form>
+    </Sheet>
+  );
+}
+
+// Pick one category for every selected transaction.
+function BulkCategorySheet({
+  count,
+  ids,
+  categories,
+  onClose,
+  onDone,
+}: {
+  count: number;
+  ids: number[];
+  categories: Category[];
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const router = useRouter();
+  const [q, setQ] = useState("");
+  const [pending, startTransition] = useTransition();
+  const results = categories.filter((c) =>
+    c.name.toLowerCase().includes(q.toLowerCase()),
+  );
+  return (
+    <Sheet open onClose={onClose}>
+      <Label>Bulk categorize</Label>
+      <h3 className="serif text-xl mt-1 mb-4">
+        {count} {count === 1 ? "transaction" : "transactions"}
+      </h3>
+      <Input
+        autoFocus
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Find a category..."
+      />
+      <div className="max-h-72 overflow-y-auto mt-4 -mx-2">
+        {results.map((c) => (
+          <button
+            key={c.id}
+            disabled={pending}
+            onClick={() =>
+              startTransition(async () => {
+                await bulkSetCategory(ids, c.id);
+                router.refresh();
+                onDone();
+              })
+            }
+            className="w-full text-left px-3 py-2 hover:bg-surface-2 rounded-md flex items-center gap-3"
+          >
+            <CategoryGlyph icon={c.icon} color={c.color} size={28} />
+            <span className="flex-1 text-sm tracking-tight">{c.name}</span>
+            <Pill tone={c.classification as "need" | "want" | "savings" | "income"}>
+              {c.classification}
+            </Pill>
+          </button>
+        ))}
+      </div>
+      <div className="flex justify-end gap-2 mt-5">
+        <Button variant="ghost" onClick={onClose}>
+          Cancel
+        </Button>
+      </div>
+    </Sheet>
+  );
+}
+
+// Step through every uncategorized transaction, one decision at a time.
+function TriageSheet({
+  txs,
+  categories,
+  onClose,
+}: {
+  txs: Transaction[];
+  categories: Category[];
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const [index, setIndex] = useState(0);
+  const [q, setQ] = useState("");
+  const [makingRule, setMakingRule] = useState(true);
+  const [pending, startTransition] = useTransition();
+
+  const done = index >= txs.length;
+  const tx = txs[index];
+  const results = categories.filter((c) =>
+    c.name.toLowerCase().includes(q.toLowerCase()),
+  );
+
+  const advance = () => {
+    setQ("");
+    if (index + 1 >= txs.length) {
+      router.refresh();
+    }
+    setIndex((i) => i + 1);
+  };
+
+  return (
+    <Sheet open onClose={() => { router.refresh(); onClose(); }}>
+      {done ? (
+        <div className="py-10 text-center">
+          <h3 className="serif text-2xl mb-2">All sorted.</h3>
+          <p className="text-sm text-foreground-muted mb-6">
+            Every uncategorized transaction has a bucket now.
+          </p>
+          <Button variant="primary" onClick={() => { router.refresh(); onClose(); }}>
+            Done
+          </Button>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-baseline justify-between gap-3">
+            <Label>Triage</Label>
+            <span className="mono tabular text-[11px] text-foreground-faint">
+              {index + 1} / {txs.length}
+            </span>
+          </div>
+          <h3 className="serif text-xl mt-1 truncate">
+            {tx.merchantClean || tx.merchantRaw}
+          </h3>
+          <div className="text-foreground-faint text-xs mb-4 mono tabular">
+            {formatCents(tx.amountCents, { signed: tx.amountCents > 0 })} ·{" "}
+            {format(new Date(tx.date), "EEE, MMM d")}
+          </div>
+          <Input
+            autoFocus
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Find a category..."
+          />
+          <div className="max-h-56 overflow-y-auto mt-3 -mx-2">
+            {results.map((c) => (
+              <button
+                key={c.id}
+                disabled={pending}
+                onClick={() =>
+                  startTransition(async () => {
+                    if (makingRule) {
+                      await makeRule(tx.merchantRaw, c.id, true, {});
+                    } else {
+                      await setCategory(tx.id, c.id);
+                    }
+                    advance();
+                  })
+                }
+                className="w-full text-left px-3 py-2 hover:bg-surface-2 rounded-md flex items-center gap-3"
+              >
+                <CategoryGlyph icon={c.icon} color={c.color} size={28} />
+                <span className="flex-1 text-sm tracking-tight">{c.name}</span>
+                <Pill tone={c.classification as "need" | "want" | "savings" | "income"}>
+                  {c.classification}
+                </Pill>
+              </button>
+            ))}
+          </div>
+          <div className="hairline my-4" />
+          <label className="flex items-center gap-3 text-xs text-foreground-muted cursor-pointer">
+            <input
+              type="checkbox"
+              checked={makingRule}
+              onChange={(e) => setMakingRule(e.target.checked)}
+              className="accent-blush-deep"
+            />
+            <Zap className="size-3.5 text-blush-deep" strokeWidth={1.5} />
+            <span>
+              Make it a rule for{" "}
+              <span className="mono text-foreground">
+                {tx.merchantRaw.slice(0, 24)}
+              </span>
+            </span>
+          </label>
+          <div className="flex justify-between gap-2 mt-5">
+            <Button variant="ghost" onClick={() => { router.refresh(); onClose(); }}>
+              Stop
+            </Button>
+            <Button variant="outline" onClick={advance} disabled={pending}>
+              Skip
+            </Button>
+          </div>
+        </>
+      )}
     </Sheet>
   );
 }
