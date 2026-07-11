@@ -68,7 +68,7 @@ const FRAMEWORKS: {
   },
 ];
 
-const classificationOrder: Classification[] = ["income", "need", "want", "savings"];
+const editorOrder: Classification[] = ["need", "want", "savings"];
 const classificationLabel: Record<Classification, string> = {
   income: "Income",
   need: "Needs",
@@ -94,6 +94,8 @@ export function BudgetClient({
   incomeOverride,
   paycheckCount,
   toAllocate,
+  goalsMonthlyTarget = 0,
+  savingsLimitTotal = 0,
   upcomingTotal,
   upcomingList,
   dayOfMonth,
@@ -112,6 +114,8 @@ export function BudgetClient({
   incomeOverride: number | null;
   paycheckCount: number;
   toAllocate: number;
+  goalsMonthlyTarget?: number;
+  savingsLimitTotal?: number;
   spend: number;
   spendByClassification: { need: number; want: number; savings: number };
   totalLimit: number;
@@ -127,6 +131,7 @@ export function BudgetClient({
 }) {
   const [selectedFramework, setSelectedFramework] =
     useState<BudgetFramework>(framework);
+  const [frameworkOpen, setFrameworkOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   // Which category row in the "Every limit" list is expanded to show its tx.
   const [expanded, setExpanded] = useState<number | null>(null);
@@ -369,6 +374,23 @@ export function BudgetClient({
               −{formatCents(totalLimit)}
             </span>
           </div>
+          {/* Are the savings goals actually funded by the plan? */}
+          {goalsMonthlyTarget > 0 && (
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-foreground-muted">
+                Savings goals want
+              </span>
+              <span className="mono tabular flex items-center gap-2.5 text-foreground-muted">
+                {savingsLimitTotal < goalsMonthlyTarget && (
+                  <span className="text-[11px] text-peach-deep">
+                    only {formatCentsCompact(savingsLimitTotal)} assigned to
+                    savings limits
+                  </span>
+                )}
+                {formatCents(goalsMonthlyTarget)}/mo
+              </span>
+            </div>
+          )}
         </div>
       </Card>
 
@@ -430,44 +452,69 @@ export function BudgetClient({
         </div>
       </div>
 
-      {/* FRAMEWORK PICKER */}
+      {/* FRAMEWORK — a set-once choice, so it rests as a single line until
+          you actually want to change it. */}
       <div>
-        <SectionHeader
-          title="Framework"
-          hint="how you decide what to allocate"
-        />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {FRAMEWORKS.map((f) => {
-            const active = selectedFramework === f.id;
-            return (
-              <button
-                key={f.id}
-                onClick={() => onPickFramework(f.id)}
-                disabled={pending}
-                className={`text-left rounded-2xl border p-5 transition-colors ${
-                  active
-                    ? "border-blush bg-blush-tint/40"
-                    : "border-border bg-surface hover:border-border-strong"
-                }`}
-              >
-                <div className="flex items-center gap-2 mb-1.5">
-                  <span className="text-sm font-medium tracking-tight">
-                    {f.label}
-                  </span>
-                  {active && (
-                    <span className="ml-auto inline-flex items-center justify-center size-5 rounded-full bg-blush-deep text-surface">
-                      <Check className="size-3" strokeWidth={2.5} />
-                    </span>
-                  )}
-                </div>
-                <p className="text-[12px] text-foreground-muted leading-relaxed">
-                  {f.blurb}
-                </p>
-              </button>
-            );
-          })}
-        </div>
-
+        {frameworkOpen ? (
+          <>
+            <SectionHeader
+              title="Framework"
+              hint="how you decide what to allocate"
+            />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {FRAMEWORKS.map((f) => {
+                const active = selectedFramework === f.id;
+                return (
+                  <button
+                    key={f.id}
+                    onClick={() => {
+                      onPickFramework(f.id);
+                      setFrameworkOpen(false);
+                    }}
+                    disabled={pending}
+                    className={`text-left rounded-2xl border p-5 transition-colors ${
+                      active
+                        ? "border-blush bg-blush-tint/40"
+                        : "border-border bg-surface hover:border-border-strong"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="text-sm font-medium tracking-tight">
+                        {f.label}
+                      </span>
+                      {active && (
+                        <span className="ml-auto inline-flex items-center justify-center size-5 rounded-full bg-blush-deep text-surface">
+                          <Check className="size-3" strokeWidth={2.5} />
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[12px] text-foreground-muted leading-relaxed">
+                      {f.blurb}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <Card className="px-5 py-3.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            <span className="text-[10px] uppercase tracking-[0.22em] text-foreground-faint">
+              Framework
+            </span>
+            <span className="text-sm font-medium tracking-tight">
+              {FRAMEWORKS.find((f) => f.id === selectedFramework)?.label}
+            </span>
+            <span className="text-[11px] text-foreground-faint hidden md:inline">
+              {FRAMEWORKS.find((f) => f.id === selectedFramework)?.blurb}
+            </span>
+            <button
+              onClick={() => setFrameworkOpen(true)}
+              className="ml-auto text-xs text-foreground-muted hover:text-foreground tracking-tight"
+            >
+              change
+            </button>
+          </Card>
+        )}
       </div>
 
       {/* FORECASTING */}
@@ -597,7 +644,10 @@ export function BudgetClient({
           disabled={pending}
         />
         <div className="space-y-6">
-          {classificationOrder.map((cls) => {
+          {/* Income categories carry no meaningful "limit" — the expected
+              income figure above is the planning number — so the editor only
+              shows spending classes. */}
+          {editorOrder.map((cls) => {
             const rows = byClass[cls];
             if (rows.length === 0) return null;
             const totalLimit = rows.reduce(

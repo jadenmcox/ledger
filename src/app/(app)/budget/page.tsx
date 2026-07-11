@@ -3,6 +3,7 @@ import {
   budgetSettings,
   categories,
   recurringSchedules,
+  savingsGoals,
   transactions,
 } from "@/db/schema";
 import type { Classification } from "@/db/schema";
@@ -38,7 +39,7 @@ export default async function BudgetPage() {
   const histStart = startOfMonth(subMonths(now, 6));
   const histEnd = endOfMonth(subMonths(now, 1));
 
-  const [allCategories, allTx, histTx, schedules, settingsRows] =
+  const [allCategories, allTx, histTx, schedules, settingsRows, goals] =
     await Promise.all([
       db.select().from(categories),
       // Full non-transfer history: a refund can credit back to a purchase in
@@ -67,6 +68,10 @@ export default async function BudgetPage() {
         .from(recurringSchedules)
         .where(eq(recurringSchedules.isActive, true)),
       db.select().from(budgetSettings).limit(1),
+      db
+        .select()
+        .from(savingsGoals)
+        .where(eq(savingsGoals.isArchived, false)),
     ]);
 
   const framework = settingsRows[0]?.framework ?? "custom";
@@ -203,6 +208,20 @@ export default async function BudgetPage() {
   // category limit. Positive => still to allocate; negative => over-allocated.
   const toAllocate = expectedIncome - totalLimit;
 
+  // What the savings goals say should move to savings each month, to compare
+  // against the savings-class limits actually assigned.
+  const goalsMonthlyTarget = goals.reduce(
+    (s, g) => s + g.monthlyTargetCents,
+    0,
+  );
+  const savingsLimitTotal = allCategories.reduce(
+    (s, c) =>
+      c.classification === "savings" && !c.isArchived && c.monthlyLimitCents
+        ? s + c.monthlyLimitCents
+        : s,
+    0,
+  );
+
   const calendarPct = (dayOfMonth / daysInMonth) * 100;
 
   // Plain-data shape for the client component.
@@ -326,6 +345,8 @@ export default async function BudgetPage() {
           incomeOverride={incomeOverride}
           paycheckCount={paycheckCount}
           toAllocate={toAllocate}
+          goalsMonthlyTarget={goalsMonthlyTarget}
+          savingsLimitTotal={savingsLimitTotal}
           spend={spend}
           spendByClassification={spendByClassification}
           totalLimit={totalLimit}
