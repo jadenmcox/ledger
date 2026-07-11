@@ -43,6 +43,13 @@
       "when": 1783596278283,
       "tag": "0005_short_the_twelve",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1783791226233,
+      "tag": "0006_forecast-only",
+      "breakpoints": true
     }
   ]
 }

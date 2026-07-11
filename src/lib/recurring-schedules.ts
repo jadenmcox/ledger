@@ -106,6 +106,9 @@ export async function backfillRecurring(now: Date = new Date()): Promise<{
   let scheduled = 0;
 
   for (const s of active) {
+    // Forecast-only schedules shape expected income and upcoming bills but
+    // never materialize transactions (the real ones arrive via Plaid/CSV).
+    if (s.isForecastOnly) continue;
     const since = s.lastCreatedDate
       ? addDays(parseISO(s.lastCreatedDate), 1)
       : parseISO(s.startDate);
