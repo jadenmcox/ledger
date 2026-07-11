@@ -3,7 +3,6 @@ import {
   accounts,
   budgetSettings,
   categories,
-  recurringSchedules,
   savingsGoals,
   transactions,
   type Category,
@@ -14,6 +13,7 @@ import { CategoryGlyph } from "@/components/category-glyph";
 import {
   computeOccurrences,
   expectedMonthlyIncome,
+  getActiveSchedules,
 } from "@/lib/recurring-schedules";
 import { asc, eq } from "drizzle-orm";
 import type { ReactNode } from "react";
@@ -86,11 +86,13 @@ export default async function DashboardPage({
   // Widen the fetch back through the previous month so late-month rent (paid on
   // or after the 20th, which counts toward *this* month) is available to pull
   // in. The window is then narrowed to this month by effective date below.
+  // Kicked off alongside the rest so a pre-migration prod DB (missing
+  // is_forecast_only) can't 500 this page — see getActiveSchedules.
+  const schedulesPromise = getActiveSchedules();
   const [
     allTx,
     allCategories,
     allAccounts,
-    schedules,
     goals,
     settingsRows,
   ] = await Promise.all([
@@ -103,16 +105,16 @@ export default async function DashboardPage({
       .where(eq(transactions.isTransfer, false)),
     db.select().from(categories),
     db.select().from(accounts),
-    db.select().from(recurringSchedules).where(eq(recurringSchedules.isActive, true)),
     db.select().from(savingsGoals).where(eq(savingsGoals.isArchived, false)).orderBy(asc(savingsGoals.sortOrder), asc(savingsGoals.id)),
     db.select().from(budgetSettings).limit(1),
   ]);
+  const schedules = await schedulesPromise;
 
   const catById = new Map(allCategories.map((c) => [c.id, c]));
   const acctById = new Map(allAccounts.map((a) => [a.id, a]));
 
   // Shared refund-aware, rent-aware month bucketing (same on every page).
-  const { monthKeyOf, refundMatch, isSpendingCat } = createMonthBucketer(
+  const { monthKeyOf, refundMatch } = createMonthBucketer(
     allTx,
     allCategories,
   );

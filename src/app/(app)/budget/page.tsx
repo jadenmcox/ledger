@@ -2,7 +2,6 @@ import { db } from "@/db";
 import {
   budgetSettings,
   categories,
-  recurringSchedules,
   savingsGoals,
   transactions,
 } from "@/db/schema";
@@ -21,6 +20,7 @@ import { isSameMonth } from "date-fns";
 import {
   computeOccurrences,
   expectedMonthlyIncome,
+  getActiveSchedules,
 } from "@/lib/recurring-schedules";
 import { createMonthBucketer } from "@/lib/month-bucket";
 import { BudgetClient } from "./client";
@@ -39,7 +39,10 @@ export default async function BudgetPage() {
   const histStart = startOfMonth(subMonths(now, 6));
   const histEnd = endOfMonth(subMonths(now, 1));
 
-  const [allCategories, allTx, histTx, schedules, settingsRows, goals] =
+  // Kicked off alongside the rest so a pre-migration prod DB (missing
+  // is_forecast_only) can't 500 this page — see getActiveSchedules.
+  const schedulesPromise = getActiveSchedules();
+  const [allCategories, allTx, histTx, settingsRows, goals] =
     await Promise.all([
       db.select().from(categories),
       // Full non-transfer history: a refund can credit back to a purchase in
@@ -63,16 +66,13 @@ export default async function BudgetPage() {
             eq(transactions.isTransfer, false),
           ),
         ),
-      db
-        .select()
-        .from(recurringSchedules)
-        .where(eq(recurringSchedules.isActive, true)),
       db.select().from(budgetSettings).limit(1),
       db
         .select()
         .from(savingsGoals)
         .where(eq(savingsGoals.isArchived, false)),
     ]);
+  const schedules = await schedulesPromise;
 
   const framework = settingsRows[0]?.framework ?? "custom";
 
