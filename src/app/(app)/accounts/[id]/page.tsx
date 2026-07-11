@@ -10,12 +10,12 @@ import {
   Pill,
   Button,
 } from "@/components/ui";
-import { formatCents, formatCentsCompact } from "@/lib/utils";
+import { formatCents } from "@/lib/utils";
 import { format, subDays, startOfDay } from "date-fns";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { AreaChart } from "@/components/charts/AreaChart";
+import { BalanceArea } from "./charts";
 
 export const dynamic = "force-dynamic";
 
@@ -160,23 +160,7 @@ export default async function AccountDetailPage({
 
           <Card className="p-6 md:p-8">
             <SectionHeader title="Balance " italic="trend" hint="last 90 days" />
-            <AreaChart
-              data={series}
-              series={[
-                { key: "balance", name: "Balance", color: lineColor },
-              ]}
-              height={260}
-              formatValue={(v) =>
-                formatCentsCompact(Math.round(v * 100))
-              }
-              formatX={(v) => {
-                const d = new Date(String(v));
-                return d.toLocaleDateString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                });
-              }}
-            />
+            <BalanceArea data={series} color={lineColor} />
           </Card>
 
           <div>
