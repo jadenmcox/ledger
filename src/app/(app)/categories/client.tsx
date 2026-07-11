@@ -250,7 +250,8 @@ function CategoryRow({
           </span>
         </div>
       )}
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+      {/* Always visible on touch screens; hover-revealed on desktop. */}
+      <div className="flex items-center gap-1 md:opacity-0 md:group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
         <button
           onClick={onEdit}
           className="size-8 inline-flex items-center justify-center text-foreground-faint hover:text-foreground rounded-md hover:bg-surface-2"
