@@ -23,6 +23,7 @@ import {
   getActiveSchedules,
 } from "@/lib/recurring-schedules";
 import { createMonthBucketer } from "@/lib/month-bucket";
+import { categoryParts, loadSplitsByTx } from "@/lib/splits";
 import { BudgetClient } from "./client";
 import type { SmartFillRow } from "./smart-fill";
 import type { CategoryTx } from "../categories/client";
@@ -42,7 +43,7 @@ export default async function BudgetPage() {
   // Kicked off alongside the rest so a pre-migration prod DB (missing
   // is_forecast_only) can't 500 this page — see getActiveSchedules.
   const schedulesPromise = getActiveSchedules();
-  const [allCategories, allTx, histTx, settingsRows, goals] =
+  const [allCategories, allTx, histTx, settingsRows, goals, splitsByTx] =
     await Promise.all([
       db.select().from(categories),
       // Full non-transfer history: a refund can credit back to a purchase in
@@ -54,6 +55,7 @@ export default async function BudgetPage() {
         .where(eq(transactions.isTransfer, false)),
       db
         .select({
+          id: transactions.id,
           date: transactions.date,
           amountCents: transactions.amountCents,
           categoryId: transactions.categoryId,
@@ -71,6 +73,7 @@ export default async function BudgetPage() {
         .select()
         .from(savingsGoals)
         .where(eq(savingsGoals.isArchived, false)),
+      loadSplitsByTx(),
     ]);
   const schedules = await schedulesPromise;
 
@@ -93,26 +96,42 @@ export default async function BudgetPage() {
   for (const t of txThisMonth) {
     // Reimbursable charges/paybacks net out — keep them off spend + income.
     if (t.reimbursable) continue;
-    const cat = t.categoryId ? catById.get(t.categoryId) : null;
-    if (cat) {
-      (txByCategory[cat.id] ??= []).push({
+    const parentCat = t.categoryId ? catById.get(t.categoryId) : null;
+    // Income stays whole (splits are spending-only); its own category drives it.
+    if (parentCat?.classification === "income") {
+      (txByCategory[parentCat.id] ??= []).push({
         id: t.id,
         date: t.date instanceof Date ? t.date.toISOString() : String(t.date),
         merchant: t.merchantClean || t.merchantRaw,
         amountCents: t.amountCents,
       });
-    }
-    if (cat?.classification === "income") {
       if (t.amountCents > 0) income += t.amountCents;
       continue;
     }
-    if (t.amountCents === 0) continue;
-    // Purchase adds to spend; a refund (positive) nets back out.
-    const delta = t.amountCents < 0 ? Math.abs(t.amountCents) : -t.amountCents;
-    if (cat) {
-      spendByCategory.set(cat.id, (spendByCategory.get(cat.id) ?? 0) + delta);
-    } else if (delta > 0) {
-      uncategorizedSpend += delta;
+    // Split transactions drill down and spend per category part; unsplit ones
+    // yield a single whole-amount part, so the drill-down still reconciles with
+    // each row's spend total. Purchase adds to spend; a refund nets back out.
+    const merchant = t.merchantClean || t.merchantRaw;
+    const dateStr =
+      t.date instanceof Date ? t.date.toISOString() : String(t.date);
+    for (const part of categoryParts(t, splitsByTx)) {
+      const cat = part.categoryId ? catById.get(part.categoryId) : null;
+      if (cat) {
+        (txByCategory[cat.id] ??= []).push({
+          id: t.id,
+          date: dateStr,
+          merchant,
+          amountCents: part.amountCents,
+        });
+      }
+      if (part.amountCents === 0) continue;
+      const delta =
+        part.amountCents < 0 ? Math.abs(part.amountCents) : -part.amountCents;
+      if (cat) {
+        spendByCategory.set(cat.id, (spendByCategory.get(cat.id) ?? 0) + delta);
+      } else if (delta > 0) {
+        uncategorizedSpend += delta;
+      }
     }
   }
   // A category can't net below zero for the month (more refunded than bought).
@@ -245,13 +264,20 @@ export default async function BudgetPage() {
   const monthsSeen = new Set<string>();
   for (const t of histTx) {
     if (t.amountCents > 0) continue;
-    const c = t.categoryId ? catById.get(t.categoryId) : null;
-    if (!c || c.classification === "income") continue;
-    monthsSeen.add(format(t.date, "yyyy-MM"));
-    histByCategory.set(
-      c.id,
-      (histByCategory.get(c.id) ?? 0) + Math.abs(t.amountCents),
-    );
+    // Fan a split purchase into each category's trailing average, matching how
+    // the current-month spend is attributed.
+    let counted = false;
+    for (const part of categoryParts(t, splitsByTx)) {
+      if (part.amountCents >= 0) continue;
+      const c = part.categoryId ? catById.get(part.categoryId) : null;
+      if (!c || c.classification === "income") continue;
+      histByCategory.set(
+        c.id,
+        (histByCategory.get(c.id) ?? 0) + Math.abs(part.amountCents),
+      );
+      counted = true;
+    }
+    if (counted) monthsSeen.add(format(t.date, "yyyy-MM"));
   }
   // Divide each category's trailing total by how many months actually had
   // activity (capped to the 6-month window). A two-month-old account shouldn't

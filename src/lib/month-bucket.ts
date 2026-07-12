@@ -1,6 +1,7 @@
 import { isSameMonth } from "date-fns";
 import { refundMatches, type RefundTxLike } from "./refunds";
 import { effectiveDate } from "./effective-month";
+import { categoryParts, type SplitPart } from "./splits";
 
 // The category shape the bucketer needs; the full drizzle Category satisfies
 // it structurally.
@@ -44,11 +45,14 @@ export function createMonthBucketer<T extends RefundTxLike>(
 
 // Consumption for one month: needs + wants + uncategorized outflow, refunds
 // netted per category (clamped at zero), savings-class contributions excluded.
-// Matches the dashboard's "Spent this month" headline.
+// Matches the dashboard's "Spent this month" headline. Split transactions fan
+// out into their category parts, so splitting a purchase into a savings-class
+// slice correctly drops that slice out of consumption.
 export function monthConsumption<T extends RefundTxLike>(
   txns: T[],
   categories: BucketCategory[],
   monthOf: Date,
+  splitsByTx: ReadonlyMap<number, readonly SplitPart[]> = new Map(),
 ): number {
   const { monthKeyOf } = createMonthBucketer(txns, categories);
   const catById = new Map(categories.map((c) => [c.id, c]));
@@ -57,13 +61,19 @@ export function monthConsumption<T extends RefundTxLike>(
   for (const t of txns) {
     if (t.reimbursable || t.amountCents === 0) continue;
     if (!isSameMonth(monthKeyOf(t), monthOf)) continue;
-    const cat = t.categoryId ? catById.get(t.categoryId) : null;
-    if (cat?.classification === "income") continue;
-    const delta = t.amountCents < 0 ? Math.abs(t.amountCents) : -t.amountCents;
-    if (cat) {
-      byCategory.set(cat.id, (byCategory.get(cat.id) ?? 0) + delta);
-    } else if (delta > 0) {
-      uncategorized += delta;
+    // Income stays whole (splits are spending-only); its own category drives it.
+    const parentCat = t.categoryId ? catById.get(t.categoryId) : null;
+    if (parentCat?.classification === "income") continue;
+    for (const part of categoryParts(t, splitsByTx)) {
+      const cat = part.categoryId ? catById.get(part.categoryId) : null;
+      if (cat?.classification === "income") continue;
+      const delta =
+        part.amountCents < 0 ? Math.abs(part.amountCents) : -part.amountCents;
+      if (cat) {
+        byCategory.set(cat.id, (byCategory.get(cat.id) ?? 0) + delta);
+      } else if (delta > 0) {
+        uncategorized += delta;
+      }
     }
   }
   let total = uncategorized;

@@ -3,6 +3,7 @@ import { categories, transactions } from "@/db/schema";
 import { asc, and, gte, lte, eq, desc } from "drizzle-orm";
 import { Container, PageHeader } from "@/components/ui";
 import { CategoriesClient, NewCategoryButton, type CategoryTx } from "./client";
+import { categoryParts, loadSplitsByTx } from "@/lib/splits";
 import { startOfMonth, endOfMonth } from "date-fns";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +13,7 @@ export default async function CategoriesPage() {
   const monthStart = startOfMonth(now);
   const monthEnd = endOfMonth(now);
 
-  const [rows, txThisMonth] = await Promise.all([
+  const [rows, txThisMonth, splitsByTx] = await Promise.all([
     db
       .select()
       .from(categories)
@@ -28,6 +29,7 @@ export default async function CategoriesPage() {
         ),
       )
       .orderBy(desc(transactions.date)),
+    loadSplitsByTx(),
   ]);
 
   const catById = new Map(rows.map((c) => [c.id, c]));
@@ -39,19 +41,26 @@ export default async function CategoriesPage() {
   const txByCategory: Record<number, CategoryTx[]> = {};
   for (const t of txThisMonth) {
     if (t.reimbursable) continue;
-    if (!t.categoryId) continue;
-    const c = catById.get(t.categoryId);
-    if (!c) continue;
-    (txByCategory[t.categoryId] ??= []).push({
-      id: t.id,
-      date: t.date instanceof Date ? t.date.toISOString() : String(t.date),
-      merchant: t.merchantClean || t.merchantRaw,
-      amountCents: t.amountCents,
-    });
-    if (c.classification === "income") continue;
-    if (t.amountCents > 0) continue;
-    spendByCategory[t.categoryId] =
-      (spendByCategory[t.categoryId] ?? 0) + Math.abs(t.amountCents);
+    // Split transactions land a portion in each category; unsplit ones yield a
+    // single whole-amount part.
+    const merchant = t.merchantClean || t.merchantRaw;
+    const dateStr =
+      t.date instanceof Date ? t.date.toISOString() : String(t.date);
+    for (const part of categoryParts(t, splitsByTx)) {
+      if (part.categoryId == null) continue;
+      const c = catById.get(part.categoryId);
+      if (!c) continue;
+      (txByCategory[part.categoryId] ??= []).push({
+        id: t.id,
+        date: dateStr,
+        merchant,
+        amountCents: part.amountCents,
+      });
+      if (c.classification === "income") continue;
+      if (part.amountCents > 0) continue;
+      spendByCategory[part.categoryId] =
+        (spendByCategory[part.categoryId] ?? 0) + Math.abs(part.amountCents);
+    }
   }
 
   return (

@@ -19,6 +19,7 @@ import {
 } from "@/components/ui";
 import { formatCents, formatCentsCompact } from "@/lib/utils";
 import { createMonthBucketer } from "@/lib/month-bucket";
+import { categoryParts, loadSplitsByTx } from "@/lib/splits";
 import { Heatmap } from "@/components/charts/Heatmap";
 import { NetWorthArea, YearStackedArea } from "./charts";
 import { YearHero } from "./year-hero";
@@ -43,7 +44,7 @@ const MONTHS = [
 export default async function YearPage() {
   const now = new Date();
 
-  const [allTx, allCats, allAccts, allSnaps] = await Promise.all([
+  const [allTx, allCats, allAccts, allSnaps, splitsByTx] = await Promise.all([
     // Full non-transfer history: rent rolls in from the prior December and a
     // refund can credit back to a purchase in any earlier month. Rows whose
     // effective month falls outside this year are dropped below.
@@ -54,6 +55,7 @@ export default async function YearPage() {
     db.select().from(categories),
     db.select().from(accounts),
     db.select().from(balanceSnapshots),
+    loadSplitsByTx(),
   ]);
 
   // Shared refund-aware, rent-aware month bucketing (same on every page).
@@ -66,20 +68,28 @@ export default async function YearPage() {
   for (const t of allTx) {
     // Reimbursable charges/paybacks wash out — keep them off spend + income.
     if (t.reimbursable) continue;
-    if (!t.categoryId) continue;
-    const cat = catById.get(t.categoryId);
-    if (!cat) continue;
     const eff = monthKeyOf(t);
     if (eff.getFullYear() !== now.getFullYear()) continue;
     const month = eff.getMonth();
-    const arr = grid.get(t.categoryId) ?? Array(12).fill(0);
-    if (cat.classification === "income") {
+    const parentCat = t.categoryId ? catById.get(t.categoryId) : null;
+    // Income stays whole (splits are spending-only); its own category drives it.
+    if (parentCat?.classification === "income") {
+      const arr = grid.get(parentCat.id) ?? Array(12).fill(0);
       arr[month] += t.amountCents;
       totalIncome += t.amountCents;
-    } else {
-      arr[month] += t.amountCents < 0 ? Math.abs(t.amountCents) : -t.amountCents;
+      grid.set(parentCat.id, arr);
+      continue;
     }
-    grid.set(t.categoryId, arr);
+    // Split transactions add each part to its category's cell for this month.
+    for (const part of categoryParts(t, splitsByTx)) {
+      if (part.categoryId == null) continue;
+      const cat = catById.get(part.categoryId);
+      if (!cat || cat.classification === "income") continue;
+      const arr = grid.get(part.categoryId) ?? Array(12).fill(0);
+      arr[month] +=
+        part.amountCents < 0 ? Math.abs(part.amountCents) : -part.amountCents;
+      grid.set(part.categoryId, arr);
+    }
   }
 
   // Clamp each spending cell at zero (a month can't net negative), then derive

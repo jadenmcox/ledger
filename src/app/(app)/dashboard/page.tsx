@@ -27,6 +27,7 @@ import {
 } from "@/components/ui";
 import { formatCents, formatCentsCompact, cn } from "@/lib/utils";
 import { createMonthBucketer } from "@/lib/month-bucket";
+import { categoryParts, loadSplitsByTx } from "@/lib/splits";
 import {
   startOfMonth,
   endOfMonth,
@@ -95,6 +96,7 @@ export default async function DashboardPage({
     allAccounts,
     goals,
     settingsRows,
+    splitsByTx,
   ] = await Promise.all([
     // Full non-transfer history: rent rolls in from the prior month and a refund
     // can credit back to a purchase in any earlier month, so a single-month
@@ -107,6 +109,7 @@ export default async function DashboardPage({
     db.select().from(accounts),
     db.select().from(savingsGoals).where(eq(savingsGoals.isArchived, false)).orderBy(asc(savingsGoals.sortOrder), asc(savingsGoals.id)),
     db.select().from(budgetSettings).limit(1),
+    loadSplitsByTx(),
   ]);
   const schedules = await schedulesPromise;
 
@@ -136,35 +139,42 @@ export default async function DashboardPage({
       else reimbursableReceived += t.amountCents;
       continue;
     }
-    const cat = t.categoryId ? catById.get(t.categoryId) : null;
-    if (cat?.classification === "income") {
+    // Income stays whole (splits are spending-only); its own category drives it.
+    const parentCat = t.categoryId ? catById.get(t.categoryId) : null;
+    if (parentCat?.classification === "income") {
       income += t.amountCents;
       continue;
     }
     if (t.amountCents === 0) continue;
-    // Purchase adds to spend; a refund (positive) nets back out of it.
-    const delta = t.amountCents < 0 ? Math.abs(t.amountCents) : -t.amountCents;
-    if (cat) {
-      spendByCategory.set(cat.id, (spendByCategory.get(cat.id) || 0) + delta);
+    // A refund nets against the vendor of the purchase it offsets (not its own
+    // descriptor), so the by-vendor rollup still sums to the category total.
+    // Merchant + refund status are whole-transaction facts shared by every part.
+    const isRefund = t.amountCents > 0;
+    const merchant = (
+      (isRefund ? refundMatch.get(t.id)?.merchant : null) ||
+      t.merchantClean ||
+      t.merchantRaw ||
+      "—"
+    ).trim();
+    // Split transactions fan out into their category parts; unsplit ones yield a
+    // single whole-amount part. Purchase adds to spend; a refund nets back out.
+    for (const part of categoryParts(t, splitsByTx)) {
+      const cat = part.categoryId ? catById.get(part.categoryId) : null;
+      const delta =
+        part.amountCents < 0 ? Math.abs(part.amountCents) : -part.amountCents;
+      if (cat) {
+        spendByCategory.set(cat.id, (spendByCategory.get(cat.id) || 0) + delta);
 
-      // A refund nets against the vendor of the purchase it offsets (not its own
-      // descriptor), so the by-vendor rollup still sums to the category total.
-      const isRefund = t.amountCents > 0;
-      const merchant = (
-        (isRefund ? refundMatch.get(t.id)?.merchant : null) ||
-        t.merchantClean ||
-        t.merchantRaw ||
-        "—"
-      ).trim();
-      if (!merchantAgg.has(cat.id)) merchantAgg.set(cat.id, new Map());
-      const inner = merchantAgg.get(cat.id)!;
-      const cur = inner.get(merchant) || { total: 0, count: 0 };
-      cur.total += delta;
-      if (!isRefund) cur.count += 1;
-      inner.set(merchant, cur);
-    } else if (delta > 0) {
-      // Uncategorized outflow. (Refunds without a category are left alone.)
-      uncategorizedSpend += delta;
+        if (!merchantAgg.has(cat.id)) merchantAgg.set(cat.id, new Map());
+        const inner = merchantAgg.get(cat.id)!;
+        const cur = inner.get(merchant) || { total: 0, count: 0 };
+        cur.total += delta;
+        if (!isRefund) cur.count += 1;
+        inner.set(merchant, cur);
+      } else if (delta > 0) {
+        // Uncategorized outflow. (Refunds without a category are left alone.)
+        uncategorizedSpend += delta;
+      }
     }
   }
 

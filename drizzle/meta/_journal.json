@@ -50,6 +50,13 @@
       "when": 1783791226233,
       "tag": "0006_forecast-only",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1783825768878,
+      "tag": "0007_fluffy_madame_masque",
+      "breakpoints": true
     }
   ]
 }

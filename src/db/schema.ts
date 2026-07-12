@@ -114,6 +114,29 @@ export const transactions = sqliteTable(
   ],
 );
 
+// Splits a single transaction's amount across multiple categories (a Target run
+// that's part groceries, part household). When a transaction has splits, spend
+// rollups attribute these parts to their categories instead of dumping the whole
+// amount into transactions.categoryId. The parts always sum to the parent's
+// amountCents and share the parent's sign convention (negative = outflow); the
+// parent row stays whole for balances, merchant/refund matching, and the list.
+export const transactionSplits = sqliteTable(
+  "transaction_splits",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    transactionId: integer("transaction_id")
+      .notNull()
+      .references(() => transactions.id, { onDelete: "cascade" }),
+    categoryId: integer("category_id").references(() => categories.id, {
+      onDelete: "set null",
+    }),
+    amountCents: integer("amount_cents").notNull(),
+    note: text("note"),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (t) => [index("transaction_splits_tx_idx").on(t.transactionId)],
+);
+
 export const categoryRules = sqliteTable("category_rules", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   matchType: text("match_type", {
@@ -248,6 +271,8 @@ export type Category = typeof categories.$inferSelect;
 export type NewCategory = typeof categories.$inferInsert;
 export type Transaction = typeof transactions.$inferSelect;
 export type NewTransaction = typeof transactions.$inferInsert;
+export type TransactionSplit = typeof transactionSplits.$inferSelect;
+export type NewTransactionSplit = typeof transactionSplits.$inferInsert;
 export type CategoryRule = typeof categoryRules.$inferSelect;
 export type NewCategoryRule = typeof categoryRules.$inferInsert;
 export type MerchantRule = typeof merchantRules.$inferSelect;
