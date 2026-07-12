@@ -7,6 +7,7 @@ import Link from "next/link";
 import { TransactionsHero } from "./transactions-hero";
 import { format, isSameDay } from "date-fns";
 import { createMonthBucketer, monthConsumption } from "@/lib/month-bucket";
+import { loadSplitsByTx } from "@/lib/splits";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,7 @@ export default async function TransactionsPage({
       ? Math.min(Math.floor(requested), MAX_N)
       : PAGE;
 
-  const [txPlusOne, heroTx, allCats, allAccts] = await Promise.all([
+  const [txPlusOne, heroTx, allCats, allAccts, splitsByTx] = await Promise.all([
     // One extra row tells us whether a "Load more" is worth showing.
     db
       .select()
@@ -51,6 +52,7 @@ export default async function TransactionsPage({
       .where(eq(transactions.isTransfer, false)),
     db.select().from(categories),
     db.select().from(accounts),
+    loadSplitsByTx(),
   ]);
 
   const hasMore = txPlusOne.length > limit;
@@ -58,7 +60,7 @@ export default async function TransactionsPage({
   const hasAccounts = allAccts.length > 0;
 
   const now = new Date();
-  const thisMonthSpend = monthConsumption(heroTx, allCats, now);
+  const thisMonthSpend = monthConsumption(heroTx, allCats, now, splitsByTx);
   const uncategorized = allTx.filter(
     (t) => !t.categoryId && !t.isTransfer && t.amountCents < 0,
   ).length;
@@ -74,6 +76,20 @@ export default async function TransactionsPage({
     const unmatched = m.merchant === own && isSameDay(new Date(m.date), new Date(t.date));
     if (unmatched) continue;
     refundNotes[t.id] = `credits ${m.merchant} · ${format(new Date(m.date), "MMM d")}`;
+  }
+
+  // Plain-object split map for the client: each split transaction's category
+  // parts, so the list can badge it and the split editor can preload.
+  const splits: Record<
+    number,
+    { categoryId: number | null; amountCents: number; note: string | null }[]
+  > = {};
+  for (const [txId, rows] of splitsByTx) {
+    splits[txId] = rows.map((r) => ({
+      categoryId: r.categoryId,
+      amountCents: r.amountCents,
+      note: r.note,
+    }));
   }
 
   return (
@@ -114,6 +130,7 @@ export default async function TransactionsPage({
             categories={allCats}
             accounts={allAccts}
             refundNotes={refundNotes}
+            splits={splits}
             hasMore={hasMore}
             nextN={limit + PAGE}
           />

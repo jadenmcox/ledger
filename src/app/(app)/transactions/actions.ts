@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/db";
-import { transactions } from "@/db/schema";
+import { transactions, transactionSplits } from "@/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import {
@@ -115,6 +115,82 @@ export async function setReimbursable(txId: number, reimbursable: boolean) {
     .where(eq(transactions.id, txId));
   revalidatePath("/transactions");
   revalidatePath("/dashboard");
+}
+
+// Splitting a purchase changes category attribution on every monthly view, so
+// refresh them all (unlike a plain edit, which only touches list + dashboard).
+function revalidateSplitViews() {
+  revalidatePath("/transactions");
+  revalidatePath("/dashboard");
+  revalidatePath("/budget");
+  revalidatePath("/categories");
+  revalidatePath("/year");
+}
+
+type SplitInput = {
+  categoryId: number | null;
+  amountCents: number; // positive magnitude in cents; parent's sign is applied
+  note?: string | null;
+};
+
+// Replace the category splits on a transaction so one purchase (a Target run)
+// counts partly toward groceries and partly toward household. Parts are given
+// as positive magnitudes; the parent's sign is applied so they keep the
+// outflow/inflow convention and must sum to the parent's amount. Fewer than two
+// non-zero parts clears the split (a single category is just a normal
+// categorization). The transaction row itself stays whole.
+export async function saveSplits(txId: number, parts: SplitInput[]) {
+  const [tx] = await db
+    .select()
+    .from(transactions)
+    .where(eq(transactions.id, txId));
+  if (!tx) throw new Error("Transaction not found");
+
+  const clean = parts.filter((p) => Math.round(p.amountCents) !== 0);
+  if (clean.length < 2) {
+    await clearSplits(txId);
+    return;
+  }
+
+  const sign = tx.amountCents < 0 ? -1 : 1;
+  const rows = clean.map((p, i) => ({
+    transactionId: txId,
+    categoryId: p.categoryId,
+    amountCents: sign * Math.abs(Math.round(p.amountCents)),
+    note: p.note?.trim() || null,
+    sortOrder: i,
+  }));
+  const sum = rows.reduce((s, p) => s + p.amountCents, 0);
+  if (sum !== tx.amountCents) {
+    throw new Error(
+      `Splits must sum to the transaction total (${tx.amountCents}¢); got ${sum}¢.`,
+    );
+  }
+
+  // The largest part becomes the parent's headline category so the list and any
+  // split-unaware read still show something sensible; splitting locks the row so
+  // rule re-runs / Plaid re-sync won't overwrite it (mirrors manual categorize).
+  const largest = rows.reduce((a, b) =>
+    Math.abs(b.amountCents) > Math.abs(a.amountCents) ? b : a,
+  );
+
+  await db
+    .delete(transactionSplits)
+    .where(eq(transactionSplits.transactionId, txId));
+  await db.insert(transactionSplits).values(rows);
+  await db
+    .update(transactions)
+    .set({ categoryId: largest.categoryId, categoryLocked: true })
+    .where(eq(transactions.id, txId));
+
+  revalidateSplitViews();
+}
+
+export async function clearSplits(txId: number) {
+  await db
+    .delete(transactionSplits)
+    .where(eq(transactionSplits.transactionId, txId));
+  revalidateSplitViews();
 }
 
 /**

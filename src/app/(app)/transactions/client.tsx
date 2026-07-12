@@ -19,8 +19,17 @@ import {
   createManualTransaction,
   recategorizeAll,
   bulkSetCategory,
+  saveSplits,
+  clearSplits,
 } from "./actions";
-import { Search, Zap, ArrowRightLeft, Trash2, Pencil, Plus, Upload, Sparkles, Receipt, Tag } from "lucide-react";
+import { Search, Zap, ArrowRightLeft, Trash2, Pencil, Plus, Upload, Sparkles, Receipt, Tag, Split, X } from "lucide-react";
+
+// A transaction's category parts, as passed from the server for display.
+export type SplitPartView = {
+  categoryId: number | null;
+  amountCents: number;
+  note: string | null;
+};
 
 function guessPatternFromRaw(raw: string): string {
   const cleaned = raw
@@ -131,6 +140,7 @@ export function TransactionsClient({
   categories,
   accounts,
   refundNotes = {},
+  splits = {},
   hasMore = false,
   nextN = 1000,
 }: {
@@ -138,6 +148,7 @@ export function TransactionsClient({
   categories: Category[];
   accounts: Account[];
   refundNotes?: Record<number, string>;
+  splits?: Record<number, SplitPartView[]>;
   hasMore?: boolean;
   nextN?: number;
 }) {
@@ -337,6 +348,7 @@ export function TransactionsClient({
                   acct={acctById.get(t.accountId)}
                   categories={categories}
                   refundNote={refundNotes[t.id]}
+                  splits={splits[t.id]}
                   selectMode={selectMode}
                   isSelected={selected.has(t.id)}
                   onToggleSelect={() => toggleSelected(t.id)}
@@ -551,6 +563,7 @@ function Row({
   acct,
   categories,
   refundNote,
+  splits,
   selectMode = false,
   isSelected = false,
   onToggleSelect,
@@ -560,14 +573,33 @@ function Row({
   acct: Account | undefined;
   categories: Category[];
   refundNote?: string;
+  splits?: SplitPartView[];
   selectMode?: boolean;
   isSelected?: boolean;
   onToggleSelect?: () => void;
 }) {
   const [picking, setPicking] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [splitting, setSplitting] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [, startTransition] = useTransition();
+
+  const catById = useMemo(
+    () => new Map(categories.map((c) => [c.id, c])),
+    [categories],
+  );
+  const isSplit = !!splits && splits.length >= 2;
+  // Compact breakdown for a split row: "Groceries $120 · Household $80".
+  const splitLabel = isSplit
+    ? splits!
+        .map(
+          (p) =>
+            `${p.categoryId ? catById.get(p.categoryId)?.name ?? "Uncategorized" : "Uncategorized"} ${formatCents(
+              Math.abs(p.amountCents),
+            )}`,
+        )
+        .join(" · ")
+    : null;
 
   const color = cat?.color ?? "var(--foreground-faint)";
   return (
@@ -606,16 +638,20 @@ function Row({
           </span>
           {tx.isTransfer && <Pill>transfer</Pill>}
           {tx.reimbursable && <Pill tone="savings">reimbursable</Pill>}
+          {isSplit && <Pill tone="need">split</Pill>}
         </div>
         <div className="flex items-baseline gap-2 mt-1 md:mt-0.5">
           <button
             onClick={(e) => {
               e.stopPropagation();
-              setPicking(true);
+              // Editing the parts is the natural action on a split row; a plain
+              // recategorize would blow the split away.
+              if (isSplit) setSplitting(true);
+              else setPicking(true);
             }}
-            className="text-[11px] text-foreground-faint hover:text-blush-deep transition-colors tracking-tight"
+            className="text-[11px] text-foreground-faint hover:text-blush-deep transition-colors tracking-tight truncate"
           >
-            {cat?.name ?? "— uncategorized —"}
+            {splitLabel ?? cat?.name ?? "— uncategorized —"}
           </button>
           {acct && (
             <span className="text-[10px] text-foreground-faint truncate">
@@ -675,6 +711,18 @@ function Row({
           <Receipt className="size-3.5" strokeWidth={1.5} />
         </button>
         <button
+          onClick={() => setSplitting(true)}
+          className={cn(
+            "size-7 inline-flex items-center justify-center rounded-md hover:bg-surface-2",
+            isSplit
+              ? "text-blush-deep"
+              : "text-foreground-faint hover:text-foreground",
+          )}
+          title="Split across categories"
+        >
+          <Split className="size-3.5" strokeWidth={1.5} />
+        </button>
+        <button
           onClick={() => {
             if (confirm("Delete this transaction?"))
               startTransition(() => deleteTransaction(tx.id));
@@ -686,7 +734,7 @@ function Row({
         </button>
       </div>
 
-      {(picking || editing || actionsOpen) && (
+      {(picking || editing || splitting || actionsOpen) && (
         // The row itself is tappable (opens the action sheet on mobile), and
         // these dialogs are its DOM children — keep their clicks from
         // bubbling back up and re-opening the sheet.
@@ -705,10 +753,19 @@ function Row({
               onClose={() => setEditing(false)}
             />
           )}
+          {splitting && (
+            <SplitSheet
+              tx={tx}
+              categories={categories}
+              existing={splits}
+              onClose={() => setSplitting(false)}
+            />
+          )}
           {actionsOpen && (
             <MobileActionsSheet
               tx={tx}
               cat={cat}
+              isSplit={isSplit}
               onClose={() => setActionsOpen(false)}
               onEdit={() => {
                 setActionsOpen(false);
@@ -717,6 +774,10 @@ function Row({
               onPick={() => {
                 setActionsOpen(false);
                 setPicking(true);
+              }}
+              onSplit={() => {
+                setActionsOpen(false);
+                setSplitting(true);
               }}
             />
           )}
@@ -730,15 +791,19 @@ function Row({
 function MobileActionsSheet({
   tx,
   cat,
+  isSplit = false,
   onClose,
   onEdit,
   onPick,
+  onSplit,
 }: {
   tx: Transaction;
   cat: Category | undefined;
+  isSplit?: boolean;
   onClose: () => void;
   onEdit: () => void;
   onPick: () => void;
+  onSplit: () => void;
 }) {
   const [, startTransition] = useTransition();
   const item = (
@@ -779,6 +844,17 @@ function MobileActionsSheet({
           <Tag className="size-4 text-foreground-faint" strokeWidth={1.5} />,
           cat ? `Category: ${cat.name}` : "Give it a category",
           onPick,
+        )}
+        {item(
+          <Split
+            className={cn(
+              "size-4",
+              isSplit ? "text-blush-deep" : "text-foreground-faint",
+            )}
+            strokeWidth={1.5}
+          />,
+          isSplit ? "Edit split" : "Split across categories",
+          onSplit,
         )}
         {item(
           <ArrowRightLeft
@@ -1308,6 +1384,215 @@ function CategoryPicker({
             </Button>
           )}
         </div>
+    </Sheet>
+  );
+}
+
+// Splits one purchase across categories: a Target run that's part groceries,
+// part household. The parts must add up to the transaction total; a running
+// remainder shows what's left, and "assign remainder" fills a line in one tap.
+// Saving locks the row (rules/Plaid won't clobber it) and drops to a normal
+// single category if fewer than two parts remain.
+function SplitSheet({
+  tx,
+  categories,
+  existing,
+  onClose,
+}: {
+  tx: Transaction;
+  categories: Category[];
+  existing?: SplitPartView[];
+  onClose: () => void;
+}) {
+  const totalCents = Math.abs(tx.amountCents);
+  const money = (cents: number) => (cents / 100).toFixed(2);
+  const parse = (s: string) => {
+    const n = Number(s);
+    return Number.isFinite(n) ? Math.max(0, Math.round(n * 100)) : 0;
+  };
+
+  type Line = { key: number; categoryId: string; amount: string };
+  const [lines, setLines] = useState<Line[]>(() => {
+    if (existing && existing.length >= 2) {
+      return existing.map((p, i) => ({
+        key: i,
+        categoryId: p.categoryId ? String(p.categoryId) : "",
+        amount: money(Math.abs(p.amountCents)),
+      }));
+    }
+    // Seed with the whole amount on the current category plus a blank line to
+    // peel a portion into — the common "most of this is X, some is Y" case.
+    return [
+      {
+        key: 0,
+        categoryId: tx.categoryId ? String(tx.categoryId) : "",
+        amount: money(totalCents),
+      },
+      { key: 1, categoryId: "", amount: "" },
+    ];
+  });
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  // Income categories can't receive part of a purchase.
+  const spendCats = categories.filter((c) => c.classification !== "income");
+
+  const enteredCents = lines.reduce((s, l) => s + parse(l.amount), 0);
+  const remainderCents = totalCents - enteredCents;
+  const nonZero = lines.filter((l) => parse(l.amount) !== 0);
+  const canSave =
+    remainderCents === 0 &&
+    nonZero.length >= 2 &&
+    nonZero.every((l) => l.categoryId !== "");
+
+  const setLine = (key: number, patch: Partial<Line>) =>
+    setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
+  const addLine = () =>
+    setLines((ls) => [
+      ...ls,
+      {
+        key: ls.reduce((m, l) => Math.max(m, l.key), 0) + 1,
+        categoryId: "",
+        amount: "",
+      },
+    ]);
+  const removeLine = (key: number) =>
+    setLines((ls) => (ls.length <= 1 ? ls : ls.filter((l) => l.key !== key)));
+  const assignRemainder = (key: number) =>
+    setLines((ls) =>
+      ls.map((l) =>
+        l.key === key
+          ? { ...l, amount: money(parse(l.amount) + remainderCents) }
+          : l,
+      ),
+    );
+
+  const save = () =>
+    startTransition(async () => {
+      setError(null);
+      try {
+        await saveSplits(
+          tx.id,
+          nonZero.map((l) => ({
+            categoryId: l.categoryId ? Number(l.categoryId) : null,
+            amountCents: parse(l.amount),
+          })),
+        );
+        onClose();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    });
+
+  const remove = () =>
+    startTransition(async () => {
+      await clearSplits(tx.id);
+      onClose();
+    });
+
+  return (
+    <Sheet open onClose={onClose}>
+      <Label>Split transaction</Label>
+      <div className="flex items-baseline justify-between gap-3 mt-1 mb-1">
+        <h3 className="serif text-xl truncate">
+          {tx.merchantClean || tx.merchantRaw}
+        </h3>
+        <span className="mono tabular text-sm shrink-0">
+          {formatCents(tx.amountCents, { signed: tx.amountCents > 0 })}
+        </span>
+      </div>
+      <p className="text-foreground-faint text-xs mb-4">
+        Divide this purchase across categories so a mixed basket lands in the
+        right buckets. The parts must add up to the total.
+      </p>
+
+      <div className="space-y-2">
+        {lines.map((l) => (
+          <div key={l.key} className="flex items-center gap-2">
+            <select
+              value={l.categoryId}
+              onChange={(e) => setLine(l.key, { categoryId: e.target.value })}
+              className="h-9 flex-1 min-w-0 bg-surface-2 border border-border-strong rounded-md px-2 text-xs"
+            >
+              <option value="">Category…</option>
+              {spendCats.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            <div className="inline-flex items-center gap-1 h-9 px-2 bg-surface-2 border border-border-strong rounded-md focus-within:border-blush">
+              <span className="text-foreground-faint text-xs">$</span>
+              <input
+                value={l.amount}
+                onChange={(e) => setLine(l.key, { amount: e.target.value })}
+                inputMode="decimal"
+                placeholder="0.00"
+                className="w-20 bg-transparent text-xs mono tabular outline-none text-right"
+              />
+            </div>
+            <button
+              onClick={() => removeLine(l.key)}
+              disabled={lines.length <= 1}
+              className="size-8 inline-flex items-center justify-center rounded-md text-foreground-faint hover:text-blush-deep hover:bg-surface-2 disabled:opacity-30"
+              title="Remove line"
+              aria-label="Remove line"
+            >
+              <X className="size-4" strokeWidth={1.5} />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <button
+        onClick={addLine}
+        className="mt-3 inline-flex items-center gap-1.5 text-xs text-foreground-muted hover:text-blush-deep transition-colors"
+      >
+        <Plus className="size-3.5" strokeWidth={1.75} />
+        Add category
+      </button>
+
+      <div className="hairline my-4" />
+
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-foreground-faint">
+          {formatCents(enteredCents)} of {formatCents(totalCents)} assigned
+        </span>
+        {remainderCents === 0 ? (
+          <span className="text-sage-deep font-medium">Balanced</span>
+        ) : (
+          <button
+            onClick={() => {
+              // Assign the leftover to the last line for a one-tap balance.
+              const last = lines[lines.length - 1];
+              if (last) assignRemainder(last.key);
+            }}
+            className="text-blush-deep hover:underline"
+          >
+            {remainderCents > 0
+              ? `${formatCents(remainderCents)} left · assign it`
+              : `${formatCents(-remainderCents)} over · fix it`}
+          </button>
+        )}
+      </div>
+
+      {error && (
+        <div className="mt-3 text-xs text-blush-deep">{error}</div>
+      )}
+
+      <div className="flex justify-end gap-2 mt-5">
+        {existing && existing.length >= 2 && (
+          <Button variant="ghost" onClick={remove} disabled={pending}>
+            Remove split
+          </Button>
+        )}
+        <Button variant="ghost" onClick={onClose} disabled={pending}>
+          Cancel
+        </Button>
+        <Button variant="primary" onClick={save} disabled={!canSave || pending}>
+          {pending ? "Saving…" : "Save split"}
+        </Button>
+      </div>
     </Sheet>
   );
 }
