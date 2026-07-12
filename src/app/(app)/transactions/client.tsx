@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Account, Category, Transaction } from "@/db/schema";
 import { Card, Input, Label, Pill, Button } from "@/components/ui";
@@ -21,8 +21,32 @@ import {
   bulkSetCategory,
   saveSplits,
   clearSplits,
+  scanReceipt,
 } from "./actions";
-import { Search, Zap, ArrowRightLeft, Trash2, Pencil, Plus, Upload, Sparkles, Receipt, Tag, Split, X } from "lucide-react";
+import { Search, Zap, ArrowRightLeft, Trash2, Pencil, Plus, Upload, Sparkles, Receipt, Tag, Split, X, ScanLine } from "lucide-react";
+
+// Downscale a photo to a compact JPEG data: URL before sending it to the
+// receipt parser — keeps the upload well under the server-action body limit and
+// under Groq's base64 ceiling, and cuts vision-token cost, with plenty of
+// resolution left to read receipt text.
+async function downscaleToDataUrl(
+  file: File,
+  maxDim = 1500,
+  quality = 0.7,
+): Promise<string> {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
+  const w = Math.max(1, Math.round(bitmap.width * scale));
+  const h = Math.max(1, Math.round(bitmap.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Couldn't process the image.");
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  bitmap.close?.();
+  return canvas.toDataURL("image/jpeg", quality);
+}
 
 // A transaction's category parts, as passed from the server for display.
 export type SplitPartView = {
@@ -1433,6 +1457,9 @@ function SplitSheet({
   });
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanNote, setScanNote] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Income categories can't receive part of a purchase.
   const spendCats = categories.filter((c) => c.classification !== "income");
@@ -1466,6 +1493,44 @@ function SplitSheet({
           : l,
       ),
     );
+
+  // Photograph/upload a receipt: downscale it, parse line items via the scan
+  // action, and replace the editor's lines with the per-category grouping. The
+  // transaction total stays authoritative, so any tax/tip gap surfaces as the
+  // usual remainder for the user to assign before saving.
+  const onPickReceipt = async (file: File | undefined) => {
+    if (!file) return;
+    setError(null);
+    setScanNote(null);
+    setScanning(true);
+    try {
+      const dataUrl = await downscaleToDataUrl(file);
+      const result = await scanReceipt(dataUrl);
+      if (result.splits.length === 0) {
+        setScanNote("Couldn't read any line items — enter them by hand.");
+        return;
+      }
+      setLines(
+        result.splits.map((s, i) => ({
+          key: i,
+          categoryId: s.categoryId ? String(s.categoryId) : "",
+          amount: money(s.amountCents),
+        })),
+      );
+      const assigned = result.splits.reduce((a, s) => a + s.amountCents, 0);
+      const parts = [
+        result.merchant ? `Read ${result.itemCount} items from ${result.merchant}` : `Read ${result.itemCount} items`,
+        totalCents - assigned !== 0
+          ? "check the remainder (tax/tip), then save"
+          : "review and save",
+      ];
+      setScanNote(parts.join(" · "));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setScanning(false);
+    }
+  };
 
   const save = () =>
     startTransition(async () => {
@@ -1505,6 +1570,29 @@ function SplitSheet({
         Divide this purchase across categories so a mixed basket lands in the
         right buckets. The parts must add up to the total.
       </p>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => {
+          void onPickReceipt(e.target.files?.[0]);
+          e.target.value = "";
+        }}
+      />
+      <button
+        onClick={() => fileInputRef.current?.click()}
+        disabled={scanning || pending}
+        className="w-full mb-3 h-10 inline-flex items-center justify-center gap-2 rounded-md border border-dashed border-border-strong text-xs text-foreground-muted hover:text-blush-deep hover:border-blush transition-colors disabled:opacity-50"
+      >
+        <ScanLine className="size-4" strokeWidth={1.5} />
+        {scanning ? "Reading receipt…" : "Scan a receipt to fill these in"}
+      </button>
+      {scanNote && (
+        <div className="mb-3 text-[11px] text-blue-deep">{scanNote}</div>
+      )}
 
       <div className="space-y-2">
         {lines.map((l) => (

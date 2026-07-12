@@ -1,8 +1,9 @@
 "use server";
 
 import { db } from "@/db";
-import { transactions, transactionSplits } from "@/db/schema";
+import { transactions, transactionSplits, categories } from "@/db/schema";
 import { eq, inArray } from "drizzle-orm";
+import { scanReceiptImage, type ScannedReceipt } from "@/lib/receipt";
 import { revalidatePath } from "next/cache";
 import {
   applyRulesToHistory,
@@ -191,6 +192,33 @@ export async function clearSplits(txId: number) {
     .delete(transactionSplits)
     .where(eq(transactionSplits.transactionId, txId));
   revalidateSplitViews();
+}
+
+// Parses a photographed receipt (a downscaled data: URL from the client) into
+// per-category split slices to seed the split editor. Read-only: it never
+// writes splits itself, so the user always reviews and saves via saveSplits.
+// Degrades to a clear error when GROQ_API_KEY isn't configured.
+export async function scanReceipt(dataUrl: string): Promise<ScannedReceipt> {
+  if (!process.env.GROQ_API_KEY) {
+    throw new Error(
+      "Receipt scanning isn't set up yet (GROQ_API_KEY is missing).",
+    );
+  }
+  if (!dataUrl.startsWith("data:image/")) {
+    throw new Error("That doesn't look like an image.");
+  }
+  const cats = await db
+    .select()
+    .from(categories)
+    .where(eq(categories.isArchived, false));
+  return scanReceiptImage(
+    dataUrl,
+    cats.map((c) => ({
+      id: c.id,
+      name: c.name,
+      classification: c.classification,
+    })),
+  );
 }
 
 /**
