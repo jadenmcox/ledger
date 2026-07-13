@@ -45,12 +45,12 @@ export function PlannedActual({
     <table className="w-full text-sm">
       <thead>
         <tr className="text-[10px] tracking-[0.18em] uppercase text-foreground-faint border-b border-border">
-          <th className="text-left px-5 py-3 font-medium">Category</th>
-          <th className="text-right px-3 py-3 font-medium hidden sm:table-cell">
+          <th className="text-left px-3.5 sm:px-5 py-3 font-medium">Category</th>
+          <th className="text-right px-2.5 sm:px-3 py-3 font-medium hidden sm:table-cell">
             Planned
           </th>
-          <th className="text-right px-3 py-3 font-medium">Actual</th>
-          <th className="text-right px-5 py-3 font-medium">Difference</th>
+          <th className="text-right px-2.5 sm:px-3 py-3 font-medium">Actual</th>
+          <th className="text-right px-3.5 sm:px-5 py-3 font-medium">Difference</th>
         </tr>
       </thead>
       <tbody>
@@ -67,16 +67,16 @@ export function PlannedActual({
           ),
         )}
         <tr className="border-t-2 border-border bg-surface-2/40">
-          <td className="px-5 py-3 text-sm font-medium tracking-tight">Total</td>
-          <td className="px-3 py-3 text-right mono tabular hidden sm:table-cell">
+          <td className="px-3.5 sm:px-5 py-3 text-sm font-medium tracking-tight">Total</td>
+          <td className="px-2.5 sm:px-3 py-3 text-right mono tabular hidden sm:table-cell">
             {formatCents(totals.planned)}
           </td>
-          <td className="px-3 py-3 text-right mono tabular">
+          <td className="px-2.5 sm:px-3 py-3 text-right mono tabular">
             {formatCents(totals.actual)}
           </td>
           <td
             className={cn(
-              "px-5 py-3 text-right mono tabular",
+              "px-3.5 sm:px-5 py-3 text-right mono tabular",
               totals.difference < 0 && "text-blush-deep",
             )}
           >
@@ -115,7 +115,7 @@ function RowGroup({
       <tr className="bg-surface-2/30 border-t border-border">
         <td
           colSpan={4}
-          className="px-5 py-2 text-[10px] tracking-[0.2em] uppercase text-foreground-faint"
+          className="px-3.5 sm:px-5 py-2 text-[10px] tracking-[0.2em] uppercase text-foreground-faint"
         >
           {label}
         </td>
@@ -138,18 +138,18 @@ function RowGroup({
         );
       })}
       <tr className="border-t border-border bg-surface-2/10">
-        <td className="px-5 py-2 text-[11px] text-foreground-faint tracking-tight">
+        <td className="px-3.5 sm:px-5 py-2 text-[11px] text-foreground-faint tracking-tight">
           {label} subtotal
         </td>
-        <td className="px-3 py-2 text-right mono tabular text-foreground-faint text-[11px] hidden sm:table-cell">
+        <td className="px-2.5 sm:px-3 py-2 text-right mono tabular text-foreground-faint text-[11px] hidden sm:table-cell">
           {formatCents(subtotal.planned)}
         </td>
-        <td className="px-3 py-2 text-right mono tabular text-foreground-faint text-[11px]">
+        <td className="px-2.5 sm:px-3 py-2 text-right mono tabular text-foreground-faint text-[11px]">
           {formatCents(subtotal.actual)}
         </td>
         <td
           className={cn(
-            "px-5 py-2 text-right mono tabular text-[11px]",
+            "px-3.5 sm:px-5 py-2 text-right mono tabular text-[11px]",
             subtotal.difference < 0 ? "text-blush-deep" : "text-foreground-faint",
           )}
         >
@@ -186,7 +186,7 @@ function RowFragment({
         )}
         onClick={onToggle}
       >
-        <td className="px-5 py-3">
+        <td className="px-3.5 sm:px-5 py-3">
           <div className="flex items-center gap-3 min-w-0">
             <CategoryGlyph icon={row.icon} color={row.color} size={30} />
             <span className="truncate">{row.name}</span>
@@ -201,7 +201,7 @@ function RowFragment({
             )}
           </div>
           {row.planned > 0 && (
-            <div className="ml-[42px] mt-2 max-w-[160px]">
+            <div className="ml-[42px] mt-2 max-w-[120px] sm:max-w-[160px]">
               <ProgressBar
                 value={row.actual}
                 max={row.planned}
@@ -211,17 +211,17 @@ function RowFragment({
             </div>
           )}
         </td>
-        <td className="px-3 py-3 text-right mono tabular text-foreground-muted hidden sm:table-cell">
+        <td className="px-2.5 sm:px-3 py-3 text-right mono tabular text-foreground-muted hidden sm:table-cell">
           {row.planned > 0 ? formatCents(row.planned) : "—"}
         </td>
         <td
-          className={cn("px-3 py-3 text-right mono tabular", over && "text-blush-deep")}
+          className={cn("px-2.5 sm:px-3 py-3 text-right mono tabular", over && "text-blush-deep")}
         >
           {formatCents(row.actual)}
         </td>
         <td
           className={cn(
-            "px-5 py-3 text-right mono tabular",
+            "px-3.5 sm:px-5 py-3 text-right mono tabular",
             row.difference < 0 && "text-blush-deep",
           )}
         >
@@ -237,7 +237,7 @@ function RowFragment({
       </tr>
       {isOpen && (
         <tr className="bg-surface-2/20">
-          <td colSpan={4} className="px-5 pb-3.5 pt-0">
+          <td colSpan={4} className="px-3.5 sm:px-5 pb-3.5 pt-0">
             <div className="ml-[42px] overflow-hidden rounded-xl border border-border bg-surface">
               <div className="px-3.5 py-2 text-[10px] uppercase tracking-[0.2em] text-foreground-faint border-b border-border">
                 by vendor

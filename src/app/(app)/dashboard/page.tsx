@@ -655,6 +655,9 @@ export default async function DashboardPage({
                 </Card>
               ) : (
                 <Card className="overflow-hidden">
+                  {/* Scroll the dense table inside the card on a phone rather
+                      than clipping the Difference column or pushing the page. */}
+                  <div className="overflow-x-auto">
                   <PlannedActual
                     groups={groups.map((g) => ({
                       key: g.key,
@@ -672,6 +675,7 @@ export default async function DashboardPage({
                     totals={totals}
                     merchantsByCategory={merchantsByCategory}
                   />
+                  </div>
                 </Card>
               )}
             </Section>
