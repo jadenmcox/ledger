@@ -11,6 +11,7 @@ export type HeatmapCell = {
 export function Heatmap({
   cells,
   columns = 12,
+  mobileColumns,
   color = "var(--blush)",
   emptyColor = "var(--surface-2)",
   rounded = 8,
@@ -18,18 +19,35 @@ export function Heatmap({
 }: {
   cells: HeatmapCell[];
   columns?: number;
+  // A phone can't fit 12 readable square cells in one row, so wrap to fewer
+  // columns below the `sm` breakpoint. Defaults to half (rounded up) — a
+  // 12-month grid becomes a tidy 6×2.
+  mobileColumns?: number;
   color?: string;
   emptyColor?: string;
   rounded?: number;
   gap?: number;
 }) {
+  const phoneCols = mobileColumns ?? Math.ceil(columns / 2);
+  // Start at the full column count for SSR/first paint, then narrow on phones
+  // once we can read the viewport. `min-w-0` on each cell keeps even the wide
+  // count from overflowing before this resolves.
+  const [cols, setCols] = React.useState(columns);
+  React.useEffect(() => {
+    const mq = window.matchMedia("(min-width: 640px)");
+    const apply = () => setCols(mq.matches ? columns : phoneCols);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, [columns, phoneCols]);
+
   const max = Math.max(1, ...cells.map((c) => c.value));
 
   return (
     <div
       className="w-full grid"
       style={{
-        gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+        gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
         gap,
       }}
     >
@@ -42,11 +60,14 @@ export function Heatmap({
         return (
           <div
             key={i}
-            className="aspect-square flex flex-col items-center justify-center text-center"
+            // min-w-0 lets the square shrink to its grid track; without it the
+            // aspect-ratio + min-height give the cell an automatic min-width
+            // that overflows a narrow track and pushes the page sideways.
+            className="aspect-square flex flex-col items-center justify-center text-center min-w-0 overflow-hidden"
             style={{
               background: bg,
               borderRadius: rounded,
-              minHeight: 56,
+              minHeight: 44,
             }}
             title={`${c.label}: ${c.display ?? c.value}`}
           >
