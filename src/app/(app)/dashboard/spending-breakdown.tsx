@@ -157,10 +157,11 @@ export function SpendingHero({
       ) : (
         <>
           <div className="flex flex-col items-center gap-6 md:flex-row md:items-center md:gap-14 lg:gap-20">
-            {/* LEFT — interactive donut */}
+            {/* LEFT — interactive donut. Fills the card up to 420px and scales
+                down on a phone; center text tracks the donut via cqw units so
+                it always fits the hole. */}
             <div
-              className="relative shrink-0"
-              style={{ width: 420, height: 420 }}
+              className="@container relative w-full max-w-[420px] shrink-0 md:w-[420px]"
               onMouseLeave={() => setActive(null)}
             >
               <DonutChart
@@ -172,28 +173,28 @@ export function SpendingHero({
                 onActiveChange={setActive}
                 onSliceClick={(d) => d.href && router.push(d.href)}
               />
-              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-16 text-center">
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-[15%] text-center">
                 {active ? (
                   <>
                     <span
-                      className="mb-1 max-w-full truncate text-[11px] font-semibold uppercase tracking-[0.2em]"
+                      className="mb-1 max-w-full truncate text-[max(10px,2.6cqw)] font-semibold uppercase tracking-[0.2em]"
                       style={{ color: active.color }}
                     >
                       {active.name}
                     </span>
-                    <span className="display text-[2.4rem] leading-none">
+                    <span className="display text-[9cqw] leading-none">
                       {formatCents(active.value)}
                     </span>
-                    <span className="mt-1.5 text-[12px] text-foreground-faint">
+                    <span className="mt-1.5 text-[max(11px,2.8cqw)] text-foreground-faint">
                       {activePct}%
                     </span>
                   </>
                 ) : (
                   <>
-                    <span className="mb-0.5 text-[11px] uppercase tracking-[0.28em] text-foreground-faint">
+                    <span className="mb-0.5 text-[max(10px,2.6cqw)] uppercase tracking-[0.28em] text-foreground-faint">
                       spent
                     </span>
-                    <span className="display text-[2.6rem] leading-none">
+                    <span className="display text-[9.5cqw] leading-none">
                       {formatCents(consumption)}
                     </span>
                   </>

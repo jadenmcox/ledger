@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { PieChart, Pie, Cell, Tooltip } from "recharts";
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 
 export type DonutDatum = {
   name: string;
@@ -26,6 +26,9 @@ export function DonutChart({
   data: DonutDatum[];
   centerLabel?: string;
   centerValue?: string;
+  // `size` is the *preferred* (max) diameter. The donut fills its container up
+  // to this width and scales down on narrow viewports so it never overflows a
+  // phone screen. `thickness` is the ring width at that preferred size.
   size?: number;
   thickness?: number;
   formatValue?: (v: number) => string;
@@ -39,22 +42,34 @@ export function DonutChart({
   const filtered = data.filter((d) => d.value > 0);
   const hasData = filtered.length > 0;
   const total = filtered.reduce((s, d) => s + d.value, 0) || 1;
-  const outer = Math.floor(size / 2) - 6;
+  // Radii as percentages of the (square) container rather than fixed pixels, so
+  // the ring scales with the container inside a ResponsiveContainer. The
+  // percentages are derived from the caller's preferred size/thickness, so the
+  // proportions match a fixed `size`-px render exactly at full width.
+  const half = size / 2;
+  const outer = Math.floor(half) - 6;
   const inner = Math.max(8, outer - thickness);
+  const outerPct = `${(outer / half) * 100}%`;
+  const innerPct = `${(inner / half) * 100}%`;
 
   return (
     <div
-      className="relative flex items-center justify-center mx-auto"
-      style={{ height: size, width: size, maxWidth: "100%" }}
+      className="relative mx-auto w-full"
+      style={{ maxWidth: size, aspectRatio: "1 / 1" }}
     >
-      <PieChart width={size} height={size}>
+      <ResponsiveContainer width="100%" height="100%">
+        <PieChart>
           <Pie
-            data={hasData ? filtered : [{ name: "—", value: 1, color: "var(--surface-2)" }]}
+            data={
+              hasData
+                ? filtered
+                : [{ name: "—", value: 1, color: "var(--surface-2)" }]
+            }
             dataKey="value"
             cx="50%"
             cy="50%"
-            innerRadius={inner}
-            outerRadius={outer}
+            innerRadius={innerPct}
+            outerRadius={outerPct}
             stroke="var(--surface)"
             strokeWidth={2}
             startAngle={90}
@@ -102,7 +117,8 @@ export function DonutChart({
               }) as unknown as never}
             />
           )}
-      </PieChart>
+        </PieChart>
+      </ResponsiveContainer>
       {(centerLabel || centerValue) && (
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center px-6">
           {centerLabel && (
