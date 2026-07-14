@@ -50,7 +50,9 @@ export function PlannedActual({
             Planned
           </th>
           <th className="text-right px-2.5 sm:px-3 py-3 font-medium">Actual</th>
-          <th className="text-right px-3.5 sm:px-5 py-3 font-medium">Difference</th>
+          <th className="text-right px-3.5 sm:px-5 py-3 font-medium hidden sm:table-cell">
+            Difference
+          </th>
         </tr>
       </thead>
       <tbody>
@@ -73,10 +75,23 @@ export function PlannedActual({
           </td>
           <td className="px-2.5 sm:px-3 py-3 text-right mono tabular">
             {formatCents(totals.actual)}
+            {/* Difference folds under Actual on mobile, where its own column is
+                hidden to keep the table from scrolling sideways. */}
+            <div
+              className={cn(
+                "sm:hidden text-[11px] mt-0.5 font-normal",
+                totals.difference < 0
+                  ? "text-blush-deep"
+                  : "text-foreground-faint",
+              )}
+            >
+              {totals.difference >= 0 ? "+" : ""}
+              {formatCents(totals.difference)}
+            </div>
           </td>
           <td
             className={cn(
-              "px-3.5 sm:px-5 py-3 text-right mono tabular",
+              "px-3.5 sm:px-5 py-3 text-right mono tabular hidden sm:table-cell",
               totals.difference < 0 && "text-blush-deep",
             )}
           >
@@ -144,12 +159,21 @@ function RowGroup({
         <td className="px-2.5 sm:px-3 py-2 text-right mono tabular text-foreground-faint text-[11px] hidden sm:table-cell">
           {formatCents(subtotal.planned)}
         </td>
-        <td className="px-2.5 sm:px-3 py-2 text-right mono tabular text-foreground-faint text-[11px]">
+        <td className="px-2.5 sm:px-3 py-2 text-right mono tabular text-foreground-faint text-[11px] max-sm:align-top">
           {formatCents(subtotal.actual)}
+          <div
+            className={cn(
+              "sm:hidden",
+              subtotal.difference < 0 && "text-blush-deep",
+            )}
+          >
+            {subtotal.difference >= 0 ? "+" : ""}
+            {formatCents(subtotal.difference)}
+          </div>
         </td>
         <td
           className={cn(
-            "px-3.5 sm:px-5 py-2 text-right mono tabular text-[11px]",
+            "px-3.5 sm:px-5 py-2 text-right mono tabular text-[11px] hidden sm:table-cell",
             subtotal.difference < 0 ? "text-blush-deep" : "text-foreground-faint",
           )}
         >
@@ -214,14 +238,28 @@ function RowFragment({
         <td className="px-2.5 sm:px-3 py-3 text-right mono tabular text-foreground-muted hidden sm:table-cell">
           {row.planned > 0 ? formatCents(row.planned) : "—"}
         </td>
-        <td
-          className={cn("px-2.5 sm:px-3 py-3 text-right mono tabular", over && "text-blush-deep")}
-        >
-          {formatCents(row.actual)}
+        <td className="px-2.5 sm:px-3 py-3 text-right mono tabular max-sm:align-top">
+          <div className={cn(over && "text-blush-deep")}>
+            {formatCents(row.actual)}
+          </div>
+          {/* Difference folds under Actual on mobile, where its own column is
+              hidden so the table fits without scrolling. */}
+          <div
+            className={cn(
+              "sm:hidden text-[11px] mt-0.5",
+              row.planned > 0 && row.difference < 0
+                ? "text-blush-deep"
+                : "text-foreground-faint",
+            )}
+          >
+            {row.planned === 0
+              ? "no limit"
+              : `${row.difference >= 0 ? "+" : ""}${formatCents(row.difference)}`}
+          </div>
         </td>
         <td
           className={cn(
-            "px-3.5 sm:px-5 py-3 text-right mono tabular",
+            "px-3.5 sm:px-5 py-3 text-right mono tabular hidden sm:table-cell",
             row.difference < 0 && "text-blush-deep",
           )}
         >
