@@ -625,6 +625,18 @@ function Row({
         .join(" · ")
     : null;
 
+  // A credit/refund: money back into a spending category. Income (paychecks)
+  // is positive too but isn't a credit, and transfers move between your own
+  // accounts, so both are excluded. Flagged for every credit, whether or not
+  // it matched a prior purchase, so returns are obvious at a glance. Mirrors
+  // the isRefund rule in month-bucket.ts that drives the netting.
+  const isCredit =
+    tx.amountCents > 0 &&
+    !tx.reimbursable &&
+    !tx.isTransfer &&
+    cat != null &&
+    cat.classification !== "income";
+
   const color = cat?.color ?? "var(--foreground-faint)";
   return (
     <div
@@ -662,6 +674,7 @@ function Row({
           </span>
           {tx.isTransfer && <Pill>transfer</Pill>}
           {tx.reimbursable && <Pill tone="savings">reimbursable</Pill>}
+          {isCredit && <Pill tone="income">credit</Pill>}
           {isSplit && <Pill tone="need">split</Pill>}
         </div>
         <div className="flex items-baseline gap-2 mt-1 md:mt-0.5">
