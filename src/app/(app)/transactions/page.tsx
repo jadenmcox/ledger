@@ -61,9 +61,6 @@ export default async function TransactionsPage({
 
   const now = new Date();
   const thisMonthSpend = monthConsumption(heroTx, allCats, now, splitsByTx);
-  const uncategorized = allTx.filter(
-    (t) => !t.categoryId && !t.isTransfer && t.amountCents < 0,
-  ).length;
 
   // Refund provenance for the visible rows: a matched refund gets a small
   // "credits <merchant> · <date>" note so the netting isn't invisible magic.
@@ -109,7 +106,6 @@ export default async function TransactionsPage({
             <TransactionsHero
               totalSpend={thisMonthSpend}
               txCount={allTx.length}
-              uncategorized={uncategorized}
               monthLabel={format(now, "MMMM")}
             />
           </div>

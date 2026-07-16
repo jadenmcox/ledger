@@ -10,18 +10,19 @@ export type TxSlice = {
 };
 
 // Slim headline strip for the Transactions page. The donut lives on the
-// dashboard now; here we just surface the month's spend + how much still needs
-// categorizing, then get out of the way of the list below.
+// dashboard now; here we just surface the month's spend and how many
+// transactions are loaded, then get out of the way of the list below.
+// Uncategorized isn't a stat here: the list shows a callout only when
+// something actually needs categorizing, so a permanent "0 / all categorized"
+// tile was just noise.
 export function TransactionsHero({
   totalSpend,
   txCount,
-  uncategorized,
   monthLabel,
 }: {
   slices?: TxSlice[];
   totalSpend: number;
   txCount: number;
-  uncategorized: number;
   monthLabel: string;
 }) {
   return (
@@ -38,13 +39,6 @@ export function TransactionsHero({
           value: String(txCount),
           accent: "var(--blue-deep)",
           hint: "loaded (500 max)",
-        },
-        {
-          label: "Uncategorized",
-          value: String(uncategorized),
-          accent:
-            uncategorized > 0 ? "var(--blush-deep)" : "var(--sage-deep)",
-          hint: uncategorized > 0 ? "tap a merchant to fix" : "all categorized",
         },
       ]}
     />
