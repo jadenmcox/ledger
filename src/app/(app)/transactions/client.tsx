@@ -128,8 +128,9 @@ function RecategorizeBanner({
           )
         ) : (
           <span>
-            <span className="font-medium">{count}</span> uncategorized — run
-            your rules and Plaid&apos;s category hints across them.
+            <span className="font-medium">{count}</span>{" "}
+            uncategorized — run your rules and Plaid&apos;s category hints
+            across them.
           </span>
         )}
       </div>
