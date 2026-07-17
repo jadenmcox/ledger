@@ -54,6 +54,31 @@ export function monthConsumption<T extends RefundTxLike>(
   monthOf: Date,
   splitsByTx: ReadonlyMap<number, readonly SplitPart[]> = new Map(),
 ): number {
+  const { byCategory, uncategorized } = monthConsumptionByCategory(
+    txns,
+    categories,
+    monthOf,
+    splitsByTx,
+  );
+  const catById = new Map(categories.map((c) => [c.id, c]));
+  let total = uncategorized;
+  for (const [id, v] of byCategory) {
+    const c = catById.get(id);
+    if (c?.classification === "savings") continue;
+    if (v > 0) total += v;
+  }
+  return total;
+}
+
+// Per-category breakdown behind monthConsumption, exposed so other views
+// (e.g. the dashboard summary's overspent-category rows) share the exact
+// same refund/rollforward/split semantics instead of re-deriving them.
+export function monthConsumptionByCategory<T extends RefundTxLike>(
+  txns: T[],
+  categories: BucketCategory[],
+  monthOf: Date,
+  splitsByTx: ReadonlyMap<number, readonly SplitPart[]> = new Map(),
+): { byCategory: Map<number, number>; uncategorized: number } {
   const { monthKeyOf } = createMonthBucketer(txns, categories);
   const catById = new Map(categories.map((c) => [c.id, c]));
   const byCategory = new Map<number, number>();
@@ -76,11 +101,5 @@ export function monthConsumption<T extends RefundTxLike>(
       }
     }
   }
-  let total = uncategorized;
-  for (const [id, v] of byCategory) {
-    const c = catById.get(id);
-    if (c?.classification === "savings") continue;
-    if (v > 0) total += v;
-  }
-  return total;
+  return { byCategory, uncategorized };
 }

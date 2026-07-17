@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { categories, transactions } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { startOfMonth, endOfMonth } from "date-fns";
-import { monthConsumption } from "@/lib/month-bucket";
+import { monthConsumption, monthConsumptionByCategory } from "@/lib/month-bucket";
 import { loadSplitsByTx } from "@/lib/splits";
 import { formatCentsCompact } from "@/lib/utils";
 
@@ -36,6 +36,31 @@ export async function GET(request: Request) {
   const ratio = plannedCents > 0 ? actualCents / plannedCents : null;
   const direction = ratio == null ? "flat" : ratio > 1 ? "up" : ratio > 0.9 ? "flat" : "down";
 
+  // Categories currently over their monthly limit, worst first — same
+  // bucketing as the headline number, so the two can never disagree.
+  const { byCategory } = monthConsumptionByCategory(
+    allTx,
+    allCategories,
+    monthStart,
+    splitsByTx,
+  );
+  const overspent = allCategories
+    .filter(
+      (c) =>
+        c.classification !== "income" &&
+        c.classification !== "savings" &&
+        !c.isArchived &&
+        (c.monthlyLimitCents ?? 0) > 0,
+    )
+    .map((c) => ({
+      c,
+      actual: Math.max(byCategory.get(c.id) ?? 0, 0),
+      limit: c.monthlyLimitCents ?? 0,
+    }))
+    .filter((x) => x.actual > x.limit)
+    .sort((a, b) => b.actual - b.limit - (a.actual - a.limit))
+    .slice(0, 2);
+
   return NextResponse.json({
     label: "Spend vs. budget",
     value: formatCentsCompact(actualCents),
@@ -47,5 +72,10 @@ export async function GET(request: Request) {
       ratio != null
         ? { value: `${Math.round(ratio * 100)}%`, direction }
         : undefined,
+    details: overspent.map(({ c, actual, limit }) => ({
+      id: String(c.id),
+      label: c.name,
+      sublabel: `${formatCentsCompact(actual - limit)} over budget`,
+    })),
   });
 }
