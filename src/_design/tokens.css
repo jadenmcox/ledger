@@ -1,0 +1,416 @@
+/* AUTO-COPIED from the design system. DO NOT EDIT HERE.
+   Source: design/tokens/tokens.css
+   Change it there, then run: npm run sync -- <app>
+   Check every app for drift with: npm run check:drift */
+
+/* =========================================================================
+   L0 - Design tokens
+   Plain CSS custom properties. No Tailwind, no build step, no framework.
+   Works unchanged in Tailwind v3 and v4, Next and Vite.
+
+   Everything is prefixed --ds- so this can be dropped into an app that still
+   has its own tokens, and the two coexist while the app is migrated.
+
+   Light is the default. Dark values live under explicit selectors only
+   (.ds-dark / [data-ds-scheme="dark"] / .dark), so an app that has no dark
+   design can never flip into one by accident. Apps that DO support dark
+   additionally import tokens-dark-auto.css to wire prefers-color-scheme.
+   ========================================================================= */
+
+:root {
+  /* --- Neutrals ------------------------------------------------------- */
+  --ds-page: #fcfcfb;
+  --ds-surface: #ffffff;
+  --ds-surface-2: #f4f4f3;
+  --ds-surface-3: #ebebe9;
+  --ds-fg: #17171a;
+  --ds-fg-muted: #6c6c74;
+  --ds-fg-faint: #a6a6ad;
+  --ds-border: #ececeb;
+  --ds-border-strong: #dcdcd9;
+
+  /* --- Status --------------------------------------------------------- */
+  --ds-good: #1f9d57;
+  --ds-good-tint: #e7f6ee;
+  --ds-warn: #b06a00;
+  --ds-warn-tint: #fbf0da;
+  --ds-bad: #d23f30;
+  --ds-bad-tint: #fdeae7;
+  /* The solid fill for destructive buttons. `bad` alone cannot do this job:
+     in dark mode it lightens (so it stays legible as TEXT on a dark card),
+     which drops white-on-it to 2.78:1 when used as a background. */
+  --ds-bad-deep: #bf3a2a;
+  --ds-info: #2d6ca3;
+  --ds-info-tint: #e6f0f8;
+
+  /* --- Accent contract ------------------------------------------------
+     The kit reads ONLY these four. Every app sets them in its own stylesheet,
+     using the values in tokens.mjs (`node bin/app-css.mjs <app>` prints the
+     exact block). The defaults below are a neutral ink fallback, so an
+     unconfigured app renders correctly rather than transparent.
+
+       --ds-accent           brand fill: decorative, progress, button HOVER
+       --ds-accent-deep      interactive: primary button fill, text on a tint.
+                             Guaranteed AA on both white and its own tint.
+       --ds-accent-tint      the light wash behind chips and pills
+       --ds-accent-contrast  the label on an interactive fill (white)
+
+     A dark-capable app overrides accent / deep / tint again inside its dark
+     selector. Never hand-pick these: bin/derive-accents.mjs generates them and
+     bin/check-contrast.mjs proves all 54 pairings clear WCAG AA. */
+  --ds-accent: #17171a;
+  --ds-accent-deep: #000000;
+  --ds-accent-tint: #f4f4f3;
+  --ds-accent-contrast: #ffffff;
+
+  /* --- Type ----------------------------------------------------------- */
+  /* Apps set --ds-font-display / --ds-font-body from next/font or @font-face.
+     The fallback stack keeps things sane before fonts load. */
+  --ds-font-display: "Schibsted Grotesk", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --ds-font-body: "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --ds-font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Deliberately identical to Tailwind's default scale, which all nine apps
+     already use. Redefining it would silently resize existing markup
+     everywhere for no design gain. Only --ds-text-2xs is an addition. */
+  --ds-text-2xs: 0.6875rem; /* 11 - overline, chip labels */
+  --ds-text-xs: 0.75rem;    /* 12 */
+  --ds-text-sm: 0.875rem;   /* 14 - default UI text */
+  --ds-text-base: 1rem;     /* 16 - body copy, and the iOS no-zoom floor */
+  --ds-text-lg: 1.125rem;   /* 18 */
+  --ds-text-xl: 1.25rem;    /* 20 */
+  --ds-text-2xl: 1.5rem;    /* 24 */
+  --ds-text-3xl: 1.875rem;  /* 30 */
+  --ds-text-4xl: 2.25rem;   /* 36 */
+  --ds-text-5xl: 3rem;      /* 48 - hero numerals */
+
+  --ds-weight-normal: 400;
+  --ds-weight-medium: 500;
+  --ds-weight-semibold: 600;
+  --ds-weight-display: 640;
+  --ds-weight-bold: 700;
+
+  --ds-leading-tight: 1.1;
+  --ds-leading-snug: 1.25;
+  --ds-leading-normal: 1.5;
+  --ds-leading-relaxed: 1.65;
+
+  --ds-tracking-numeral: -0.04em;
+  --ds-tracking-display: -0.02em;
+  --ds-tracking-tight: -0.01em;
+  --ds-tracking-normal: 0em;
+  --ds-tracking-caps: 0.06em;
+
+  /* --- Spacing (4px base) --------------------------------------------- */
+  --ds-space-0: 0;
+  --ds-space-1: 0.25rem; /* 4 */
+  --ds-space-2: 0.5rem;  /* 8 */
+  --ds-space-3: 0.75rem; /* 12 */
+  --ds-space-4: 1rem;    /* 16 */
+  --ds-space-5: 1.25rem; /* 20 */
+  --ds-space-6: 1.5rem;  /* 24 */
+  --ds-space-8: 2rem;    /* 32 */
+  --ds-space-10: 2.5rem; /* 40 */
+  --ds-space-12: 3rem;   /* 48 */
+  --ds-space-16: 4rem;   /* 64 */
+
+  /* --- Radius ---------------------------------------------------------
+     The numeric steps match Tailwind's defaults so existing markup is
+     unaffected. What the system actually standardizes is the SEMANTIC set
+     below: components reference those, never a raw step. Generous rounding
+     is the Tally reference, so the semantic values sit high on the scale. */
+  --ds-radius-sm: 4px;
+  --ds-radius-md: 6px;
+  --ds-radius-lg: 8px;
+  --ds-radius-xl: 12px;
+  --ds-radius-2xl: 16px;
+  --ds-radius-3xl: 24px;
+  --ds-radius-4xl: 32px;
+  --ds-radius-full: 9999px;
+
+  --ds-radius-chip: 10px;    /* icon chips, small tinted squares */
+  --ds-radius-field: 12px;   /* inputs, textareas, selects */
+  --ds-radius-card: 16px;    /* the default card */
+  --ds-radius-sheet: 24px;   /* bottom sheets, modals, hero blocks */
+  --ds-radius-pill: 9999px;  /* buttons, pills, badges */
+
+  /* --- Elevation: subtle depth, never glow ---------------------------- */
+  --ds-shadow-sm: 0 1px 2px rgba(20, 20, 30, 0.04);
+  --ds-shadow-card:
+    0 1px 2px rgba(20, 20, 30, 0.04),
+    0 4px 16px rgba(20, 20, 30, 0.05);
+  --ds-shadow-pop: 0 12px 40px rgba(20, 20, 30, 0.12);
+  --ds-shadow-sheet: 0 -8px 40px rgba(20, 20, 30, 0.14);
+
+  /* --- Motion --------------------------------------------------------- */
+  --ds-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ds-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ds-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ds-duration-fast: 120ms;
+  --ds-duration: 200ms;
+  --ds-duration-slow: 450ms;
+
+  /* --- Layout --------------------------------------------------------- */
+  --ds-gutter: 1.25rem;       /* 20 on mobile */
+  --ds-content-max: 44rem;    /* 704 - reading width */
+  --ds-content-max-wide: 72rem;
+  --ds-nav-height: 3.75rem;   /* 60 */
+  --ds-tap-min: 44px;         /* the iOS touch-target floor */
+  --ds-safe-top: env(safe-area-inset-top, 0px);
+  --ds-safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  /* --- Stacking ------------------------------------------------------- */
+  --ds-z-base: 0;
+  --ds-z-sticky: 10;
+  --ds-z-nav: 20;
+  --ds-z-overlay: 30;
+  --ds-z-sheet: 40;
+  --ds-z-toast: 50;
+
+  /* --- Focus ---------------------------------------------------------- */
+  --ds-ring-width: 2px;
+  --ds-ring-offset: 2px;
+}
+
+@media (min-width: 768px) {
+  :root {
+    --ds-gutter: 2rem; /* 32 on desktop */
+  }
+}
+
+/* =========================================================================
+   Dark palette - explicit opt-in only.
+   .dark is included so Tally's existing class-based toggle works untouched.
+   ========================================================================= */
+.ds-dark,
+[data-ds-scheme="dark"],
+.dark {
+  --ds-page: #0d0d0f;
+  --ds-surface: #161619;
+  --ds-surface-2: #202024;
+  --ds-surface-3: #2a2a30;
+  --ds-fg: #f2f2f0;
+  --ds-fg-muted: #9a9aa2;
+  --ds-fg-faint: #5f5f68;
+  --ds-border: #26262c;
+  --ds-border-strong: #38383f;
+
+  --ds-good: #4fc084;
+  --ds-good-tint: #14271c;
+  --ds-warn: #dcab5a;
+  --ds-warn-tint: #2b2213;
+  --ds-bad: #ec7a6c;
+  --ds-bad-tint: #331a17;
+  --ds-bad-deep: #c4402f;
+  --ds-info: #4f93d4;
+  --ds-info-tint: #16232f;
+
+  --ds-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --ds-shadow-card:
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 6px 20px rgba(0, 0, 0, 0.35);
+  --ds-shadow-pop: 0 16px 48px rgba(0, 0, 0, 0.55);
+  --ds-shadow-sheet: 0 -8px 40px rgba(0, 0, 0, 0.5);
+}
+
+/* =========================================================================
+   Base element styling and the shared utility classes every app uses.
+   ========================================================================= */
+
+body {
+  font-family: var(--ds-font-body);
+  background: var(--ds-page);
+  color: var(--ds-fg);
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overscroll-behavior-y: none;
+}
+
+::selection {
+  background: var(--ds-accent-tint);
+}
+
+/* Display type: the grotesque, tightened. */
+.ds-display {
+  font-family: var(--ds-font-display);
+  font-weight: var(--ds-weight-semibold);
+  letter-spacing: var(--ds-tracking-display);
+}
+
+/* Big numbers are the product in most of these apps: tight, heavy, tabular. */
+.ds-numeral {
+  font-family: var(--ds-font-display);
+  font-weight: var(--ds-weight-display);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--ds-tracking-numeral);
+}
+
+.ds-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Small all-caps label above a section or stat. */
+.ds-overline {
+  font-size: var(--ds-text-3xs);
+  font-weight: var(--ds-weight-semibold);
+  letter-spacing: var(--ds-tracking-caps);
+  text-transform: uppercase;
+  color: var(--ds-fg-muted);
+}
+
+.ds-elevate {
+  box-shadow: var(--ds-shadow-card);
+}
+
+.ds-no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.ds-no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.ds-safe-bottom {
+  padding-bottom: var(--ds-safe-bottom);
+}
+.ds-safe-top {
+  padding-top: var(--ds-safe-top);
+}
+
+/* Keyboard focus only, never on mouse click. */
+.ds-focusable:focus-visible {
+  outline: var(--ds-ring-width) solid var(--ds-accent);
+  outline-offset: var(--ds-ring-offset);
+}
+
+/* --- Motion ---------------------------------------------------------- */
+
+@keyframes ds-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes ds-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes ds-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Horizontal fill for progress bars. Element sets its own transform target. */
+@keyframes ds-bar-grow {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+/* Progress rings draw themselves in. Element sets --ds-dash-start. */
+@keyframes ds-ring-draw {
+  from {
+    stroke-dashoffset: var(--ds-dash-start);
+  }
+}
+
+@keyframes ds-shimmer {
+  from {
+    background-position: -200% 0;
+  }
+  to {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes ds-sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+.ds-rise-in {
+  animation: ds-rise-in var(--ds-duration-slow) var(--ds-ease) both;
+}
+.ds-fade-in {
+  animation: ds-fade-in var(--ds-duration) ease both;
+}
+.ds-scale-in {
+  animation: ds-scale-in 0.26s var(--ds-ease) both;
+}
+.ds-bar-grow {
+  transform-origin: left;
+  animation: ds-bar-grow 0.6s var(--ds-ease) both;
+}
+.ds-ring-draw {
+  animation: ds-ring-draw 0.9s var(--ds-ease) both;
+}
+.ds-sheet-up {
+  animation: ds-sheet-up 0.32s var(--ds-ease-out) both;
+}
+
+/* Stagger helpers for list and tile load-ins. */
+.ds-stagger-1 { animation-delay: 40ms; }
+.ds-stagger-2 { animation-delay: 80ms; }
+.ds-stagger-3 { animation-delay: 120ms; }
+.ds-stagger-4 { animation-delay: 160ms; }
+.ds-stagger-5 { animation-delay: 200ms; }
+.ds-stagger-6 { animation-delay: 240ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ds-rise-in,
+  .ds-fade-in,
+  .ds-scale-in,
+  .ds-bar-grow,
+  .ds-ring-draw,
+  .ds-sheet-up {
+    animation: none;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* --- Forms ----------------------------------------------------------- */
+
+/* iOS zooms any focused input under 16px. Never let that happen on mobile. */
+@media (max-width: 767px) {
+  input,
+  textarea,
+  select {
+    font-size: max(16px, 1em);
+  }
+}
+
+/* Number fields in these apps use explicit steppers, so kill the spinners. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}

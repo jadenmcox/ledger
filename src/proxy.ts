@@ -10,6 +10,10 @@ export const proxy =
 
 export const config = {
   matcher: [
-    "/((?!api/auth|_next|login|preview|icon.svg|manifest.webmanifest|favicon|.*\\.(?:png|jpg|svg|webmanifest)).*)",
+    // The trailing extension group already covers every generated icon
+    // (png/svg/ico) and the manifest, so they are served without a session.
+    // iOS fetches apple-touch-icon WITHOUT cookies at add-to-home-screen time,
+    // which is exactly what a missing exclusion here would break.
+    "/((?!api/auth|_next|login|preview|manifest.webmanifest|favicon|.*\\.(?:png|jpg|svg|ico|webmanifest)).*)",
   ],
 };

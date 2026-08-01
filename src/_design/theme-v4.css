@@ -1,0 +1,120 @@
+/* AUTO-COPIED from the design system. DO NOT EDIT HERE.
+   Source: design/tokens/theme-v4.css
+   Change it there, then run: npm run sync -- <app>
+   Check every app for drift with: npm run check:drift */
+
+/* =========================================================================
+   L1 - Tailwind v4 bridge
+
+   Maps the --ds-* tokens into Tailwind's theme namespace so utilities like
+   bg-surface, text-foreground-muted, shadow-card and rounded-card exist.
+
+   Usage in an app's globals.css:
+
+     @import "tailwindcss";
+     @import "../_design/tokens.css";
+     @import "../_design/theme-v4.css";
+     @source "../_design";          <- so Tailwind scans the kit's classes
+
+     :root {                        <- the app's three lines of identity
+       --ds-accent: #c62e63;
+       --ds-accent-deep: #9e2149;
+       --ds-accent-tint: #fbe8ef;
+     }
+
+   Two deliberate choices:
+
+   1. `inline` is required. It makes generated utilities emit the resolved
+      value rather than var(--color-x), which is what lets a dark-mode class
+      swap --ds-* underneath and have every utility follow.
+
+   2. The neutral names (background, surface, foreground-muted, border...) and
+      `primary` are kept exactly as dashboard, circle, closet and plate
+      already spell them, and `primary` is aliased to the accent. That means
+      monorepo/packages/ui and all existing app markup keep working untouched
+      while the underlying values become the shared family values.
+
+   Tailwind's own numeric type and radius scales are intentionally NOT
+   overridden. See tokens.css for why.
+   ========================================================================= */
+
+@theme inline {
+  /* --- Neutrals ------------------------------------------------------- */
+  --color-background: var(--ds-page);
+  --color-page: var(--ds-page);
+  --color-surface: var(--ds-surface);
+  --color-surface-2: var(--ds-surface-2);
+  --color-surface-3: var(--ds-surface-3);
+  --color-foreground: var(--ds-fg);
+  --color-foreground-muted: var(--ds-fg-muted);
+  --color-foreground-faint: var(--ds-fg-faint);
+  --color-border: var(--ds-border);
+  --color-border-strong: var(--ds-border-strong);
+
+  /* Short aliases, for new code that prefers them. */
+  --color-fg: var(--ds-fg);
+  --color-fg-muted: var(--ds-fg-muted);
+  --color-fg-faint: var(--ds-fg-faint);
+
+  /* --- Accent ---------------------------------------------------------
+     `primary` is the back-compat alias consumed by monorepo/packages/ui. */
+  --color-accent: var(--ds-accent);
+  --color-accent-deep: var(--ds-accent-deep);
+  --color-accent-tint: var(--ds-accent-tint);
+  --color-accent-contrast: var(--ds-accent-contrast);
+  --color-primary: var(--ds-accent);
+  --color-primary-deep: var(--ds-accent-deep);
+  --color-primary-tint: var(--ds-accent-tint);
+
+  /* --- Status --------------------------------------------------------- */
+  --color-good: var(--ds-good);
+  --color-good-tint: var(--ds-good-tint);
+  --color-warn: var(--ds-warn);
+  --color-warn-tint: var(--ds-warn-tint);
+  --color-bad: var(--ds-bad);
+  --color-bad-tint: var(--ds-bad-tint);
+  --color-bad-deep: var(--ds-bad-deep);
+  --color-info: var(--ds-info);
+  --color-info-tint: var(--ds-info-tint);
+
+  /* --- Type ----------------------------------------------------------- */
+  --font-sans: var(--ds-font-body);
+  --font-body: var(--ds-font-body);
+  --font-display: var(--ds-font-display);
+  --font-mono: var(--ds-font-mono);
+
+  /* The one addition to Tailwind's size scale. */
+  --text-2xs: var(--ds-text-2xs);
+
+  --tracking-numeral: var(--ds-tracking-numeral);
+  --tracking-display: var(--ds-tracking-display);
+  --tracking-caps: var(--ds-tracking-caps);
+
+  /* --- Semantic radius ------------------------------------------------ */
+  --radius-chip: var(--ds-radius-chip);
+  --radius-field: var(--ds-radius-field);
+  --radius-card: var(--ds-radius-card);
+  --radius-sheet: var(--ds-radius-sheet);
+  --radius-pill: var(--ds-radius-pill);
+
+  /* --- Elevation ------------------------------------------------------ */
+  --shadow-sm: var(--ds-shadow-sm);
+  --shadow-card: var(--ds-shadow-card);
+  --shadow-pop: var(--ds-shadow-pop);
+  --shadow-sheet: var(--ds-shadow-sheet);
+
+  /* --- Motion --------------------------------------------------------- */
+  --ease-ds: var(--ds-ease);
+  --ease-ds-out: var(--ds-ease-out);
+  --ease-ds-in-out: var(--ds-ease-in-out);
+
+  --animate-rise-in: ds-rise-in var(--ds-duration-slow) var(--ds-ease) both;
+  --animate-fade-in: ds-fade-in var(--ds-duration) ease both;
+  --animate-scale-in: ds-scale-in 0.26s var(--ds-ease) both;
+  --animate-sheet-up: ds-sheet-up 0.32s var(--ds-ease-out) both;
+
+  /* --- Layout --------------------------------------------------------- */
+  --spacing-gutter: var(--ds-gutter);
+  --spacing-nav: var(--ds-nav-height);
+  --spacing-tap: var(--ds-tap-min);
+}

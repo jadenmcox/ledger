@@ -1,15 +1,40 @@
 @import "tailwindcss";
 
+/* The shared design system. tokens.css carries every neutral, status color,
+   radius, shadow and motion value; theme-v4.css maps them onto Tailwind. Both
+   are vendored from ~/Documents/Projects/design, so edit them THERE and re-run
+   `npm run sync -- budgetly`, never here. */
+@import "../_design/tokens.css";
+@import "../_design/theme-v4.css";
+
+/* Scan the kit so its utility classes get generated. */
+@source "../_design";
+
 :root {
-  /* Modern white with a whisper of pink */
-  --background: #fdfafb;
-  --surface: #ffffff;
-  --surface-2: #fdeef3;
-  --foreground: #1a1325;
-  --foreground-muted: #6b5e75;
-  --foreground-faint: #b8acbb;
-  --border: #f1e6eb;
-  --border-strong: #e3d2da;
+  color-scheme: light;
+
+  /* --- Budgetly's identity -------------------------------------------
+     Blush, from the canonical accent map in design/tokens/tokens.mjs.
+     Derived and contrast-checked; `deep` is what primary buttons and text
+     on a tint use, because the brand blush alone is only 3.14:1 on white. */
+  --ds-accent: #ec6385;
+  --ds-accent-deep: #d11947;
+  --ds-accent-tint: #fbe7ec;
+  --ds-accent-contrast: #ffffff;
+
+  /* --- Neutrals now come from the shared system ----------------------
+     Kept as aliases rather than renamed: there are ~58 direct var(--surface)
+     style references across the app plus a large @theme block below that
+     reads them. Aliasing means every one of those adopts the family value
+     with no churn. New code should use --ds-* directly. */
+  --background: var(--ds-page);
+  --surface: var(--ds-surface);
+  --surface-2: var(--ds-surface-2);
+  --foreground: var(--ds-fg);
+  --foreground-muted: var(--ds-fg-muted);
+  --foreground-faint: var(--ds-fg-faint);
+  --border: var(--ds-border);
+  --border-strong: var(--ds-border-strong);
 
   /* Ink — primary brand, deep midnight indigo
      (these keep the "sage" variable names so existing classes
@@ -23,10 +48,12 @@
   --peach-deep: #c96545;
   --peach-tint: #fde2d4;
 
-  /* Blush — the pink that runs through it all (the headline accent) */
-  --blush: #ec6385;
-  --blush-deep: #c43d62;
-  --blush-tint: #fde1ea;
+  /* Blush is Budgetly's accent, so it points at the shared contract rather
+     than carrying its own hexes. ~95 blush-* class usages adopt the derived,
+     contrast-checked values this way without a single markup change. */
+  --blush: var(--ds-accent);
+  --blush-deep: var(--ds-accent-deep);
+  --blush-tint: var(--ds-accent-tint);
 
   /* Powder blue — income, savings (replacing sage as the "positive" color) */
   --blue: #6f9bd9;
@@ -103,12 +130,12 @@
   --color-clay: var(--blush);
   --color-clay-dim: var(--blush-deep);
 
-  /* Single-typeface system — Inter handles all roles.
-     We keep these tokens so legacy class hooks resolve, but they all
-     point at the same family. */
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-sans);
-  --font-serif: var(--font-sans);
+  /* Legacy class hooks (.mono, .serif) resolve to the family body face; the
+     display face is separate now rather than everything being one typeface. */
+  --font-sans: var(--ds-font-body);
+  --font-mono: var(--ds-font-body);
+  --font-serif: var(--ds-font-body);
+  --font-display: var(--ds-font-display);
 }
 
 * {
