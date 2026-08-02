@@ -23,7 +23,21 @@
 
 import * as React from "react";
 import { cn } from "./cn";
-import { Icon as DefaultIcon, IconChip, type IconProps, type IconSize } from "./Icon";
+import {
+  Icon as DefaultIcon,
+  IconChip,
+  TONE_FILL,
+  TONE_TINT,
+  TONE_TRACK,
+  TONE_TRACK_VAR,
+  TONE_VAR,
+  type IconProps,
+  type IconSize,
+  type Tone,
+} from "./Icon";
+
+export type { Tone } from "./Icon";
+export { TONE_FILL, TONE_TINT, TONE_TRACK, TONE_VAR, TONE_TRACK_VAR } from "./Icon";
 
 type IconCmp = React.ComponentType<IconProps>;
 
@@ -90,9 +104,9 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         aria-busy={loading || undefined}
         className={cn(
           "inline-flex items-center justify-center rounded-pill font-medium tracking-tight",
-          "transition-all duration-200 ease-ds",
+          "transition-all duration-200 ease-spring",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-          "disabled:opacity-50 disabled:pointer-events-none active:scale-[0.98]",
+          "disabled:opacity-50 disabled:pointer-events-none active:scale-95",
           iconOnly ? BTN_ICON_SIZE[size] : BTN_SIZE[size],
           BTN_VARIANT[variant],
           className,
@@ -222,14 +236,17 @@ export function EmptyState({
   title,
   body,
   icon,
+  tone = "accent",
   action,
   className,
   iconComponent,
 }: {
   title: string;
   body: string;
-  /** Icon name. Rendered in a large neutral chip above the title. */
+  /** Icon name. Rendered in a large tinted chip above the title. */
   icon?: string;
+  /** Colours the chip. Defaults to the app accent. */
+  tone?: Tone;
   action?: React.ReactNode;
   className?: string;
   iconComponent?: IconCmp;
@@ -237,13 +254,23 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        "bg-surface/70 border border-dashed border-border-strong rounded-sheet",
+        // A soft accent wash and a tinted border rather than dashed grey. An
+        // empty state is the first thing you see in a new app; it should look
+        // like an invitation, not like something failed.
+        "relative overflow-hidden rounded-sheet border border-accent-tint",
+        "bg-gradient-to-b from-accent-tint/60 to-surface",
         "p-10 md:p-16 text-center flex flex-col items-center",
         className,
       )}
     >
       {icon && (
-        <IconChip name={icon} size="xl" tone="neutral" className="mb-4" icon={iconComponent} />
+        <IconChip
+          name={icon}
+          size="xl"
+          tone={tone}
+          className="mb-4 ds-pop-in"
+          icon={iconComponent}
+        />
       )}
       <h3 className="ds-display text-xl mb-2">{title}</h3>
       <p
@@ -288,12 +315,7 @@ export function PageHeader({
    ------------------------------------------------------------------------- */
 
 const PILL_TONES = {
-  accent: "bg-accent-tint text-accent-deep",
-  good: "bg-good-tint text-good",
-  warn: "bg-warn-tint text-warn",
-  bad: "bg-bad-tint text-bad",
-  info: "bg-info-tint text-info",
-  neutral: "bg-surface-2 text-foreground-muted",
+  ...TONE_TINT,
   outline: "border border-border-strong text-foreground-muted",
 } as const;
 
@@ -305,7 +327,7 @@ export function Pill({
   iconComponent: IconCmpProp = DefaultIcon,
 }: {
   children: React.ReactNode;
-  tone?: keyof typeof PILL_TONES;
+  tone?: Tone | "outline";
   icon?: string;
   className?: string;
   iconComponent?: IconCmp;
@@ -337,17 +359,28 @@ export function StatTile({
   tone = "accent",
   className,
   iconComponent,
+  /** Washes the whole tile in the tone instead of only the chip. Default on:
+   *  a row of stat tiles should read as a colourful set, not five grey cards
+   *  with a spot of colour each. */
+  tinted = true,
 }: {
   label: string;
   value: React.ReactNode;
   sublabel?: string;
   icon?: string;
-  tone?: "accent" | "good" | "warn" | "bad" | "info" | "neutral";
+  tone?: Tone;
   className?: string;
   iconComponent?: IconCmp;
+  tinted?: boolean;
 }) {
   return (
-    <Card className={cn("p-4 flex items-center gap-3", className)}>
+    <Card
+      className={cn(
+        "p-4 flex items-center gap-3 transition-transform duration-200 ease-spring",
+        tinted && TILE_WASH[tone],
+        className,
+      )}
+    >
       {icon && <IconChip name={icon} tone={tone} icon={iconComponent} />}
       <div className="min-w-0">
         <p className="ds-overline">{label}</p>
@@ -360,6 +393,24 @@ export function StatTile({
   );
 }
 
+/* A very light wash plus a matching hairline. Subtle on purpose: the tile is
+   tinted, not painted, so a grid of them stays calm while still being
+   unmistakably colourful. */
+const TILE_WASH: Record<Tone, string> = {
+  accent: "bg-accent-tint/50 border-accent-tint",
+  good: "bg-good-tint/50 border-good-tint",
+  warn: "bg-warn-tint/50 border-warn-tint",
+  bad: "bg-bad-tint/50 border-bad-tint",
+  info: "bg-info-tint/50 border-info-tint",
+  neutral: "",
+  "cat-1": "bg-cat-1-tint/50 border-cat-1-tint",
+  "cat-2": "bg-cat-2-tint/50 border-cat-2-tint",
+  "cat-3": "bg-cat-3-tint/50 border-cat-3-tint",
+  "cat-4": "bg-cat-4-tint/50 border-cat-4-tint",
+  "cat-5": "bg-cat-5-tint/50 border-cat-5-tint",
+  "cat-6": "bg-cat-6-tint/50 border-cat-6-tint",
+};
+
 export function ProgressBar({
   value,
   max = 100,
@@ -370,32 +421,41 @@ export function ProgressBar({
 }: {
   value: number;
   max?: number;
-  tone?: "accent" | "good" | "warn" | "bad";
+  tone?: Tone;
   className?: string;
   label?: string;
   animate?: boolean;
 }) {
   const pct = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
-  const fill = {
-    accent: "bg-accent",
-    good: "bg-good",
-    warn: "bg-warn",
-    bad: "bg-bad",
-  }[tone];
+  const empty = pct === 0;
 
   return (
     <div
-      className={cn("h-2 w-full rounded-pill bg-surface-2 overflow-hidden", className)}
+      className={cn(
+        // Track is tinted in the tone, never grey. A bar at zero should look
+        // like it is waiting for you, not like the component failed to load.
+        "h-2 w-full rounded-pill overflow-hidden",
+        TONE_TRACK[tone],
+        className,
+      )}
       role="progressbar"
       aria-valuenow={Math.round(pct)}
       aria-valuemin={0}
       aria-valuemax={100}
       aria-label={label}
     >
-      <div
-        className={cn("h-full rounded-pill", fill, animate && "ds-bar-grow")}
-        style={{ width: `${pct}%` }}
-      />
+      {empty ? (
+        // Ghost fill: a small breathing stub of the real colour, so an
+        // untouched bar still shows what it is going to become.
+        <div
+          className={cn("h-full w-[14%] rounded-pill opacity-40 ds-breathe", TONE_FILL[tone])}
+        />
+      ) : (
+        <div
+          className={cn("h-full rounded-pill", TONE_FILL[tone], animate && "ds-bar-grow")}
+          style={{ width: `${pct}%` }}
+        />
+      )}
     </div>
   );
 }
@@ -416,7 +476,7 @@ export function ProgressRing({
   max?: number;
   size?: number;
   thickness?: number;
-  tone?: "accent" | "good" | "warn" | "bad";
+  tone?: Tone;
   children?: React.ReactNode;
   className?: string;
   animate?: boolean;
@@ -426,12 +486,8 @@ export function ProgressRing({
   const r = (size - thickness) / 2;
   const circumference = 2 * Math.PI * r;
   const offset = circumference * (1 - pct);
-  const stroke = {
-    accent: "var(--ds-accent)",
-    good: "var(--ds-good)",
-    warn: "var(--ds-warn)",
-    bad: "var(--ds-bad)",
-  }[tone];
+  const stroke = TONE_VAR[tone];
+  const empty = pct === 0;
 
   return (
     <div className={cn("relative inline-flex items-center justify-center", className)}>
@@ -445,14 +501,30 @@ export function ProgressRing({
         aria-label={label}
         className="-rotate-90"
       >
+        {/* Track tinted in the tone rather than grey. */}
         <circle
           cx={size / 2}
           cy={size / 2}
           r={r}
           fill="none"
-          stroke="var(--ds-surface-2)"
+          stroke={TONE_TRACK_VAR[tone]}
           strokeWidth={thickness}
         />
+        {/* Nothing logged yet: a dashed, slowly breathing ghost of the real
+            colour, so an untouched ring invites rather than looking broken. */}
+        {empty && (
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            fill="none"
+            stroke={stroke}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeDasharray="2 10"
+            className="ds-breathe"
+          />
+        )}
         <circle
           cx={size / 2}
           cy={size / 2}
@@ -485,7 +557,7 @@ export function ListRow({
   title,
   subtitle,
   icon,
-  iconTone = "neutral",
+  iconTone = "accent",
   trailing,
   onClick,
   href,
@@ -495,7 +567,7 @@ export function ListRow({
   title: React.ReactNode;
   subtitle?: React.ReactNode;
   icon?: string;
-  iconTone?: "accent" | "good" | "warn" | "bad" | "info" | "neutral";
+  iconTone?: Tone;
   trailing?: React.ReactNode;
   onClick?: () => void;
   href?: string;
@@ -570,7 +642,11 @@ export function StreakBadge({
     <span
       className={cn(
         "inline-flex items-center gap-1.5 rounded-pill px-3 py-1.5",
-        active ? "bg-accent-tint text-accent-deep" : "bg-surface-2 text-foreground-faint",
+        // A live streak is a win, so it glows in warm categorical colour
+        // rather than sitting in the same tint as everything else.
+        active
+          ? "bg-cat-2-tint text-cat-2-deep ds-pop-in"
+          : "bg-surface-2 text-foreground-faint",
         className,
       )}
       title={active ? `${days} day streak` : "No streak yet"}

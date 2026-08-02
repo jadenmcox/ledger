@@ -84,24 +84,115 @@ export const Icon = createIcon(coreIcons);
    IconChip - the tinted rounded square icons sit in throughout the family.
    ------------------------------------------------------------------------- */
 
-export type IconChipProps = {
-  name: string;
-  size?: IconSize;
-  /** Which color the chip carries. `accent` is the app's brand. */
-  tone?: "accent" | "good" | "warn" | "bad" | "info" | "neutral";
-  className?: string;
-  label?: string;
-  /** Pass an app-specific Icon built with createIcon. */
-  icon?: React.ComponentType<IconProps>;
-};
+/* Every tone the kit understands: the app accent, the four status colours, the
+   six categorical slots, and neutral. Categorical tones are what let a screen
+   be colourful with MEANING rather than decoration: each metric keeps its slot
+   across every app. */
+export type Tone =
+  | "accent"
+  | "good"
+  | "warn"
+  | "bad"
+  | "info"
+  | "neutral"
+  | "cat-1"
+  | "cat-2"
+  | "cat-3"
+  | "cat-4"
+  | "cat-5"
+  | "cat-6";
 
-const CHIP_TONES: Record<NonNullable<IconChipProps["tone"]>, string> = {
+/** Background + foreground for a tinted surface (chips, pills, tiles). */
+export const TONE_TINT: Record<Tone, string> = {
   accent: "bg-accent-tint text-accent-deep",
   good: "bg-good-tint text-good",
   warn: "bg-warn-tint text-warn",
   bad: "bg-bad-tint text-bad",
   info: "bg-info-tint text-info",
   neutral: "bg-surface-2 text-foreground-muted",
+  "cat-1": "bg-cat-1-tint text-cat-1-deep",
+  "cat-2": "bg-cat-2-tint text-cat-2-deep",
+  "cat-3": "bg-cat-3-tint text-cat-3-deep",
+  "cat-4": "bg-cat-4-tint text-cat-4-deep",
+  "cat-5": "bg-cat-5-tint text-cat-5-deep",
+  "cat-6": "bg-cat-6-tint text-cat-6-deep",
+};
+
+/** Solid fill, for progress and marks. */
+export const TONE_FILL: Record<Tone, string> = {
+  accent: "bg-accent",
+  good: "bg-good",
+  warn: "bg-warn",
+  bad: "bg-bad",
+  info: "bg-info",
+  neutral: "bg-foreground-faint",
+  "cat-1": "bg-cat-1",
+  "cat-2": "bg-cat-2",
+  "cat-3": "bg-cat-3",
+  "cat-4": "bg-cat-4",
+  "cat-5": "bg-cat-5",
+  "cat-6": "bg-cat-6",
+};
+
+/** The track behind a fill. Tinted in the tone, never grey: a bar at zero
+ *  should read as waiting rather than broken. */
+export const TONE_TRACK: Record<Tone, string> = {
+  accent: "bg-accent-tint",
+  good: "bg-good-tint",
+  warn: "bg-warn-tint",
+  bad: "bg-bad-tint",
+  info: "bg-info-tint",
+  neutral: "bg-surface-2",
+  "cat-1": "bg-cat-1-tint",
+  "cat-2": "bg-cat-2-tint",
+  "cat-3": "bg-cat-3-tint",
+  "cat-4": "bg-cat-4-tint",
+  "cat-5": "bg-cat-5-tint",
+  "cat-6": "bg-cat-6-tint",
+};
+
+/** The CSS variable for a tone, for SVG strokes and inline styles. */
+export const TONE_VAR: Record<Tone, string> = {
+  accent: "var(--ds-accent)",
+  good: "var(--ds-good)",
+  warn: "var(--ds-warn)",
+  bad: "var(--ds-bad)",
+  info: "var(--ds-info)",
+  neutral: "var(--ds-fg-faint)",
+  "cat-1": "var(--ds-cat-1)",
+  "cat-2": "var(--ds-cat-2)",
+  "cat-3": "var(--ds-cat-3)",
+  "cat-4": "var(--ds-cat-4)",
+  "cat-5": "var(--ds-cat-5)",
+  "cat-6": "var(--ds-cat-6)",
+};
+
+export const TONE_TRACK_VAR: Record<Tone, string> = {
+  accent: "var(--ds-accent-tint)",
+  good: "var(--ds-good-tint)",
+  warn: "var(--ds-warn-tint)",
+  bad: "var(--ds-bad-tint)",
+  info: "var(--ds-info-tint)",
+  neutral: "var(--ds-surface-2)",
+  "cat-1": "var(--ds-cat-1-tint)",
+  "cat-2": "var(--ds-cat-2-tint)",
+  "cat-3": "var(--ds-cat-3-tint)",
+  "cat-4": "var(--ds-cat-4-tint)",
+  "cat-5": "var(--ds-cat-5-tint)",
+  "cat-6": "var(--ds-cat-6-tint)",
+};
+
+export type IconChipProps = {
+  name: string;
+  size?: IconSize;
+  /** Which color the chip carries. `accent` is the app's brand; the cat-*
+   *  slots are the shared categorical palette, for when the chip stands for a
+   *  specific metric rather than the app itself. */
+  tone?: Tone;
+  className?: string;
+  label?: string;
+  /** Pass an app-specific Icon built with createIcon. */
+  icon?: React.ComponentType<IconProps>;
 };
 
 const CHIP_BOX: Record<IconSize, string> = {
@@ -125,7 +216,7 @@ export function IconChip({
       className={[
         "inline-flex shrink-0 items-center justify-center rounded-chip",
         CHIP_BOX[size],
-        CHIP_TONES[tone],
+        TONE_TINT[tone],
         className,
       ]
         .filter(Boolean)
