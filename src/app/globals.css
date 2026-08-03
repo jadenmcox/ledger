@@ -155,32 +155,41 @@ body {
   background-color: var(--background);
 }
 
-/* Display headings — Inter, tightened tracking, semibold.
-   No serif anywhere. Class name kept for compatibility. */
+/* Section headings. No serif anywhere; the class name is kept only because ~20
+   call sites use it.
+
+   This was set in --font-sans, the BODY face, while .display below correctly
+   used --font-display. So Budgetly's section headings were the one place in
+   the suite where headings were not Schibsted, which is what made the app read
+   as slightly off-family next to the other seven. */
 .serif {
-  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-display), var(--font-sans), ui-sans-serif, system-ui,
+    sans-serif;
   font-weight: 600;
   letter-spacing: -0.035em;
-  font-feature-settings: "ss01" on, "cv11" on;
 }
 
-/* Was an italic serif accent; now an emphasized inline span — same blush
-   hierarchy without the editorial look. */
+/* Was an italic serif accent; now an emphasized inline number. Display face
+   like every other numeral in the suite. */
 .serif-italic {
-  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-display), var(--font-sans), ui-sans-serif, system-ui,
+    sans-serif;
   font-style: normal;
   font-weight: 600;
   letter-spacing: -0.035em;
   color: var(--blush-deep);
 }
 
-/* Numbers — Inter with tabular figures. Inter's default zero is unslashed,
-   which is exactly what we want. */
+/* Numbers. The design system sets numerals in the DISPLAY face, tabular, at
+   -0.04em: numbers are the product in most of these apps. This was the body
+   face, and the "zero"/"ss01" feature flags were Inter's, which do nothing on
+   Schibsted Grotesk. */
 .mono {
-  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-display), var(--font-sans), ui-sans-serif, system-ui,
+    sans-serif;
   font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" on, "zero" 0, "ss01" off;
-  letter-spacing: -0.02em;
+  font-feature-settings: "tnum" on;
+  letter-spacing: var(--ds-tracking-numeral);
 }
 
 .tabular {
