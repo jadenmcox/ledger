@@ -9,17 +9,18 @@ import {
   EmptyState,
   Pill,
 } from "@/components/ui";
-import { formatCents } from "@/lib/utils";
+import { formatCents, parseDollarsToCents, cn } from "@/lib/utils";
 import {
   createAccount,
   updateAccount,
   archiveAccount,
   unarchiveAccount,
   deleteAccount,
+  adjustBalance,
 } from "./actions";
 import type { Account } from "@/db/schema";
 import { accountTypes } from "@/db/schema";
-import { Plus, Pencil, Trash2, Archive, ArchiveRestore, ArrowUpRight } from "lucide-react";
+import { Plus, Pencil, Trash2, Archive, ArchiveRestore, ArrowUpRight, Coins } from "lucide-react";
 import Link from "next/link";
 import { Sparkline } from "@/components/charts/Sparkline";
 
@@ -63,6 +64,24 @@ export function AccountsClient({
 }) {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Account | null>(null);
+  const [adjusting, setAdjusting] = useState<Account | null>(null);
+
+  // Only one panel (add / full edit / quick balance update) is open at a time.
+  const openAdd = () => {
+    setEditing(null);
+    setAdjusting(null);
+    setAdding(true);
+  };
+  const openEdit = (a: Account) => {
+    setAdding(false);
+    setAdjusting(null);
+    setEditing(a);
+  };
+  const openAdjust = (a: Account) => {
+    setAdding(false);
+    setEditing(null);
+    setAdjusting(a);
+  };
 
   if (initial.length === 0 && !adding) {
     return (
@@ -70,7 +89,7 @@ export function AccountsClient({
         title="No accounts yet"
         body="Add your first account. The current balance you enter today becomes the starting point for tracking your net worth over time."
         action={
-          <Button variant="primary" onClick={() => setAdding(true)}>
+          <Button variant="primary" onClick={openAdd}>
             <Plus className="size-4" strokeWidth={1.5} /> Add an account
           </Button>
         }
@@ -83,7 +102,9 @@ export function AccountsClient({
 
   return (
     <div className="space-y-8">
-      {(adding || editing) && (
+      {adjusting ? (
+        <BalanceForm account={adjusting} onClose={() => setAdjusting(null)} />
+      ) : adding || editing ? (
         <AccountForm
           initial={editing}
           onClose={() => {
@@ -91,11 +112,12 @@ export function AccountsClient({
             setEditing(null);
           }}
         />
-      )}
+      ) : null}
 
       <AccountList
         accounts={active}
-        onEdit={setEditing}
+        onEdit={openEdit}
+        onAdjust={openAdjust}
         onArchive={(id) => archiveAccount(id)}
         trends={trends}
       />
@@ -110,7 +132,8 @@ export function AccountsClient({
           </div>
           <AccountList
             accounts={archived}
-            onEdit={setEditing}
+            onEdit={openEdit}
+            onAdjust={openAdjust}
             onUnarchive={(id) => unarchiveAccount(id)}
             onDelete={(id) => {
               if (
@@ -130,7 +153,7 @@ export function AccountsClient({
       <div className="flex md:justify-end">
         <Button
           variant="primary"
-          onClick={() => setAdding(true)}
+          onClick={openAdd}
           className="w-full md:w-auto justify-center"
         >
           <Plus className="size-4" strokeWidth={1.5} /> New account
@@ -143,6 +166,7 @@ export function AccountsClient({
 function AccountList({
   accounts,
   onEdit,
+  onAdjust,
   onArchive,
   onUnarchive,
   onDelete,
@@ -151,6 +175,7 @@ function AccountList({
 }: {
   accounts: Account[];
   onEdit: (a: Account) => void;
+  onAdjust?: (a: Account) => void;
   onArchive?: (id: number) => void;
   onUnarchive?: (id: number) => void;
   onDelete?: (id: number) => void;
@@ -235,10 +260,19 @@ function AccountList({
                   </div>
                   {/* Always visible on touch screens; hover-revealed on desktop. */}
                   <div className="flex items-center gap-1 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                    {onAdjust && (
+                      <button
+                        onClick={() => onAdjust(a)}
+                        className="size-8 inline-flex items-center justify-center text-foreground-faint hover:text-blue-deep rounded-md hover:bg-surface-2"
+                        title="Update balance"
+                      >
+                        <Coins className="size-3.5" strokeWidth={1.5} />
+                      </button>
+                    )}
                     <button
                       onClick={() => onEdit(a)}
                       className="size-8 inline-flex items-center justify-center text-foreground-faint hover:text-foreground rounded-md hover:bg-surface-2"
-                      title="Edit"
+                      title="Edit details"
                     >
                       <Pencil className="size-3.5" strokeWidth={1.5} />
                     </button>
@@ -369,6 +403,116 @@ function AccountForm({
           </Button>
           <Button type="submit" variant="primary" disabled={pending}>
             {pending ? "Saving..." : editing ? "Save changes" : "Add account"}
+          </Button>
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+// Quick balance update for accounts with no bank feed. "Set to" corrects a
+// stale figure; "Add"/"Subtract" log a transfer in or out without retyping the
+// whole balance. A live preview shows where the balance lands before saving.
+function BalanceForm({
+  account,
+  onClose,
+}: {
+  account: Account;
+  onClose: () => void;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [mode, setMode] = useState<"set" | "add" | "subtract">("set");
+  const current = account.currentBalanceCents;
+  const [amount, setAmount] = useState((current / 100).toFixed(2));
+
+  const changeMode = (m: "set" | "add" | "subtract") => {
+    setMode(m);
+    // Prefill the current balance when correcting; start blank for a delta.
+    setAmount(m === "set" ? (current / 100).toFixed(2) : "");
+  };
+
+  const hasAmount = amount.trim() !== "";
+  const delta = parseDollarsToCents(amount);
+  const next = mode === "add" ? current + delta : mode === "subtract" ? current - delta : delta;
+
+  const modes: { key: "set" | "add" | "subtract"; label: string }[] = [
+    { key: "set", label: "Set to" },
+    { key: "add", label: "Add" },
+    { key: "subtract", label: "Subtract" },
+  ];
+
+  return (
+    <Card className="p-6 md:p-8">
+      <div className="mb-6">
+        <Label>Update balance</Label>
+        <h3 className="serif text-2xl mt-1">{account.name}</h3>
+        <p className="text-sm text-foreground-muted mt-1">
+          Currently{" "}
+          <span className="mono tabular">{formatCents(current)}</span>. No bank
+          feed here, so set the balance or log a transfer to keep it current.
+        </p>
+      </div>
+      <form
+        action={(fd) => {
+          startTransition(async () => {
+            fd.set("id", String(account.id));
+            fd.set("mode", mode);
+            fd.set("amount", amount || "0");
+            await adjustBalance(fd);
+            onClose();
+          });
+        }}
+        className="space-y-6"
+      >
+        <div className="flex gap-1.5">
+          {modes.map((m) => (
+            <button
+              key={m.key}
+              type="button"
+              onClick={() => changeMode(m.key)}
+              className={cn(
+                "flex-1 h-10 rounded-xl border text-sm tracking-tight transition-colors",
+                mode === m.key
+                  ? "border-blue bg-blue-tint text-blue-deep"
+                  : "border-border text-foreground-muted hover:border-border-strong",
+              )}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+        <div>
+          <Label htmlFor="amount">
+            {mode === "set"
+              ? "New balance"
+              : mode === "add"
+                ? "Amount moved in"
+                : "Amount moved out"}
+          </Label>
+          <Input
+            id="amount"
+            name="amount"
+            inputMode="decimal"
+            placeholder="0.00"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            autoFocus
+          />
+        </div>
+        {hasAmount && mode !== "set" && (
+          <div className="text-sm text-foreground-muted">
+            New balance:{" "}
+            <span className="mono tabular text-foreground">
+              {formatCents(next)}
+            </span>
+          </div>
+        )}
+        <div className="flex justify-end gap-3 pt-2">
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" disabled={pending || !hasAmount}>
+            {pending ? "Saving..." : "Save balance"}
           </Button>
         </div>
       </form>

@@ -95,3 +95,46 @@ export async function deleteAccount(id: number) {
   revalidatePath("/accounts");
   revalidatePath("/dashboard");
 }
+
+// Quick balance update for manually-tracked accounts (no bank feed). Lets you
+// correct a stale balance ("set"), or log money moved in/out ("add"/"subtract")
+// without retyping the whole figure, the natural way to keep an investment
+// account current after a transfer. Snapshots the new balance so the net-worth
+// trend stays honest, same as a full edit.
+export async function adjustBalance(form: FormData) {
+  const id = Number(form.get("id"));
+  const mode = String(form.get("mode") || "set"); // set | add | subtract
+  const amountCents = parseDollarsToCents(String(form.get("amount") || "0"));
+  if (!id) throw new Error("id required");
+
+  const [acct] = await db
+    .select({ balance: accounts.currentBalanceCents })
+    .from(accounts)
+    .where(eq(accounts.id, id));
+  if (!acct) throw new Error("Account not found");
+
+  const next =
+    mode === "add"
+      ? acct.balance + amountCents
+      : mode === "subtract"
+        ? acct.balance - amountCents
+        : amountCents;
+
+  await db
+    .update(accounts)
+    .set({ currentBalanceCents: next })
+    .where(eq(accounts.id, id));
+  await db
+    .insert(balanceSnapshots)
+    .values({
+      accountId: id,
+      date: format(new Date(), "yyyy-MM-dd"),
+      balanceCents: next,
+    })
+    .onConflictDoUpdate({
+      target: [balanceSnapshots.accountId, balanceSnapshots.date],
+      set: { balanceCents: next },
+    });
+  revalidatePath("/accounts");
+  revalidatePath("/dashboard");
+}
