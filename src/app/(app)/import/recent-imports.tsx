@@ -23,7 +23,7 @@ export function RecentImports({ batches }: { batches: ImportBatch[] }) {
       <div className="flex items-baseline justify-between mb-4 px-1">
         <div className="flex items-baseline gap-3">
           <h3 className="serif text-xl">Past imports</h3>
-          <span className="text-[10px] tracking-[0.2em] uppercase text-foreground-faint">
+          <span className="text-[10px] tracking-[0.08em] font-bold uppercase text-foreground-muted">
             {batches.length}
           </span>
         </div>

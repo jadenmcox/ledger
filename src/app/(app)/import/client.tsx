@@ -128,7 +128,7 @@ export function ImportClient({ accounts }: { accounts: Account[] }) {
                 id="account"
                 value={accountId ?? ""}
                 onChange={(e) => setAccountId(Number(e.target.value))}
-                className="h-10 w-full bg-surface border border-border rounded-xl px-3.5 text-sm focus:border-sage focus:ring-2 focus:ring-sage-tint focus:outline-none transition-all"
+                className="h-10 w-full bg-surface border border-border rounded-field px-3.5 text-sm focus:border-sage focus:ring-2 focus:ring-sage-tint focus:outline-none transition-all"
               >
                 {accounts.map((a) => (
                   <option key={a.id} value={a.id} className="bg-surface">
@@ -188,7 +188,7 @@ export function ImportClient({ accounts }: { accounts: Account[] }) {
                   onChange={(e) =>
                     setCols((c) => ({ ...c, [f.key]: e.target.value }))
                   }
-                  className="h-10 w-full bg-surface border border-border rounded-xl px-3.5 text-sm focus:border-sage focus:ring-2 focus:ring-sage-tint focus:outline-none transition-all"
+                  className="h-10 w-full bg-surface border border-border rounded-field px-3.5 text-sm focus:border-sage focus:ring-2 focus:ring-sage-tint focus:outline-none transition-all"
                 >
                   <option value="" className="bg-surface">
                     — none —

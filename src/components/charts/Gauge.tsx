@@ -58,7 +58,7 @@ export function Gauge({
           </div>
         )}
         {label && (
-          <div className="text-[9px] tracking-[0.25em] uppercase text-foreground-faint mt-1.5">
+          <div className="text-[9px] tracking-[0.08em] font-bold uppercase text-foreground-muted mt-1.5">
             {label}
           </div>
         )}

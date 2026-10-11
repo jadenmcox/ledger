@@ -122,7 +122,7 @@ export function DonutChart({
       {(centerLabel || centerValue) && (
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center px-6">
           {centerLabel && (
-            <div className="text-[10px] tracking-[0.25em] uppercase text-foreground-faint mb-1">
+            <div className="text-[10px] tracking-[0.08em] font-bold uppercase text-foreground-muted mb-1">
               {centerLabel}
             </div>
           )}

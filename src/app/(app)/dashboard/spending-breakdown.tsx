@@ -96,7 +96,7 @@ export function SpendingHero({
   const spentPct = income > 0 ? Math.round((consumption / income) * 100) : null;
 
   return (
-    <section className="rise overflow-hidden rounded-[28px] border border-border bg-surface/85 p-6 backdrop-blur-sm shadow-[0_30px_70px_-40px_rgba(34,28,74,0.45)] md:p-8">
+    <section className="rise overflow-hidden rounded-card bg-surface p-6 md:p-8">
       {consumption <= 0 ? (
         !isCurrentMonth ? (
           <div className="py-16 text-center text-sm text-foreground-faint">
@@ -106,7 +106,7 @@ export function SpendingHero({
           // Fresh-month state: nothing spent yet, so show what the month
           // holds instead of a big empty box.
           <div className="mx-auto max-w-md py-10 text-center md:py-14">
-            <div className="mb-2 text-[11px] uppercase tracking-[0.28em] text-foreground-faint">
+            <div className="mb-2 text-[11px] uppercase tracking-[0.08em] font-bold text-foreground-muted">
               Fresh month
             </div>
             <div className="display text-2xl md:text-3xl">
@@ -122,7 +122,7 @@ export function SpendingHero({
             )}
             {upcoming.length > 0 && (
               <div className="mt-6 space-y-2 text-left">
-                <div className="text-[10px] uppercase tracking-[0.22em] text-foreground-faint text-center">
+                <div className="text-[10px] uppercase tracking-[0.08em] font-bold text-foreground-muted text-center">
                   Coming up
                 </div>
                 {upcoming.slice(0, 3).map((b, i) => (
@@ -177,7 +177,7 @@ export function SpendingHero({
                 {active ? (
                   <>
                     <span
-                      className="mb-1 max-w-full truncate text-[max(10px,2.6cqw)] font-semibold uppercase tracking-[0.2em]"
+                      className="mb-1 max-w-full truncate text-[max(10px,2.6cqw)] font-semibold uppercase tracking-[0.08em] font-bold"
                       style={{ color: active.color }}
                     >
                       {active.name}
@@ -191,7 +191,7 @@ export function SpendingHero({
                   </>
                 ) : (
                   <>
-                    <span className="mb-0.5 text-[max(10px,2.6cqw)] uppercase tracking-[0.28em] text-foreground-faint">
+                    <span className="mb-0.5 text-[max(10px,2.6cqw)] uppercase tracking-[0.08em] font-bold text-foreground-muted">
                       spent
                     </span>
                     <span className="display text-[9.5cqw] leading-none">
@@ -207,7 +207,7 @@ export function SpendingHero({
               {/* Primary — total spent */}
               <div>
                 <div
-                  className="mb-2 text-[10px] font-semibold uppercase tracking-[0.22em]"
+                  className="mb-2 text-[10px] font-semibold uppercase tracking-[0.08em] font-bold"
                   style={{ color: "var(--blush-deep)" }}
                 >
                   Total spent
@@ -406,7 +406,7 @@ function MiniStat({
   return (
     <div>
       <div
-        className="mb-1 text-[9px] font-semibold uppercase tracking-[0.2em]"
+        className="mb-1 text-[9px] font-semibold uppercase tracking-[0.08em] font-bold"
         style={{ color: accent }}
       >
         {label}

@@ -124,7 +124,7 @@ export function RulesClient({
     <div className="flex items-baseline justify-between mb-4 px-1">
       <div className="flex items-baseline gap-3">
         <h3 className="serif text-xl">{title}</h3>
-        <span className="text-[10px] tracking-[0.2em] uppercase text-foreground-faint">
+        <span className="text-[10px] tracking-[0.08em] font-bold uppercase text-foreground-muted">
           {count}
         </span>
       </div>
@@ -311,7 +311,7 @@ export function RulesClient({
               id="categoryId"
               name="categoryId"
               defaultValue={editingCat.categoryId}
-              className="h-11 w-full bg-surface border border-border rounded-xl px-3 text-sm"
+              className="h-11 w-full bg-surface border border-border rounded-field px-3 text-sm"
             >
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -455,7 +455,7 @@ function RuleSheet({
               id="matchType"
               name="matchType"
               defaultValue={rule.matchType}
-              className="h-11 bg-surface border border-border rounded-xl px-3 text-sm"
+              className="h-11 bg-surface border border-border rounded-field px-3 text-sm"
             >
               <option value="merchant_contains">contains</option>
               <option value="merchant_exact">is exactly</option>

@@ -140,9 +140,9 @@ export default function FontsPreviewPage() {
 function FontCard({ option, letter }: { option: Option; letter: string }) {
   const ff = option.fontVar;
   return (
-    <div className="bg-surface/95 backdrop-blur-sm border border-border rounded-3xl p-6 md:p-8 relative overflow-hidden">
+    <div className="bg-surface/95 backdrop-blur-sm rounded-card p-6 md:p-8 relative overflow-hidden">
       <div className="flex items-center justify-between mb-6">
-        <div className="text-[10px] tracking-[0.25em] uppercase text-foreground-faint">
+        <div className="text-[10px] tracking-[0.08em] font-bold uppercase text-foreground-muted">
           Option {letter} · {option.vibe}
         </div>
         <div className="size-7 rounded-full bg-surface-2 border border-border flex items-center justify-center text-[11px] mono text-foreground-muted">
@@ -169,7 +169,7 @@ function FontCard({ option, letter }: { option: Option; letter: string }) {
       {/* Hero stat */}
       <div className="py-7 border-b border-border">
         <div
-          className="text-[10px] tracking-[0.25em] uppercase text-foreground-faint mb-3"
+          className="text-[10px] tracking-[0.08em] font-bold uppercase text-foreground-muted mb-3"
           style={{ fontFamily: ff }}
         >
           Spent this month

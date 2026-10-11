@@ -19,7 +19,7 @@ export function PageHeader({
       <div className="flex items-start md:items-end justify-between gap-3 md:gap-6">
         <div className="min-w-0 flex-1">
           {eyebrow && (
-            <div className="inline-flex items-center gap-2 text-foreground-faint text-[10px] tracking-[0.25em] uppercase mb-2 md:mb-3">
+            <div className="inline-flex items-center gap-2 text-foreground-muted text-[10px] tracking-[0.08em] font-bold uppercase mb-2 md:mb-3">
               <span className="size-1 rounded-full bg-blush" />
               {eyebrow}
             </div>
@@ -102,7 +102,7 @@ export const Input = React.forwardRef<
     <input
       ref={ref}
       className={cn(
-        "h-11 w-full bg-surface border border-border rounded-xl px-3.5 text-sm placeholder:text-foreground-faint focus:border-blush focus:ring-2 focus:ring-blush-tint focus:outline-none transition-all",
+        "h-11 w-full bg-surface border border-border rounded-field px-3.5 text-sm placeholder:text-foreground-faint focus:border-blush focus:ring-2 focus:ring-blush-tint focus:outline-none transition-all",
         className,
       )}
       {...props}
@@ -123,7 +123,7 @@ export function Label({
     <label
       htmlFor={htmlFor}
       className={cn(
-        "text-[10px] tracking-[0.25em] uppercase text-foreground-faint block mb-2",
+        "text-[10px] tracking-[0.08em] font-bold uppercase text-foreground-muted block mb-2",
         className,
       )}
     >
@@ -142,7 +142,7 @@ export function Card({
   return (
     <div
       className={cn(
-        "bg-surface border border-border rounded-2xl",
+        "bg-surface rounded-card",
         className,
       )}
     >
@@ -197,13 +197,13 @@ export function EmptyState({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="bg-surface/70 backdrop-blur-sm border border-dashed border-border-strong rounded-3xl p-10 md:p-20 text-center relative overflow-hidden">
+    <div className="bg-surface/70 backdrop-blur-sm border border-dashed border-border-strong rounded-card p-10 md:p-20 text-center relative overflow-hidden">
       {/* corner light leak */}
       <div className="pointer-events-none absolute -top-24 -right-24 size-64 rounded-full bg-blush-tint blur-3xl opacity-60" />
       <div className="pointer-events-none absolute -bottom-24 -left-24 size-64 rounded-full bg-blue-tint blur-3xl opacity-60" />
 
       <div className="relative">
-        <div className="inline-flex items-center gap-2 text-foreground-muted text-[10px] tracking-[0.25em] uppercase mb-5 bg-surface border border-border px-2.5 py-1 rounded-full">
+        <div className="inline-flex items-center gap-2 text-foreground-muted text-[10px] tracking-[0.08em] font-bold uppercase mb-5 bg-surface border border-border px-2.5 py-1 rounded-full">
           <span className="size-1 rounded-full bg-blush" />
           Empty
         </div>
@@ -355,7 +355,7 @@ export function Pill({
   return (
     <span
       className={cn(
-        "inline-flex items-center text-[10px] tracking-[0.18em] uppercase px-2 py-0.5 rounded-full border font-medium",
+        "inline-flex items-center text-[10px] tracking-[0.08em] font-bold uppercase px-2 py-0.5 rounded-full border font-medium",
         tone === "default" &&
           "border-border text-foreground-muted bg-surface-2",
         tone === "need" && "border-blush/40 text-blush-deep bg-blush-tint",

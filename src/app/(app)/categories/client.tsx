@@ -130,7 +130,7 @@ export function CategoriesClient({
                 <h3 className="serif text-xl">
                   {classificationLabel[classification]}
                 </h3>
-                <span className="text-[10px] tracking-[0.2em] uppercase text-foreground-faint">
+                <span className="text-[10px] tracking-[0.08em] font-bold uppercase text-foreground-muted">
                   {items.length}
                 </span>
               </div>
@@ -358,7 +358,7 @@ function CategoryForm({
               id="classification"
               name="classification"
               defaultValue={initial?.classification ?? "want"}
-              className="h-10 w-full bg-surface border border-border rounded-xl px-3.5 text-sm focus:border-blush focus:ring-2 focus:ring-blush-tint focus:outline-none transition-all"
+              className="h-10 w-full bg-surface border border-border rounded-field px-3.5 text-sm focus:border-blush focus:ring-2 focus:ring-blush-tint focus:outline-none transition-all"
             >
               {classifications.map((c) => (
                 <option key={c} value={c} className="bg-surface">

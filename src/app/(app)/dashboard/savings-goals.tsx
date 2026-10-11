@@ -73,7 +73,7 @@ export function SavingsGoalsSection({
         <Card className="overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-[10px] tracking-[0.18em] uppercase text-foreground-faint border-b border-border">
+              <tr className="text-[10px] tracking-[0.08em] font-bold uppercase text-foreground-muted border-b border-border">
                 <th className="text-left px-5 py-3 font-medium">Goal</th>
                 <th className="text-right px-3 py-3 font-medium hidden sm:table-cell">
                   Monthly
@@ -250,7 +250,7 @@ function GoalModal({
           <select
             name="accountId"
             defaultValue={goal?.accountId ?? ""}
-            className="h-11 w-full bg-surface border border-border rounded-xl px-3.5 text-sm focus:border-blush focus:ring-2 focus:ring-blush-tint focus:outline-none transition-all"
+            className="h-11 w-full bg-surface border border-border rounded-field px-3.5 text-sm focus:border-blush focus:ring-2 focus:ring-blush-tint focus:outline-none transition-all"
           >
             <option value="">No account · I&apos;ll enter the balance manually</option>
             {savingsAccounts.map((a) => (

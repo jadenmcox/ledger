@@ -109,7 +109,7 @@ export function PlaidItemsList({ items }: { items: PlaidItemRow[] }) {
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-baseline gap-3">
           <Label>Linked banks</Label>
-          <span className="text-[10px] tracking-[0.2em] uppercase text-foreground-faint">
+          <span className="text-[10px] tracking-[0.08em] font-bold uppercase text-foreground-muted">
             {items.length}
           </span>
         </div>

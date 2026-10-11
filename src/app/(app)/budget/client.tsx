@@ -280,7 +280,7 @@ export function BudgetClient({
       <Card className="p-5 md:p-6">
         <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
           <div className="min-w-0">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-foreground-faint">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.08em] font-bold text-foreground-muted">
               Ready to allocate
             </div>
             <div className="mt-2 flex items-baseline gap-3">
@@ -409,7 +409,7 @@ export function BudgetClient({
             <span>{calendarPct.toFixed(0)}%</span>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-px bg-border rounded-2xl overflow-hidden border border-border">
+        <div className="grid grid-cols-2 gap-px bg-border rounded-card overflow-hidden">
           <div className="bg-surface p-5">
             <Stat
               label="Income in"
@@ -472,7 +472,7 @@ export function BudgetClient({
                       setFrameworkOpen(false);
                     }}
                     disabled={pending}
-                    className={`text-left rounded-2xl border p-5 transition-colors ${
+                    className={`text-left rounded-card border p-5 transition-colors ${
                       active
                         ? "border-blush bg-blush-tint/40"
                         : "border-border bg-surface hover:border-border-strong"
@@ -498,7 +498,7 @@ export function BudgetClient({
           </>
         ) : (
           <Card className="px-5 py-3.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-            <span className="text-[10px] uppercase tracking-[0.22em] text-foreground-faint">
+            <span className="text-[10px] uppercase tracking-[0.08em] font-bold text-foreground-muted">
               Framework
             </span>
             <span className="text-sm font-medium tracking-tight">
@@ -585,7 +585,7 @@ export function BudgetClient({
         </div>
         {upcomingList.length > 0 && (
           <Card className="mt-4 divide-y divide-border">
-            <div className="px-5 py-3 text-[10px] tracking-[0.25em] uppercase text-foreground-faint flex justify-between">
+            <div className="px-5 py-3 text-[10px] tracking-[0.08em] font-bold uppercase text-foreground-muted flex justify-between">
               <span>Upcoming this month</span>
               <span>{upcomingList.length} {upcomingList.length === 1 ? "bill" : "bills"}</span>
             </div>

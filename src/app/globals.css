@@ -14,12 +14,12 @@
   color-scheme: light;
 
   /* --- Budgetly's identity -------------------------------------------
-     Blush, from the canonical accent map in design/tokens/tokens.mjs.
-     Derived and contrast-checked; `deep` is what primary buttons and text
-     on a tint use, because the brand blush alone is only 3.14:1 on white. */
-  --ds-accent: #ec6385;
-  --ds-accent-deep: #d11947;
-  --ds-accent-tint: #fbe7ec;
+     Pink (v2, brighter than the old blush), from the canonical accent map in
+     design/tokens/tokens.mjs. Derived and contrast-checked; `deep` is what
+     primary buttons and text on a tint use. */
+  --ds-accent: #f0478e;
+  --ds-accent-deep: #ce1160;
+  --ds-accent-tint: #fce6ef;
   --ds-accent-contrast: #ffffff;
 
   /* --- Neutrals now come from the shared system ----------------------
@@ -44,9 +44,11 @@
   --sage-tint: #ebe7f5;
 
   /* Peach — wants, warm accent (kept, slightly saturated) */
-  --peach: #f29070;
-  --peach-deep: #c96545;
-  --peach-tint: #fde2d4;
+  /* v2: the wants/savings/decorative hues ride the shared categorical slots,
+     so they are Lock In's orange and blue and move with the family. */
+  --peach: var(--ds-cat-2);
+  --peach-deep: var(--ds-cat-2-deep);
+  --peach-tint: var(--ds-cat-2-tint);
 
   /* Blush is Budgetly's accent, so it points at the shared contract rather
      than carrying its own hexes. ~95 blush-* class usages adopt the derived,
@@ -56,13 +58,13 @@
   --blush-tint: var(--ds-accent-tint);
 
   /* Powder blue — income, savings (replacing sage as the "positive" color) */
-  --blue: #6f9bd9;
-  --blue-deep: #3c6db4;
-  --blue-tint: #e0ecfa;
+  --blue: var(--ds-cat-3);
+  --blue-deep: var(--ds-cat-3-deep);
+  --blue-tint: var(--ds-cat-3-tint);
 
   /* Lavender — tertiary, decorative */
-  --lavender: #b8a3d4;
-  --lavender-tint: #ece4f5;
+  --lavender: var(--ds-cat-1);
+  --lavender-tint: var(--ds-cat-1-tint);
 
   /* Classification colors — semantic */
   --need: var(--blush);
@@ -71,7 +73,7 @@
   --income: var(--blue-deep);
 
   /* Soft blush wash — for hero gradients, full-bleed backgrounds */
-  --blush-soft: #fde8ee;
+  --blush-soft: var(--ds-accent-tint);
   --ink: #0f0b1f;
 
   /* 5-stop chart palette — semantic order for visualizations */
@@ -165,8 +167,8 @@ body {
 .serif {
   font-family: var(--font-display), var(--font-sans), ui-sans-serif, system-ui,
     sans-serif;
-  font-weight: 600;
-  letter-spacing: -0.035em;
+  font-weight: 700;
+  letter-spacing: var(--ds-tracking-display);
 }
 
 /* Was an italic serif accent; now an emphasized inline number. Display face
@@ -175,8 +177,8 @@ body {
   font-family: var(--font-display), var(--font-sans), ui-sans-serif, system-ui,
     sans-serif;
   font-style: normal;
-  font-weight: 600;
-  letter-spacing: -0.035em;
+  font-weight: 700;
+  letter-spacing: var(--ds-tracking-display);
   color: var(--blush-deep);
 }
 

@@ -847,7 +847,7 @@ function ReconStat({
 }) {
   return (
     <div className="text-right">
-      <div className="text-[10px] uppercase tracking-[0.18em] text-foreground-faint">
+      <div className="text-[10px] uppercase tracking-[0.08em] font-bold text-foreground-muted">
         {label}
       </div>
       <div

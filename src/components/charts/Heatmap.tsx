@@ -71,7 +71,7 @@ export function Heatmap({
             }}
             title={`${c.label}: ${c.display ?? c.value}`}
           >
-            <div className="text-[10px] tracking-[0.18em] uppercase text-foreground-faint">
+            <div className="text-[10px] tracking-[0.08em] font-bold uppercase text-foreground-muted">
               {c.label}
             </div>
             {c.display && c.value > 0 && (

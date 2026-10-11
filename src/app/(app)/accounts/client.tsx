@@ -126,7 +126,7 @@ export function AccountsClient({
         <div>
           <div className="flex items-baseline gap-3 mb-4">
             <h3 className="serif text-xl text-foreground-muted">Archived</h3>
-            <span className="text-[10px] tracking-[0.2em] uppercase text-foreground-faint">
+            <span className="text-[10px] tracking-[0.08em] font-bold uppercase text-foreground-muted">
               {archived.length}
             </span>
           </div>
@@ -367,7 +367,7 @@ function AccountForm({
               id="type"
               name="type"
               defaultValue={initial?.type ?? "checking"}
-              className="h-10 w-full bg-surface border border-border rounded-xl px-3.5 text-sm focus:border-sage focus:ring-2 focus:ring-sage-tint focus:outline-none transition-all"
+              className="h-10 w-full bg-surface border border-border rounded-field px-3.5 text-sm focus:border-sage focus:ring-2 focus:ring-sage-tint focus:outline-none transition-all"
             >
               {accountTypes.map((t) => (
                 <option key={t} value={t} className="bg-surface">

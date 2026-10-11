@@ -165,7 +165,7 @@ export function CommandPalette({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-xl bg-surface border border-border rounded-2xl shadow-2xl overflow-hidden"
+        className="w-full max-w-xl bg-surface rounded-card shadow-2xl overflow-hidden"
       >
         <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
           <Search className="size-4 text-foreground-faint" strokeWidth={1.5} />
@@ -192,7 +192,7 @@ export function CommandPalette({
           ) : (
             Object.entries(grouped).map(([group, items]) => (
               <div key={group}>
-                <div className="text-[10px] tracking-[0.25em] uppercase text-foreground-faint px-3 pt-3 pb-1">
+                <div className="text-[10px] tracking-[0.08em] font-bold uppercase text-foreground-muted px-3 pt-3 pb-1">
                   {group}
                 </div>
                 {items.map((it) => {

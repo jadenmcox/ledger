@@ -25,7 +25,7 @@ export function HeroStat({
         />
       )}
       <div
-        className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.2em]"
+        className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] font-bold"
         style={{ color: accent }}
       >
         {label}

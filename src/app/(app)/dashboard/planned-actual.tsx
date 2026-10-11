@@ -44,7 +44,7 @@ export function PlannedActual({
   return (
     <table className="w-full text-sm">
       <thead>
-        <tr className="text-[10px] tracking-[0.18em] uppercase text-foreground-faint border-b border-border">
+        <tr className="text-[10px] tracking-[0.08em] font-bold uppercase text-foreground-muted border-b border-border">
           <th className="text-left px-3.5 sm:px-5 py-3 font-medium">Category</th>
           <th className="text-right px-2.5 sm:px-3 py-3 font-medium hidden sm:table-cell">
             Planned
@@ -130,7 +130,7 @@ function RowGroup({
       <tr className="bg-surface-2/30 border-t border-border">
         <td
           colSpan={4}
-          className="px-3.5 sm:px-5 py-2 text-[10px] tracking-[0.2em] uppercase text-foreground-faint"
+          className="px-3.5 sm:px-5 py-2 text-[10px] tracking-[0.08em] font-bold uppercase text-foreground-muted"
         >
           {label}
         </td>
@@ -277,7 +277,7 @@ function RowFragment({
         <tr className="bg-surface-2/20">
           <td colSpan={4} className="px-3.5 sm:px-5 pb-3.5 pt-0">
             <div className="ml-[42px] overflow-hidden rounded-xl border border-border bg-surface">
-              <div className="px-3.5 py-2 text-[10px] uppercase tracking-[0.2em] text-foreground-faint border-b border-border">
+              <div className="px-3.5 py-2 text-[10px] uppercase tracking-[0.08em] font-bold text-foreground-muted border-b border-border">
                 by vendor
               </div>
               {merchants.map((m) => (

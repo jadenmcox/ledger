@@ -15,7 +15,7 @@ export type StatItem = {
 // stay informative without every page reading as a clone of the dashboard.
 export function StatStrip({ items }: { items: StatItem[] }) {
   return (
-    <section className="rise overflow-hidden rounded-[28px] border border-border bg-surface/85 px-6 py-6 backdrop-blur-sm shadow-[0_30px_70px_-40px_rgba(34,28,74,0.45)] md:px-8 md:py-7">
+    <section className="rise overflow-hidden rounded-card bg-surface px-6 py-6 md:px-8 md:py-7">
       <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:gap-0">
         {items.map((it, i) => (
           <div
@@ -26,7 +26,7 @@ export function StatStrip({ items }: { items: StatItem[] }) {
             )}
           >
             <div
-              className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.2em]"
+              className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] font-bold"
               style={{ color: it.accent ?? "var(--foreground-muted)" }}
             >
               {it.label}

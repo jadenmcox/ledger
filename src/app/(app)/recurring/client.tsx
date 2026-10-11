@@ -81,7 +81,7 @@ export function RecurringClient({
       <div className="flex items-baseline justify-between mb-4 px-1">
         <div className="flex items-baseline gap-3">
           <h3 className="serif text-xl">{title}</h3>
-          <span className="text-[10px] tracking-[0.2em] uppercase text-foreground-faint">
+          <span className="text-[10px] tracking-[0.08em] font-bold uppercase text-foreground-muted">
             {rows.length}
           </span>
         </div>
@@ -185,7 +185,7 @@ export function RecurringClient({
     <div className="space-y-10">
       <Card className="p-5 md:p-6 flex flex-wrap items-center justify-between gap-x-8 gap-y-3">
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-foreground-faint">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.08em] font-bold text-foreground-muted">
             Expected monthly income
           </div>
           <div className="mt-1.5 flex items-baseline gap-3">
@@ -344,7 +344,7 @@ function ScheduleForm({
               name="accountId"
               defaultValue={initial?.accountId ?? accounts[0]?.id}
               required
-              className="h-11 w-full bg-surface border border-border rounded-xl px-3 text-sm"
+              className="h-11 w-full bg-surface border border-border rounded-field px-3 text-sm"
             >
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>
@@ -359,7 +359,7 @@ function ScheduleForm({
               id="categoryId"
               name="categoryId"
               defaultValue={initial?.categoryId ?? ""}
-              className="h-11 w-full bg-surface border border-border rounded-xl px-3 text-sm"
+              className="h-11 w-full bg-surface border border-border rounded-field px-3 text-sm"
             >
               <option value="">— None —</option>
               {categories.map((c) => (
@@ -377,7 +377,7 @@ function ScheduleForm({
               id="cadence"
               value={cadence}
               onChange={(e) => setCadence(e.target.value as RecurringCadence)}
-              className="h-11 w-full bg-surface border border-border rounded-xl px-3 text-sm"
+              className="h-11 w-full bg-surface border border-border rounded-field px-3 text-sm"
             >
               <option value="monthly">Monthly</option>
               <option value="semi_monthly">Twice a month</option>

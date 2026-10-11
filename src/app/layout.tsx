@@ -1,17 +1,17 @@
 import type { Metadata, Viewport } from "next";
-import { Hanken_Grotesk, Schibsted_Grotesk } from "next/font/google";
+import { Figtree, Outfit } from "next/font/google";
 import "./globals.css";
 
 // The family type pairing. These emit --ds-font-* rather than --font-*: the
 // design system's Tailwind bridge defines --font-sans FROM --ds-font-body, so
 // naming them --font-sans would create a variable cycle. globals.css maps the
 // legacy --font-sans/mono/serif hooks onto these.
-const hankenGrotesk = Hanken_Grotesk({
+const figtree = Figtree({
   variable: "--ds-font-body",
   subsets: ["latin"],
 });
 
-const schibstedGrotesk = Schibsted_Grotesk({
+const outfit = Outfit({
   variable: "--ds-font-display",
   subsets: ["latin"],
   display: "swap",
@@ -41,7 +41,7 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   // Matches --ds-page.
-  themeColor: "#fcfcfb",
+  themeColor: "#f2f1ee",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -56,7 +56,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${hankenGrotesk.variable} ${schibstedGrotesk.variable} h-full antialiased`}
+      className={`${figtree.variable} ${outfit.variable} h-full antialiased`}
     >
       <body className="min-h-full bg-background text-foreground">
         {children}

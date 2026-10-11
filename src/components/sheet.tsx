@@ -52,7 +52,7 @@ export function Sheet({
         className={cn(
           // Mobile: full-width bottom sheet
           "w-full bg-surface border-t md:border border-border",
-          "rounded-t-3xl md:rounded-2xl",
+          "rounded-t-sheet md:rounded-sheet",
           "pb-[max(env(safe-area-inset-bottom),1.25rem)] md:pb-6",
           "pt-2 md:pt-6 px-5 md:px-6",
           "max-h-[92vh] md:max-h-[85vh] md:max-w-md overflow-y-auto",
