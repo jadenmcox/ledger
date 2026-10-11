@@ -114,6 +114,7 @@
   /* --- Semantic radius ------------------------------------------------ */
   --radius-chip: var(--ds-radius-chip);
   --radius-field: var(--ds-radius-field);
+  --radius-tile: var(--ds-radius-tile);
   --radius-card: var(--ds-radius-card);
   --radius-sheet: var(--ds-radius-sheet);
   --radius-pill: var(--ds-radius-pill);

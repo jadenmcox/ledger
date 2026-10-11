@@ -62,7 +62,7 @@ export function SegmentedControl<T extends string>({
             aria-selected={active}
             onClick={() => onChange(opt.value)}
             className={cn(
-              "rounded-pill font-medium transition-all duration-200 ease-ds",
+              "rounded-pill font-semibold transition-all duration-200 ease-ds",
               size === "sm" ? "px-3 py-1 text-2xs" : "px-4 py-1.5 text-xs",
               active
                 ? "bg-surface text-foreground shadow-sm"
@@ -197,7 +197,7 @@ export function BottomNav({
     <nav
       className={cn(
         "fixed bottom-0 inset-x-0 z-[20]",
-        "border-t border-border bg-surface/85 backdrop-blur-lg",
+        "border-t border-border bg-surface/95 backdrop-blur-xl",
         "ds-safe-bottom",
         className,
       )}
@@ -223,7 +223,7 @@ export function BottomNav({
                     ? "text-accent-contrast"
                     : active
                       ? "text-accent-deep"
-                      : "text-foreground-faint hover:text-foreground-muted",
+                      : "text-foreground-muted hover:text-foreground",
                 )}
               >
                 {item.primary ? (
@@ -243,7 +243,7 @@ export function BottomNav({
                   <>
                     <IconCmpProp name={item.icon} size="md" />
                     <span
-                      className={cn("text-2xs leading-none", active && "font-semibold")}
+                      className={cn("text-2xs leading-none", active ? "font-bold" : "font-semibold")}
                     >
                       {item.label}
                     </span>
@@ -321,7 +321,7 @@ export function SideNav({
                 <Link
                   href={item.href}
                   className={cn(
-                    "flex items-center gap-2.5 rounded-pill px-4 h-11 text-sm font-medium",
+                    "flex items-center gap-2.5 rounded-pill px-4 h-11 text-sm font-semibold",
                     "bg-accent-deep text-accent-contrast shadow-sm",
                     "transition-all duration-200 ease-ds hover:bg-accent active:scale-[0.98]",
                   )}

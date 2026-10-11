@@ -46,7 +46,7 @@ type IconCmp = React.ComponentType<IconProps>;
    ------------------------------------------------------------------------- */
 
 export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: "primary" | "secondary" | "ghost" | "danger";
+  variant?: "primary" | "secondary" | "ink" | "ghost" | "danger";
   size?: "sm" | "md" | "lg";
   /** Icon name rendered before the label. */
   iconLeft?: string;
@@ -62,19 +62,22 @@ export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
 const BTN_SIZE = {
   sm: "h-9 px-4 text-xs gap-1.5",
   md: "h-11 px-5 text-sm gap-2",
-  lg: "h-13 px-6 text-base gap-2",
+  lg: "h-14 px-6 text-[17px] gap-2",
 } as const;
 
-const BTN_ICON_SIZE = { sm: "h-9 w-9", md: "h-11 w-11", lg: "h-13 w-13" } as const;
+const BTN_ICON_SIZE = { sm: "h-9 w-9", md: "h-11 w-11", lg: "h-14 w-14" } as const;
 
 const BTN_VARIANT = {
   // Fills with accent-DEEP and hovers to accent. deep is the value guaranteed
   // AA against white, so the label is always legible; accent is the brighter
   // hover step. This is the pattern from monorepo/packages/ui.
   primary:
-    "bg-accent-deep text-accent-contrast hover:bg-accent shadow-sm active:bg-accent-deep",
+    "bg-accent-deep text-accent-contrast hover:bg-accent active:bg-accent-deep",
   secondary:
     "border border-border-strong bg-surface text-foreground hover:bg-surface-2",
+  // v2: Lock In's black button. For the one action on a screen that should
+  // not compete with the app's colour, like "Done" under a coloured hero.
+  ink: "bg-foreground text-surface hover:opacity-90",
   ghost: "text-foreground-muted hover:text-foreground hover:bg-surface-2",
   danger: "bg-bad-deep text-white hover:opacity-90",
 } as const;
@@ -103,7 +106,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         disabled={disabled || loading}
         aria-busy={loading || undefined}
         className={cn(
-          "inline-flex items-center justify-center rounded-pill font-medium tracking-tight",
+          "inline-flex items-center justify-center rounded-pill font-bold tracking-tight",
           "transition-all duration-200 ease-spring",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background",
           "disabled:opacity-50 disabled:pointer-events-none active:scale-95",
@@ -219,10 +222,12 @@ export function Card({
   elevated?: boolean;
   as?: React.ElementType;
 }) {
+  // v2: no hairline. A white card on the warm page reads by contrast alone,
+  // which is what makes Lock In feel calm rather than boxed in.
   return (
     <Tag
       className={cn(
-        "bg-surface border border-border rounded-card",
+        "bg-surface rounded-card",
         elevated && "shadow-card",
         className,
       )}
@@ -617,7 +622,7 @@ export function Skeleton({ className }: { className?: string }) {
     <div
       aria-hidden="true"
       className={cn(
-        "rounded-field bg-surface-2 relative overflow-hidden",
+        "rounded-field bg-surface-3 relative overflow-hidden",
         "after:absolute after:inset-0 after:bg-gradient-to-r",
         "after:from-transparent after:via-black/[0.04] after:to-transparent",
         "after:animate-[ds-shimmer_1.6s_ease-in-out_infinite]",
