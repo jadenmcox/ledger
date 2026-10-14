@@ -335,6 +335,13 @@ body {
   display: none;
 }
 
+/* These SET the padding to the inset; they don't add to it. This file is
+   unlayered and Tailwind v4 puts utilities in a cascade layer, so on the same
+   element .ds-safe-bottom beats pb-4 / py-4 every time, and the padding
+   becomes the bare inset: 0 in a browser tab. That is how the Sheet footer
+   and every Tally page lost their padding. Use these only where the inset
+   alone is the padding; for padding plus the inset write
+   pb-[calc(1rem+var(--ds-safe-bottom))] instead. */
 .ds-safe-bottom {
   padding-bottom: var(--ds-safe-bottom);
 }
@@ -455,6 +462,15 @@ body {
 }
 .ds-sheet-up {
   animation: ds-sheet-up 0.32s var(--ds-ease-out) both;
+}
+/* From sm up the Sheet is a centred dialog, and a dialog sliding up from
+   below the window reads as broken, so it settles in place instead. This
+   can't be a Tailwind sm:animate-none on the element: as above, this rule is
+   unlayered and would win. */
+@media (min-width: 640px) {
+  .ds-sheet-up {
+    animation: ds-scale-in 0.22s var(--ds-ease) both;
+  }
 }
 .ds-pop-in {
   animation: ds-pop-in 0.42s var(--ds-ease-spring) both;

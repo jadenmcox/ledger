@@ -88,6 +88,7 @@ export function Sheet({
   children,
   footer,
   className,
+  icon: IconCmpProp = DefaultIcon,
 }: {
   open: boolean;
   onClose: () => void;
@@ -95,7 +96,12 @@ export function Sheet({
   children: React.ReactNode;
   footer?: React.ReactNode;
   className?: string;
+  icon?: IconCmp;
 }) {
+  const dialogRef = React.useRef<HTMLDivElement>(null);
+  const bodyRef = React.useRef<HTMLDivElement>(null);
+  const contentRef = React.useRef<HTMLDivElement>(null);
+
   // Escape closes, and the body must not scroll behind the sheet. Restoring
   // the previous overflow rather than clearing it avoids stomping on an app
   // that already locks scrolling for its own reasons.
@@ -113,42 +119,188 @@ export function Sheet({
     };
   }, [open, onClose]);
 
+  // Focus moves into the sheet on open (unless the app already focused a
+  // field in it) and back to whatever opened it on close.
+  React.useEffect(() => {
+    if (!open) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const dialog = dialogRef.current;
+    if (dialog && !dialog.contains(document.activeElement)) dialog.focus({ preventScroll: true });
+    return () => {
+      if (previous?.isConnected) previous.focus({ preventScroll: true });
+    };
+  }, [open]);
+
+  // Hairlines under the title and over the footer only while content is
+  // scrolled past them, so a short sheet stays clean and a long one shows
+  // there is more.
+  const [edges, setEdges] = React.useState({ top: false, bottom: false });
+  const measure = React.useCallback(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const top = el.scrollTop > 1;
+    const bottom = el.scrollTop + el.clientHeight < el.scrollHeight - 1;
+    setEdges((e) => (e.top === top && e.bottom === bottom ? e : { top, bottom }));
+  }, []);
+  React.useEffect(() => {
+    if (!open) return;
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    if (bodyRef.current) ro.observe(bodyRef.current);
+    if (contentRef.current) ro.observe(contentRef.current);
+    return () => ro.disconnect();
+  }, [open, measure]);
+
+  // On a phone the on-screen keyboard covers the bottom of the layout
+  // viewport, which is where this sheet and its Save button are pinned.
+  // visualViewport reports how much is hidden, and the sheet rises by that.
+  const [keyboard, setKeyboard] = React.useState(0);
+  React.useEffect(() => {
+    if (!open) return;
+    const vv = window.visualViewport;
+    if (!vv || !window.matchMedia("(pointer: coarse)").matches) return;
+    const update = () => {
+      const hidden = window.innerHeight - vv.height - vv.offsetTop;
+      // Ignore small differences (toolbars, pinch zoom); a keyboard is big.
+      setKeyboard(hidden > 80 ? Math.round(hidden) : 0);
+    };
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, [open]);
+
+  // Drag the handle or title down to dismiss, on the phone layout only. The
+  // offset rides on `translate`, which composes with the entrance animation's
+  // `transform` instead of fighting it.
+  const drag = React.useRef<{ y: number; t: number; dy: number } | null>(null);
+  const [dragY, setDragY] = React.useState(0);
+  const [settling, setSettling] = React.useState(false);
+
+  function onDragStart(e: React.PointerEvent<HTMLDivElement>) {
+    if (window.matchMedia("(min-width: 640px)").matches) return;
+    if ((e.target as HTMLElement).closest("button, a, input, textarea, select")) return;
+    drag.current = { y: e.clientY, t: e.timeStamp, dy: 0 };
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setSettling(false);
+  }
+  function onDragMove(e: React.PointerEvent<HTMLDivElement>) {
+    const d = drag.current;
+    if (!d) return;
+    d.dy = Math.max(0, e.clientY - d.y);
+    setDragY(d.dy);
+  }
+  function onDragEnd(e: React.PointerEvent<HTMLDivElement>) {
+    const d = drag.current;
+    if (!d) return;
+    drag.current = null;
+    const height = dialogRef.current?.offsetHeight ?? 400;
+    const speed = d.dy / Math.max(1, e.timeStamp - d.t);
+    setSettling(true);
+    if (d.dy > Math.min(120, height / 3) || (d.dy > 24 && speed > 0.6)) {
+      setDragY(height);
+      window.setTimeout(onClose, 180);
+    } else {
+      setDragY(0);
+    }
+  }
+
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[40] flex items-end justify-center sm:items-center">
+    <div
+      className="fixed inset-0 z-[40] flex items-end justify-center sm:items-center sm:p-6"
+      style={keyboard ? { paddingBottom: keyboard } : undefined}
+    >
       <div
         className="absolute inset-0 bg-black/40 ds-fade-in"
         onClick={onClose}
         aria-hidden="true"
       />
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label={title}
+        tabIndex={-1}
         className={cn(
-          "relative w-full sm:max-w-md bg-surface shadow-sheet",
+          "relative w-full sm:max-w-md bg-surface shadow-sheet outline-none",
           "rounded-t-sheet sm:rounded-sheet",
-          "ds-sheet-up sm:animate-none max-h-[90vh] flex flex-col",
+          // dvh, not vh: iOS Safari's vh includes the area behind its
+          // toolbar, which pushed the footer offscreen.
+          "ds-sheet-up max-h-[min(90dvh,calc(100%_-_1rem))] flex flex-col",
           className,
         )}
+        style={{
+          translate: dragY ? `0 ${dragY}px` : undefined,
+          transition: settling ? "translate 0.18s var(--ds-ease-out)" : undefined,
+        }}
       >
-        {/* The grab handle reads as "draggable" on mobile even though the
-            sheet is tap-to-dismiss. Hidden on desktop where it means nothing. */}
-        <div className="sm:hidden pt-3 pb-1 flex justify-center shrink-0">
-          <span className="h-1 w-9 rounded-pill bg-border-strong" />
+        <div
+          className="shrink-0 max-sm:touch-none"
+          onPointerDown={onDragStart}
+          onPointerMove={onDragMove}
+          onPointerUp={onDragEnd}
+          onPointerCancel={onDragEnd}
+        >
+          {/* Grab handle: the sheet really does drag down to close. Hidden on
+              desktop, where it is a centred dialog. */}
+          <div className="sm:hidden pt-2.5 pb-1.5 flex justify-center">
+            <span className="h-1 w-9 rounded-pill bg-border-strong" />
+          </div>
+
+          {title && (
+            <div
+              className={cn(
+                "flex items-center justify-between gap-3 px-5 pt-1 pb-3 sm:pt-5",
+                "border-b transition-colors duration-150",
+                edges.top ? "border-border" : "border-transparent",
+              )}
+            >
+              <h2 className="ds-display text-lg min-w-0">{title}</h2>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close"
+                className={cn(
+                  "-mr-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-pill",
+                  "text-foreground-muted transition-colors duration-150",
+                  "hover:bg-surface-2 hover:text-foreground",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+                )}
+              >
+                <IconCmpProp name="close" size="md" />
+              </button>
+            </div>
+          )}
         </div>
 
-        {title && (
-          <div className="px-5 pt-3 pb-2 shrink-0">
-            <h2 className="ds-display text-lg">{title}</h2>
-          </div>
-        )}
-
-        <div className="px-5 py-3 overflow-y-auto flex-1">{children}</div>
+        <div
+          ref={bodyRef}
+          onScroll={measure}
+          className={cn(
+            "px-5 overflow-y-auto overscroll-contain flex-1 [scrollbar-width:thin]",
+            title ? "pt-1" : "pt-3",
+            footer ? "pb-4" : "pb-[calc(1.25rem_+_var(--ds-safe-bottom))]",
+          )}
+        >
+          <div ref={contentRef}>{children}</div>
+        </div>
 
         {footer && (
-          <div className="px-5 py-4 border-t border-border shrink-0 ds-safe-bottom">
+          <div
+            className={cn(
+              // Padding plus the home-indicator inset, never .ds-safe-bottom:
+              // that class would REPLACE the padding (see tokens.css).
+              "px-5 pt-4 pb-[calc(1rem_+_var(--ds-safe-bottom))] shrink-0",
+              "border-t transition-colors duration-150",
+              edges.bottom ? "border-border" : "border-transparent",
+            )}
+          >
             {footer}
           </div>
         )}

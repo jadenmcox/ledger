@@ -132,8 +132,10 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
    Form controls
    ------------------------------------------------------------------------- */
 
+// 16px on phones, 14px from sm up. iOS Safari zooms the whole page into any
+// field under 16px when it gets focus, which shoved sheets sideways.
 const FIELD_BASE =
-  "w-full bg-surface border border-border rounded-field text-sm text-foreground " +
+  "w-full bg-surface border border-border rounded-field text-base sm:text-sm text-foreground " +
   "placeholder:text-foreground-faint transition-all duration-200 " +
   "focus:border-accent focus:ring-2 focus:ring-accent-tint focus:outline-none " +
   "disabled:opacity-60 disabled:cursor-not-allowed";

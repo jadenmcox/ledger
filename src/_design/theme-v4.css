@@ -143,3 +143,42 @@
   --spacing-nav: var(--ds-nav-height);
   --spacing-tap: var(--ds-tap-min);
 }
+
+/* -------------------------------------------------------------------------
+   Pointer cursor on anything clickable.
+
+   Tailwind v3's preflight gave buttons `cursor: pointer`; v4's does not, so
+   every button in the v4 apps showed the arrow. House rule: if you can click
+   it, the cursor is a hand. In the base layer, so a cursor-* utility on an
+   element still wins.
+
+   Three rules rather than one list: a selector a browser doesn't know
+   (:has() in an older Firefox, the -webkit- date picker part anywhere but
+   WebKit and Blink) throws out its whole rule, and must not take the
+   buttons down with it.
+   ------------------------------------------------------------------------- */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="tab"]:not([aria-disabled="true"]),
+  [role="switch"]:not([aria-disabled="true"]),
+  [role="checkbox"]:not([aria-disabled="true"]),
+  [role="radio"]:not([aria-disabled="true"]),
+  [role="option"]:not([aria-disabled="true"]),
+  [role="menuitem"]:not([aria-disabled="true"]),
+  select:not(:disabled),
+  summary,
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled),
+  input[type="file"]:not(:disabled),
+  input[type="color"]:not(:disabled),
+  input[type="range"]:not(:disabled) {
+    cursor: pointer;
+  }
+  label:has(> input[type="checkbox"]:not(:disabled), > input[type="radio"]:not(:disabled)) {
+    cursor: pointer;
+  }
+  input::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+  }
+}
