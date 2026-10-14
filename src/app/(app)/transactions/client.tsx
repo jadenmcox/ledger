@@ -23,7 +23,8 @@ import {
   clearSplits,
   scanReceipt,
 } from "./actions";
-import { Search, Zap, ArrowRightLeft, Trash2, Pencil, Plus, Upload, Sparkles, Receipt, Tag, Split, X, ScanLine } from "lucide-react";
+import { Search, Zap, ArrowRightLeft, Trash2, Pencil, Plus, Upload, Sparkles, Briefcase, Tag, Split, X, ScanLine, HandCoins } from "lucide-react";
+import { PaybackPicker } from "@/components/payback-picker";
 
 // Downscale a photo to a compact JPEG data: URL before sending it to the
 // receipt parser — keeps the upload well under the server-action body limit and
@@ -49,6 +50,13 @@ async function downscaleToDataUrl(
 }
 
 // A transaction's category parts, as passed from the server for display.
+export type PaybackLinkView = {
+  id: number;
+  paybackId: number;
+  chargeId: number;
+  amountCents: number;
+};
+
 export type SplitPartView = {
   categoryId: number | null;
   amountCents: number;
@@ -104,12 +112,13 @@ function RecategorizeBanner({
   const [done, setDone] = useState<number | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   return (
-    <Card className="p-3 md:p-4 flex items-center gap-3">
+    <Card className="p-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="flex min-w-0 flex-1 items-start gap-3 text-sm">
       <Sparkles
-        className="size-4 text-blush-deep shrink-0"
+        className="mt-0.5 size-4 text-blush-deep shrink-0"
         strokeWidth={1.75}
       />
-      <div className="flex-1 min-w-0 text-xs md:text-sm">
+      <div className="flex-1 min-w-0">
         {errors.length > 0 ? (
           <span className="text-blush-deep">
             Plaid sync failed: {errors[0]}
@@ -117,7 +126,7 @@ function RecategorizeBanner({
         ) : done !== null ? (
           done === 0 ? (
             <span>
-              No new matches. Add a rule by tapping a merchant — it&apos;ll
+              No new matches. Add a rule by tapping a merchant, and it&apos;ll
               catch every future one.
             </span>
           ) : (
@@ -129,11 +138,13 @@ function RecategorizeBanner({
         ) : (
           <span>
             <span className="font-medium">{count}</span>{" "}
-            uncategorized — run your rules and Plaid&apos;s category hints
-            across them.
+            {count === 1 ? "transaction needs" : "transactions need"} a category.
+            Auto-sort them with your rules, or go one by one.
           </span>
         )}
       </div>
+      </div>
+      <div className="flex shrink-0 gap-2">
       <Button
         size="sm"
         variant="primary"
@@ -151,11 +162,12 @@ function RecategorizeBanner({
           })
         }
       >
-        {pending ? "Working…" : done !== null ? "Run again" : "Recategorize"}
+        {pending ? "Working…" : done !== null ? "Run again" : "Auto-sort"}
       </Button>
       <Button size="sm" variant="outline" onClick={onTriage}>
         One by one
       </Button>
+      </div>
     </Card>
   );
 }
@@ -168,6 +180,7 @@ export function TransactionsClient({
   splits = {},
   hasMore = false,
   nextN = 1000,
+  links = [],
 }: {
   initial: Transaction[];
   categories: Category[];
@@ -176,6 +189,7 @@ export function TransactionsClient({
   splits?: Record<number, SplitPartView[]>;
   hasMore?: boolean;
   nextN?: number;
+  links?: PaybackLinkView[];
 }) {
   const [search, setSearch] = useState("");
   const [accountFilter, setAccountFilter] = useState<number | "all">("all");
@@ -207,10 +221,33 @@ export function TransactionsClient({
     [accounts],
   );
 
-  const uncategorizedTx = useMemo(
-    () => initial.filter((t) => !t.categoryId && !t.isTransfer),
-    [initial],
-  );
+  // Payback notes per row: what a payment paid back, or how much of a charge
+  // came back.
+  const paybackNotes = useMemo(() => {
+    const byId = new Map(initial.map((t) => [t.id, t]));
+    const notes: Record<number, string> = {};
+    const backByCharge = new Map<number, number>();
+    for (const l of links) {
+      backByCharge.set(l.chargeId, (backByCharge.get(l.chargeId) ?? 0) + l.amountCents);
+      const charge = byId.get(l.chargeId);
+      notes[l.paybackId] = charge
+        ? `pays back ${charge.merchantClean || charge.merchantRaw}`
+        : "payback";
+    }
+    for (const [id, back] of backByCharge) {
+      const t = byId.get(id);
+      if (!t) continue;
+      notes[id] =
+        back >= Math.abs(t.amountCents) ? "fully paid back" : `${formatCents(back)} paid back`;
+    }
+    return notes;
+  }, [initial, links]);
+
+  const uncategorizedTx = useMemo(() => {
+    // A linked payback needs no category: it isn't income or spending.
+    const paybackIds = new Set(links.map((l) => l.paybackId));
+    return initial.filter((t) => !t.categoryId && !t.isTransfer && !paybackIds.has(t.id));
+  }, [initial, links]);
   const uncategorizedCount = uncategorizedTx.length;
 
   // Months present in the loaded window, newest first, for the month filter.
@@ -284,11 +321,11 @@ export function TransactionsClient({
               className="bg-transparent border-none outline-none text-sm flex-1 min-w-0 placeholder:text-foreground-faint"
             />
           </div>
-          <div className="flex gap-2 md:gap-3 min-w-0 flex-wrap">
+          <div className="grid grid-cols-2 gap-2 min-w-0 md:flex md:gap-3">
             <select
               value={monthFilter}
               onChange={(e) => setMonthFilter(e.target.value)}
-              className="h-9 flex-1 min-w-0 md:flex-initial bg-surface-2 border border-border-strong rounded-md px-2 md:px-3 text-xs"
+              className="h-10 w-full min-w-0 md:h-9 md:w-auto bg-surface-2 border border-border-strong rounded-xl md:rounded-md px-3 text-sm md:text-xs"
             >
               <option value="all">All months</option>
               {months.map((m) => (
@@ -304,7 +341,7 @@ export function TransactionsClient({
                   e.target.value === "all" ? "all" : Number(e.target.value),
                 )
               }
-              className="h-9 flex-1 min-w-0 md:flex-initial bg-surface-2 border border-border-strong rounded-md px-2 md:px-3 text-xs"
+              className="h-10 w-full min-w-0 md:h-9 md:w-auto bg-surface-2 border border-border-strong rounded-xl md:rounded-md px-3 text-sm md:text-xs"
             >
               <option value="all">All accounts</option>
               {accounts.map((a) => (
@@ -321,10 +358,10 @@ export function TransactionsClient({
                 else if (v === "uncategorized") setCatFilter("uncategorized");
                 else setCatFilter(Number(v));
               }}
-              className="h-9 flex-1 min-w-0 md:flex-initial bg-surface-2 border border-border-strong rounded-md px-2 md:px-3 text-xs"
+              className="h-10 w-full min-w-0 md:h-9 md:w-auto bg-surface-2 border border-border-strong rounded-xl md:rounded-md px-3 text-sm md:text-xs"
             >
               <option value="all">All categories</option>
-              <option value="uncategorized">— Uncategorized —</option>
+              <option value="uncategorized">No category</option>
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -334,7 +371,7 @@ export function TransactionsClient({
             <button
               onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
               className={cn(
-                "h-9 px-3 rounded-md border text-xs tracking-tight transition-colors shrink-0",
+                "h-10 md:h-9 px-3 rounded-xl md:rounded-md border text-sm md:text-xs tracking-tight transition-colors shrink-0",
                 selectMode
                   ? "border-blush bg-blush-tint text-blush-deep font-medium"
                   : "border-border-strong bg-surface-2 text-foreground-muted hover:text-foreground",
@@ -372,8 +409,11 @@ export function TransactionsClient({
                   cat={t.categoryId ? catById.get(t.categoryId) : undefined}
                   acct={acctById.get(t.accountId)}
                   categories={categories}
-                  refundNote={refundNotes[t.id]}
+                  refundNote={paybackNotes[t.id] ?? refundNotes[t.id]}
                   splits={splits[t.id]}
+                  pool={initial}
+                  accounts={accounts}
+                  links={links}
                   selectMode={selectMode}
                   isSelected={selected.has(t.id)}
                   onToggleSelect={() => toggleSelected(t.id)}
@@ -555,7 +595,7 @@ function AddTransactionModal({
                 className="h-10 w-full bg-surface border border-border rounded-field px-3 text-sm"
                 defaultValue=""
               >
-                <option value="">— Uncategorized —</option>
+                <option value="">No category</option>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
@@ -589,6 +629,9 @@ function Row({
   categories,
   refundNote,
   splits,
+  pool,
+  accounts,
+  links,
   selectMode = false,
   isSelected = false,
   onToggleSelect,
@@ -599,6 +642,9 @@ function Row({
   categories: Category[];
   refundNote?: string;
   splits?: SplitPartView[];
+  pool: Transaction[];
+  accounts: Account[];
+  links: PaybackLinkView[];
   selectMode?: boolean;
   isSelected?: boolean;
   onToggleSelect?: () => void;
@@ -607,7 +653,7 @@ function Row({
   const [editing, setEditing] = useState(false);
   const [splitting, setSplitting] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
-  const [, startTransition] = useTransition();
+  const [paybackOpen, setPaybackOpen] = useState(false);
 
   const catById = useMemo(
     () => new Map(categories.map((c) => [c.id, c])),
@@ -642,9 +688,8 @@ function Row({
   return (
     <div
       className={cn(
-        "relative pl-4 md:pl-5 pr-4 md:pr-5 py-3.5 flex items-center gap-3 md:gap-3.5 group",
+        "relative pl-4 md:pl-5 pr-4 md:pr-5 py-3.5 flex items-center gap-3 md:gap-3.5 group cursor-pointer transition-colors hover:bg-surface-2/40",
         tx.isTransfer && "opacity-50",
-        selectMode && "cursor-pointer",
         isSelected && "bg-blush-tint/30",
       )}
       onClick={() => {
@@ -652,9 +697,7 @@ function Row({
           onToggleSelect?.();
           return;
         }
-        // Desktop has hover actions; on touch screens the row itself opens
-        // the action sheet (there is no hover).
-        if (window.matchMedia("(min-width: 768px)").matches) return;
+        // Tap (or click) a row to act on it, on every screen size.
         setActionsOpen(true);
       }}
     >
@@ -674,7 +717,7 @@ function Row({
             {tx.merchantClean || tx.merchantRaw}
           </span>
           {tx.isTransfer && <Pill>transfer</Pill>}
-          {tx.reimbursable && <Pill tone="savings">reimbursable</Pill>}
+          {tx.reimbursable && <Pill tone="savings">work expense</Pill>}
           {isCredit && <Pill tone="income">credit</Pill>}
           {isSplit && <Pill tone="need">split</Pill>}
         </div>
@@ -689,7 +732,7 @@ function Row({
             }}
             className="text-[11px] text-foreground-faint hover:text-blush-deep transition-colors tracking-tight truncate"
           >
-            {splitLabel ?? cat?.name ?? "— uncategorized —"}
+            {splitLabel ?? cat?.name ?? "No category"}
           </button>
           {acct && (
             <span className="text-[10px] text-foreground-faint truncate">
@@ -712,67 +755,7 @@ function Row({
       >
         {formatCents(tx.amountCents, { signed: tx.amountCents > 0 })}
       </div>
-      <div className="hidden md:flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button
-          onClick={() => setEditing(true)}
-          className="size-7 inline-flex items-center justify-center rounded-md hover:bg-surface-2 text-foreground-faint hover:text-foreground"
-          title="Edit"
-        >
-          <Pencil className="size-3.5" strokeWidth={1.5} />
-        </button>
-        <button
-          onClick={() =>
-            startTransition(() => setIsTransfer(tx.id, !tx.isTransfer))
-          }
-          className={cn(
-            "size-7 inline-flex items-center justify-center rounded-md hover:bg-surface-2",
-            tx.isTransfer
-              ? "text-blush-deep"
-              : "text-foreground-faint hover:text-foreground",
-          )}
-          title="Mark as transfer"
-        >
-          <ArrowRightLeft className="size-3.5" strokeWidth={1.5} />
-        </button>
-        <button
-          onClick={() =>
-            startTransition(() => setReimbursable(tx.id, !tx.reimbursable))
-          }
-          className={cn(
-            "size-7 inline-flex items-center justify-center rounded-md hover:bg-surface-2",
-            tx.reimbursable
-              ? "text-blue-deep"
-              : "text-foreground-faint hover:text-foreground",
-          )}
-          title="Reimbursable — won't count toward spending or income"
-        >
-          <Receipt className="size-3.5" strokeWidth={1.5} />
-        </button>
-        <button
-          onClick={() => setSplitting(true)}
-          className={cn(
-            "size-7 inline-flex items-center justify-center rounded-md hover:bg-surface-2",
-            isSplit
-              ? "text-blush-deep"
-              : "text-foreground-faint hover:text-foreground",
-          )}
-          title="Split across categories"
-        >
-          <Split className="size-3.5" strokeWidth={1.5} />
-        </button>
-        <button
-          onClick={() => {
-            if (confirm("Delete this transaction?"))
-              startTransition(() => deleteTransaction(tx.id));
-          }}
-          className="size-7 inline-flex items-center justify-center text-foreground-faint hover:text-blush-deep rounded-md hover:bg-surface-2"
-          title="Delete"
-        >
-          <Trash2 className="size-3.5" strokeWidth={1.5} />
-        </button>
-      </div>
-
-      {(picking || editing || splitting || actionsOpen) && (
+      {(picking || editing || splitting || actionsOpen || paybackOpen) && (
         // The row itself is tappable (opens the action sheet on mobile), and
         // these dialogs are its DOM children — keep their clicks from
         // bubbling back up and re-opening the sheet.
@@ -817,6 +800,21 @@ function Row({
                 setActionsOpen(false);
                 setSplitting(true);
               }}
+              onPayback={() => {
+                setActionsOpen(false);
+                setPaybackOpen(true);
+              }}
+            />
+          )}
+          {paybackOpen && (
+            <PaybackPicker
+              base={tx}
+              pool={pool.map((t) => ({
+                ...t,
+                accountName: accounts.find((a) => a.id === t.accountId)?.name ?? null,
+              }))}
+              links={links}
+              onClose={() => setPaybackOpen(false)}
             />
           )}
         </div>
@@ -825,7 +823,7 @@ function Row({
   );
 }
 
-// Touch-screen stand-in for the desktop hover buttons: tap a row, act on it.
+// Everything you can do to one transaction: tap a row, act on it.
 function MobileActionsSheet({
   tx,
   cat,
@@ -834,6 +832,7 @@ function MobileActionsSheet({
   onEdit,
   onPick,
   onSplit,
+  onPayback,
 }: {
   tx: Transaction;
   cat: Category | undefined;
@@ -842,6 +841,7 @@ function MobileActionsSheet({
   onEdit: () => void;
   onPick: () => void;
   onSplit: () => void;
+  onPayback: () => void;
 }) {
   const [, startTransition] = useTransition();
   const item = (
@@ -909,19 +909,29 @@ function MobileActionsSheet({
           },
         )}
         {item(
-          <Receipt
-            className={cn(
-              "size-4",
-              tx.reimbursable ? "text-blue-deep" : "text-foreground-faint",
-            )}
-            strokeWidth={1.5}
-          />,
-          tx.reimbursable ? "Not reimbursable" : "Reimbursable",
-          () => {
-            startTransition(() => setReimbursable(tx.id, !tx.reimbursable));
-            onClose();
-          },
+          <HandCoins className="size-4 text-blue-deep" strokeWidth={1.5} />,
+          tx.amountCents > 0
+            ? "This paid me back for something"
+            : "Someone paid me back for this",
+          onPayback,
         )}
+        {tx.amountCents < 0 &&
+          item(
+            <Briefcase
+              className={cn(
+                "size-4",
+                tx.reimbursable ? "text-blue-deep" : "text-foreground-faint",
+              )}
+              strokeWidth={1.5}
+            />,
+            tx.reimbursable
+              ? "Not a work expense after all"
+              : "Work expense (I'll be paid back)",
+            () => {
+              startTransition(() => setReimbursable(tx.id, !tx.reimbursable));
+              onClose();
+            },
+          )}
         {item(
           <Trash2 className="size-4" strokeWidth={1.5} />,
           "Delete",
@@ -1056,7 +1066,7 @@ function EditTxModal({
                 onChange={(e) => setCategoryIdState(e.target.value)}
                 className="h-10 w-full bg-surface border border-border rounded-field px-3.5 text-sm focus:border-sage focus:ring-2 focus:ring-sage-tint focus:outline-none transition-all"
               >
-                <option value="">— Uncategorized —</option>
+                <option value="">No category</option>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
@@ -1521,7 +1531,7 @@ function SplitSheet({
       const dataUrl = await downscaleToDataUrl(file);
       const result = await scanReceipt(dataUrl);
       if (result.splits.length === 0) {
-        setScanNote("Couldn't read any line items — enter them by hand.");
+        setScanNote("Couldn't read any line items. Enter them by hand.");
         return;
       }
       setLines(

@@ -114,8 +114,8 @@ export async function setReimbursable(txId: number, reimbursable: boolean) {
     .update(transactions)
     .set({ reimbursable })
     .where(eq(transactions.id, txId));
-  revalidatePath("/transactions");
-  revalidatePath("/dashboard");
+  // Moves money between spent and owed-to-you on every monthly view.
+  revalidatePath("/", "layout");
 }
 
 // Splitting a purchase changes category attribution on every monthly view, so

@@ -1,13 +1,11 @@
 import { db } from "@/db";
-import { accounts, categories, transactions } from "@/db/schema";
-import { desc, eq } from "drizzle-orm";
+import { accounts, transactions } from "@/db/schema";
+import { desc } from "drizzle-orm";
 import { Container, PageHeader, EmptyState, Button } from "@/components/ui";
 import { TransactionsClient, TransactionsHeaderActions } from "./client";
 import Link from "next/link";
-import { TransactionsHero } from "./transactions-hero";
 import { format, isSameDay } from "date-fns";
-import { createMonthBucketer, monthConsumption } from "@/lib/month-bucket";
-import { loadSplitsByTx } from "@/lib/splits";
+import { loadLedgerData } from "@/lib/ledger-data";
 
 export const dynamic = "force-dynamic";
 
@@ -27,44 +25,25 @@ export default async function TransactionsPage({
       ? Math.min(Math.floor(requested), MAX_N)
       : PAGE;
 
-  const [txPlusOne, heroTx, allCats, allAccts, splitsByTx] = await Promise.all([
+  const [txPlusOne, ledgerData, allAccts] = await Promise.all([
     // One extra row tells us whether a "Load more" is worth showing.
     db
       .select()
       .from(transactions)
       .orderBy(desc(transactions.date))
       .limit(limit + 1),
-    // Slim full history for the hero's "spent this month": the shared
-    // month-bucketer needs every row so refunds credit the right month and
-    // late-month rent rolls forward, exactly like the dashboard headline.
-    db
-      .select({
-        id: transactions.id,
-        date: transactions.date,
-        amountCents: transactions.amountCents,
-        merchantRaw: transactions.merchantRaw,
-        merchantClean: transactions.merchantClean,
-        categoryId: transactions.categoryId,
-        isTransfer: transactions.isTransfer,
-        reimbursable: transactions.reimbursable,
-      })
-      .from(transactions)
-      .where(eq(transactions.isTransfer, false)),
-    db.select().from(categories),
+    loadLedgerData(),
     db.select().from(accounts),
-    loadSplitsByTx(),
   ]);
+  const { allCategories: allCats, splitsByTx, links, ledger } = ledgerData;
 
   const hasMore = txPlusOne.length > limit;
   const allTx = hasMore ? txPlusOne.slice(0, limit) : txPlusOne;
   const hasAccounts = allAccts.length > 0;
 
-  const now = new Date();
-  const thisMonthSpend = monthConsumption(heroTx, allCats, now, splitsByTx);
-
   // Refund provenance for the visible rows: a matched refund gets a small
   // "credits <merchant> · <date>" note so the netting isn't invisible magic.
-  const { refundMatch } = createMonthBucketer(heroTx, allCats);
+  const { refundMatch } = ledger;
   const refundNotes: Record<number, string> = {};
   for (const t of allTx) {
     const m = refundMatch.get(t.id);
@@ -95,21 +74,12 @@ export default async function TransactionsPage({
         title="Transactions"
         subtitle={
           hasAccounts
-            ? `${allTx.length} most recent from your connected accounts. Tap a merchant to recategorize — or make it a rule that catches every future one.`
+            ? "Tap any transaction to recategorize it, split it, or mark who paid you back."
             : "Connect a bank and the last few months of activity will land here automatically."
         }
         right={hasAccounts ? <TransactionsHeaderActions /> : undefined}
       />
       <Container>
-        {hasAccounts && (
-          <div className="mb-10">
-            <TransactionsHero
-              totalSpend={thisMonthSpend}
-              txCount={allTx.length}
-              monthLabel={format(now, "MMMM")}
-            />
-          </div>
-        )}
         {!hasAccounts ? (
           <EmptyState
             title="Connect a bank first"
@@ -129,6 +99,12 @@ export default async function TransactionsPage({
             splits={splits}
             hasMore={hasMore}
             nextN={limit + PAGE}
+            links={links.map((l) => ({
+              id: l.id,
+              paybackId: l.paybackId,
+              chargeId: l.chargeId,
+              amountCents: l.amountCents,
+            }))}
           />
         )}
       </Container>
