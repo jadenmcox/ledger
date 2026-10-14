@@ -1,33 +1,19 @@
 import { db } from "@/db";
-import {
-  accounts,
-  budgetSettings,
-  categories,
-  savingsGoals,
-  transactions,
-  type Category,
-} from "@/db/schema";
+import { accounts, budgetSettings, savingsGoals } from "@/db/schema";
 import { SpendingHero, type SpendingSlice } from "./spending-breakdown";
-import { PlannedActual } from "./planned-actual";
 import { CategoryGlyph } from "@/components/category-glyph";
 import {
   computeOccurrences,
   expectedMonthlyIncome,
   getActiveSchedules,
 } from "@/lib/recurring-schedules";
+import { findRecurring } from "@/lib/recurring";
+import { loadLedgerData } from "@/lib/ledger-data";
+import { owedSummary, paybackState } from "@/lib/paybacks";
 import { asc, eq } from "drizzle-orm";
 import type { ReactNode } from "react";
-import {
-  Container,
-  PageHeader,
-  Card,
-  EmptyState,
-  Pill,
-  Button,
-} from "@/components/ui";
-import { formatCents, formatCentsCompact, cn } from "@/lib/utils";
-import { createMonthBucketer } from "@/lib/month-bucket";
-import { categoryParts, loadSplitsByTx } from "@/lib/splits";
+import { Container, PageHeader, Card, EmptyState, Button } from "@/components/ui";
+import { formatCents, cn } from "@/lib/utils";
 import {
   startOfMonth,
   endOfMonth,
@@ -39,22 +25,22 @@ import {
   isSameMonth,
   subMonths,
   addMonths,
+  isAfter,
+  isBefore,
 } from "date-fns";
 import Link from "next/link";
 import {
   ArrowRight,
-  Check,
   ChevronLeft,
   ChevronRight,
+  HandCoins,
   Repeat,
-  TrendingUp,
+  Tag,
   TriangleAlert,
 } from "lucide-react";
 import { SavingsGoalsSection } from "./savings-goals";
 
 export const dynamic = "force-dynamic";
-
-type Classification = "need" | "want" | "savings";
 
 export default async function DashboardPage({
   searchParams,
@@ -62,17 +48,14 @@ export default async function DashboardPage({
   searchParams: Promise<{ m?: string }>;
 }) {
   const now = new Date();
-  // ?m=YYYY-MM lets you page back through past months. Defaults to the current
-  // month; the future is never reachable (next is disabled on the live month).
+  // ?m=YYYY-MM pages back through past months; the future is never reachable.
   const sp = await searchParams;
   const parsedMonth =
     sp.m && /^\d{4}-\d{2}$/.test(sp.m)
       ? parse(`${sp.m}-01`, "yyyy-MM-dd", new Date())
       : null;
   const viewDate =
-    parsedMonth && isValid(parsedMonth) && parsedMonth <= now
-      ? parsedMonth
-      : now;
+    parsedMonth && isValid(parsedMonth) && parsedMonth <= now ? parsedMonth : now;
   const isCurrentMonth = isSameMonth(viewDate, now);
 
   const monthStart = startOfMonth(viewDate);
@@ -80,312 +63,130 @@ export default async function DashboardPage({
   const daysInMonth = getDaysInMonth(viewDate);
   const dayOfMonth = getDate(now);
   const daysLeft = daysInMonth - dayOfMonth;
-
   const prevMonthParam = format(subMonths(monthStart, 1), "yyyy-MM");
   const nextMonthParam = format(addMonths(monthStart, 1), "yyyy-MM");
 
-  // Widen the fetch back through the previous month so late-month rent (paid on
-  // or after the 20th, which counts toward *this* month) is available to pull
-  // in. The window is then narrowed to this month by effective date below.
-  // Kicked off alongside the rest so a pre-migration prod DB (missing
-  // is_forecast_only) can't 500 this page — see getActiveSchedules.
-  const schedulesPromise = getActiveSchedules();
-  const [
-    allTx,
-    allCategories,
-    allAccounts,
-    goals,
-    settingsRows,
-    splitsByTx,
-  ] = await Promise.all([
-    // Full non-transfer history: rent rolls in from the prior month and a refund
-    // can credit back to a purchase in any earlier month, so a single-month
-    // window isn't enough. Bucketing to this month happens in memory below.
+  const [data, allAccounts, goals, settingsRows, schedules] = await Promise.all([
+    loadLedgerData(),
+    db.select().from(accounts),
     db
       .select()
-      .from(transactions)
-      .where(eq(transactions.isTransfer, false)),
-    db.select().from(categories),
-    db.select().from(accounts),
-    db.select().from(savingsGoals).where(eq(savingsGoals.isArchived, false)).orderBy(asc(savingsGoals.sortOrder), asc(savingsGoals.id)),
+      .from(savingsGoals)
+      .where(eq(savingsGoals.isArchived, false))
+      .orderBy(asc(savingsGoals.sortOrder), asc(savingsGoals.id)),
     db.select().from(budgetSettings).limit(1),
-    loadSplitsByTx(),
+    getActiveSchedules(),
   ]);
-  const schedules = await schedulesPromise;
-
+  const { allTx, allCategories, ledger, links } = data;
   const catById = new Map(allCategories.map((c) => [c.id, c]));
   const acctById = new Map(allAccounts.map((a) => [a.id, a]));
 
-  // Shared refund-aware, rent-aware month bucketing (same on every page).
-  const { monthKeyOf, refundMatch } = createMonthBucketer(
-    allTx,
-    allCategories,
-  );
+  const m = ledger.summarize(viewDate);
 
-  let income = 0;
-  // Net spend per category: purchases add, refunds subtract. Clamped below.
-  const spendByCategory = new Map<number, number>();
-  let uncategorizedSpend = 0;
-  // Per-category vendor rollup: categoryId -> (merchant -> {total, count}). Powers
-  // the expandable Planned-vs-actual rows (totals combined by vendor).
-  const merchantAgg = new Map<number, Map<string, { total: number; count: number }>>();
-  // Reimbursable charges/paybacks wash out: kept off both spent and income.
-  let reimbursablePaid = 0;
-  let reimbursableReceived = 0;
-  for (const t of allTx) {
-    if (!isSameMonth(monthKeyOf(t), viewDate)) continue;
-    if (t.reimbursable) {
-      if (t.amountCents < 0) reimbursablePaid += Math.abs(t.amountCents);
-      else reimbursableReceived += t.amountCents;
-      continue;
-    }
-    // Income stays whole (splits are spending-only); its own category drives it.
-    const parentCat = t.categoryId ? catById.get(t.categoryId) : null;
-    if (parentCat?.classification === "income") {
-      income += t.amountCents;
-      continue;
-    }
-    if (t.amountCents === 0) continue;
-    // A refund nets against the vendor of the purchase it offsets (not its own
-    // descriptor), so the by-vendor rollup still sums to the category total.
-    // Merchant + refund status are whole-transaction facts shared by every part.
-    const isRefund = t.amountCents > 0;
-    const merchant = (
-      (isRefund ? refundMatch.get(t.id)?.merchant : null) ||
-      t.merchantClean ||
-      t.merchantRaw ||
-      "—"
-    ).trim();
-    // Split transactions fan out into their category parts; unsplit ones yield a
-    // single whole-amount part. Purchase adds to spend; a refund nets back out.
-    for (const part of categoryParts(t, splitsByTx)) {
-      const cat = part.categoryId ? catById.get(part.categoryId) : null;
-      const delta =
-        part.amountCents < 0 ? Math.abs(part.amountCents) : -part.amountCents;
-      if (cat) {
-        spendByCategory.set(cat.id, (spendByCategory.get(cat.id) || 0) + delta);
+  // Expected income: the manual figure set on Budget, else recurring paychecks.
+  // The live month reconciles against it once it exceeds what has landed, so
+  // being paid on the 15th and 30th never reads as "no income". Past months
+  // always use what actually came in.
+  const { cents: derivedExpected } = expectedMonthlyIncome(schedules, monthStart, monthEnd);
+  const expectedIncome = settingsRows[0]?.expectedIncomeOverrideCents ?? derivedExpected;
+  const usingExpected = isCurrentMonth && expectedIncome > m.income;
+  const incomeBasis = usingExpected ? expectedIncome : m.income;
 
-        if (!merchantAgg.has(cat.id)) merchantAgg.set(cat.id, new Map());
-        const inner = merchantAgg.get(cat.id)!;
-        const cur = inner.get(merchant) || { total: 0, count: 0 };
-        cur.total += delta;
-        if (!isRefund) cur.count += 1;
-        inner.set(merchant, cur);
-      } else if (delta > 0) {
-        // Uncategorized outflow. (Refunds without a category are left alone.)
-        uncategorizedSpend += delta;
-      }
-    }
-  }
-
-  // A category can't net below zero for the month (more refunded than bought).
-  for (const [id, v] of spendByCategory) {
-    if (v < 0) spendByCategory.set(id, 0);
-  }
-
-  const spendByClassification = { need: 0, want: 0, savings: 0 };
-  for (const [id, v] of spendByCategory) {
-    const c = catById.get(id);
-    if (c?.classification === "need") spendByClassification.need += v;
-    else if (c?.classification === "want") spendByClassification.want += v;
-    else if (c?.classification === "savings") spendByClassification.savings += v;
-  }
-
-  // Flatten the vendor rollup, biggest first, dropping fully-refunded vendors.
-  const merchantsByCategory: Record<
-    number,
-    { merchant: string; total: number; count: number }[]
-  > = {};
-  for (const [catId, inner] of merchantAgg) {
-    merchantsByCategory[catId] = [...inner.entries()]
-      .map(([merchant, v]) => ({ merchant, total: v.total, count: v.count }))
-      .filter((v) => v.total > 0)
-      .sort((a, b) => b.total - a.total);
-  }
-
-  // Saving/investing (a "savings"-class category, e.g. a brokerage
-  // contribution) is money kept, not spent. Keep it out of "spent" and surface
-  // it on its own. Consumption is everything else that went out this month
-  // (needs, wants, and any uncategorized outflow).
-  const saved = spendByClassification.savings;
-  const spend =
-    spendByClassification.need +
-    spendByClassification.want +
-    saved +
-    uncategorizedSpend;
-  const consumption = spend - saved;
-
-  // For the *current* month the picture is mid-flight: if you're paid on the
-  // 15th/30th, income received so far can be $0 even though you'll earn a full
-  // paycheck, which would make the reconciliation scream "over income". So for
-  // the live month we reconcile against EXPECTED income (recurring paychecks)
-  // once it exceeds what's landed. Past months always use actual income —
-  // that's real history, never a forecast.
-  // Expected income = the manual override (set on /budget) if present, else
-  // derived from recurring paycheck schedules. Same source of truth the budget
-  // planner uses, so both pages agree.
-  const { cents: derivedExpected } = expectedMonthlyIncome(
-    schedules,
-    monthStart,
-    monthEnd,
-  );
-  const incomeOverride = settingsRows[0]?.expectedIncomeOverrideCents ?? null;
-  const expectedIncome = incomeOverride ?? derivedExpected;
-  const incomeReceived = income;
-  const usingExpectedIncome = isCurrentMonth && expectedIncome > incomeReceived;
-  const incomeBasis = usingExpectedIncome ? expectedIncome : incomeReceived;
-  // Live month with no income known yet (nothing received, no expected figure
-  // set): we simply can't reconcile, so don't cry "over income." Show a neutral
-  // "income not in yet" instead of implying overspending.
-  const noIncomeYet = isCurrentMonth && incomeBasis === 0;
-
-  // "Every dollar" reconciliation: income, top to bottom, minus what got spent
-  // and saved, leaves the unallocated remainder. Positive => income still
-  // waiting for a job; negative => allocations were funded from reserves.
-  // `uncategorizedSpend` is the slice of spend with no bucket yet — money that
-  // moved but isn't accounted for anywhere.
-  const leftover = incomeBasis - consumption - saved;
-  const overspent = consumption > incomeBasis;
-
-  // Spending categories (needs + wants), biggest first, for the overspend
-  // flags below and the donut. Savings categories are excluded so a big
-  // contribution never reads as overspending; now-empty (fully refunded)
-  // categories drop out too.
-  const spendingCategories = [...spendByCategory.entries()]
+  // Donut slices: top spending categories, the rest rolled into "Other", plus
+  // uncategorized, so the slices sum to the Spent headline.
+  const spendingCategories = [...m.spendByCategory.entries()]
     .map(([id, value]) => ({ category: catById.get(id)!, value }))
-    .filter(
-      (x) => x.category && x.category.classification !== "savings" && x.value > 0,
-    )
+    .filter((x) => x.category && x.category.classification !== "savings" && x.value > 0)
     .sort((a, b) => b.value - a.value);
-
-  // Slices for the "Where your money went" donut + ranked list. Show the top
-  // categories individually, roll the rest into a muted "Other", and add an
-  // "Uncategorized" slice for outflow that has no category so the slices sum to
-  // the "Spent this month" headline (consumption).
   const TOP_N = 8;
   const top = spendingCategories.slice(0, TOP_N);
   const rest = spendingCategories.slice(TOP_N);
-  const spendingSlices: SpendingSlice[] = [
-    ...top.map((x) => ({
-      id: x.category.id,
-      name: x.category.name,
-      value: x.value,
-      color: x.category.color,
-      icon: x.category.icon,
-    })),
-  ];
+  const slices: SpendingSlice[] = top.map((x) => ({
+    id: x.category.id,
+    name: x.category.name,
+    value: x.value,
+    color: x.category.color,
+    icon: x.category.icon,
+  }));
   if (rest.length > 0) {
-    spendingSlices.push({
+    slices.push({
       id: null,
-      name: `Other (${rest.length} ${rest.length === 1 ? "category" : "categories"})`,
+      name: `Other (${rest.length})`,
       value: rest.reduce((s, x) => s + x.value, 0),
       color: "var(--lavender)",
       icon: "more-horizontal",
     });
   }
-  if (uncategorizedSpend > 0) {
-    spendingSlices.push({
+  if (m.uncategorizedSpend > 0) {
+    slices.push({
       id: "uncategorized",
-      name: "Uncategorized",
-      value: uncategorizedSpend,
+      name: "No category",
+      value: m.uncategorizedSpend,
       color: "var(--foreground-faint)",
       icon: "alert-circle",
     });
   }
 
-  // Overspending flag. Rule: exclude Rent/Mortgage (a big fixed cost that
-  // would always dominate), then flag any category whose spend this month is
-  // more than 1.5x the MEDIAN non-rent category spend. We also note when a
-  // flagged category is over its set monthlyLimitCents. Needs at least 3
-  // non-rent categories for a median to mean anything.
-  const isRent = (name: string) => /\b(rent|mortgage)\b/i.test(name);
-  const nonRent = spendingCategories.filter((x) => !isRent(x.category.name));
-  const sortedSpends = nonRent.map((x) => x.value).sort((a, b) => a - b);
-  const medianSpend =
-    sortedSpends.length === 0
-      ? 0
-      : sortedSpends.length % 2 === 1
-        ? sortedSpends[(sortedSpends.length - 1) / 2]
-        : (sortedSpends[sortedSpends.length / 2 - 1] +
-            sortedSpends[sortedSpends.length / 2]) /
-          2;
-  const overspendThreshold = medianSpend * 1.5;
-  const overspending =
-    nonRent.length >= 3 && medianSpend > 0
-      ? nonRent
-          .filter((x) => x.value > overspendThreshold)
-          .map((x) => ({
-            category: x.category,
-            value: x.value,
-            multiple: x.value / medianSpend,
-            overLimit:
-              x.category.monthlyLimitCents != null &&
-              x.value > x.category.monthlyLimitCents,
-            limit: x.category.monthlyLimitCents,
-          }))
-          .sort((a, b) => b.value - a.value)
-      : [];
-
-  // Upcoming recurring bills between tomorrow and end-of-month (for "Coming up").
-  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-
-  // Planned vs Actual rows. Only categories that actually saw money move this
-  // month — a planned limit with zero spend is noise on this view (the limit is
-  // still editable over on /budget). Income and archived categories never show.
-  type Row = { category: Category; planned: number; actual: number; difference: number };
-  const rows: Row[] = allCategories
+  // Budget snapshot: spending categories that have a limit, most-used first.
+  const budgetRows = allCategories
     .filter(
       (c) =>
-        c.classification !== "income" &&
         !c.isArchived &&
-        (spendByCategory.get(c.id) ?? 0) > 0,
+        (c.classification === "need" || c.classification === "want") &&
+        (c.monthlyLimitCents ?? 0) > 0,
     )
     .map((c) => {
-      const planned = c.monthlyLimitCents ?? 0;
-      const actual = spendByCategory.get(c.id) ?? 0;
-      return { category: c, planned, actual, difference: planned - actual };
-    });
+      const spent = m.spendByCategory.get(c.id) ?? 0;
+      const limit = c.monthlyLimitCents ?? 0;
+      return { c, spent, limit, ratio: limit > 0 ? spent / limit : 0 };
+    })
+    .sort((a, b) => b.ratio - a.ratio);
+  const overBudget = budgetRows.filter((r) => r.spent > r.limit);
+  const plannedSpending = budgetRows.reduce((s, r) => s + r.limit, 0);
+  const spentAgainstPlan = budgetRows.reduce((s, r) => s + r.spent, 0);
 
-  const groups: { key: Classification; label: string; rows: Row[] }[] = (
-    ["need", "want", "savings"] as Classification[]
-  ).map((k) => ({
-    key: k,
-    label: k === "need" ? "Needs" : k === "want" ? "Wants" : "Savings",
-    rows: rows
-      .filter((r) => r.category.classification === k)
-      .sort((a, b) => b.actual - a.actual || b.planned - a.planned),
-  }));
+  // Paybacks owed to you (all-time, not just this month).
+  const owed = owedSummary(allTx, paybackState(links), now);
 
-  const totals = rows.reduce(
-    (acc, r) => ({
-      planned: acc.planned + r.planned,
-      actual: acc.actual + r.actual,
-      difference: acc.difference + r.difference,
-    }),
-    { planned: 0, actual: 0, difference: 0 },
-  );
-
-  const upcomingBills = schedules
+  // Coming up: bills you scheduled by hand, plus charges found in your history.
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const scheduled = schedules
     .filter((s) => s.amountCents < 0)
     .flatMap((s) =>
       computeOccurrences(s, tomorrow, monthEnd).map((d) => ({
-        merchant: s.merchantRaw,
+        name: s.merchantRaw,
         amountCents: Math.abs(s.amountCents),
         date: d,
+        categoryId: s.categoryId,
       })),
+    );
+  const incomeCatIds = new Set(
+    allCategories.filter((c) => c.classification === "income").map((c) => c.id),
+  );
+  const detected = findRecurring(allTx, { now, skipCategoryIds: incomeCatIds })
+    .filter((r) => isAfter(r.nextDate, now) && isBefore(r.nextDate, monthEnd))
+    .filter(
+      (r) =>
+        !scheduled.some((s) =>
+          s.name.toLowerCase().includes(r.name.toLowerCase().split(" ")[0]),
+        ),
     )
-    .sort((a, b) => a.date.getTime() - b.date.getTime())
-    .slice(0, 6);
+    .map((r) => ({
+      name: r.name,
+      amountCents: r.amountCents,
+      date: r.nextDate,
+      categoryId: r.categoryId,
+    }));
+  const comingUp = isCurrentMonth
+    ? [...scheduled, ...detected].sort((a, b) => a.date.getTime() - b.date.getTime()).slice(0, 6)
+    : [];
 
-  // Savings goals: derive "current balance" from linked account if present,
-  // otherwise from manual entry. Year-end projection assumes user keeps
-  // contributing at their stated monthly target through December.
-  const monthsRemaining = Math.max(0, 12 - now.getMonth() - 1) + 1; // includes current month
+  // Savings goals: current balance from a linked account, else manual entry.
+  const monthsRemaining = Math.max(0, 12 - now.getMonth() - 1) + 1;
   const goalView = goals.map((g) => {
     const linked = g.accountId ? acctById.get(g.accountId) : null;
     const current = linked ? linked.currentBalanceCents : g.manualBalanceCents;
-    const projectedYearEnd =
-      current + Math.max(0, monthsRemaining - 1) * g.monthlyTargetCents;
+    const projectedYearEnd = current + Math.max(0, monthsRemaining - 1) * g.monthlyTargetCents;
     return { goal: g, accountName: linked?.name ?? null, current, projectedYearEnd };
   });
   const goalTotals = goalView.reduce(
@@ -398,20 +199,65 @@ export default async function DashboardPage({
     { target: 0, current: 0, monthly: 0, projected: 0 },
   );
 
+  const attention: ReactNode[] = [];
+  if (m.uncategorizedCount > 0) {
+    attention.push(
+      <AttentionRow
+        key="uncat"
+        href="/transactions?cat=uncategorized"
+        icon={<Tag className="size-4" strokeWidth={2} />}
+        tone="blush"
+        title={`${m.uncategorizedCount} ${m.uncategorizedCount === 1 ? "charge needs" : "charges need"} a category`}
+        body={`${formatCents(m.uncategorizedSpend)} isn't counted toward any budget yet.`}
+        cta="Sort"
+      />,
+    );
+  }
+  if (owed.waiting.length > 0 || owed.readyToMatch.length > 0) {
+    attention.push(
+      <AttentionRow
+        key="owed"
+        href="/paybacks"
+        icon={<HandCoins className="size-4" strokeWidth={2} />}
+        tone="blue"
+        title={`${formatCents(owed.owedCents)} owed to you`}
+        body={
+          owed.readyToMatch.length > 0
+            ? `Found ${owed.readyToMatch.length} ${owed.readyToMatch.length === 1 ? "payment that pays" : "payments that pay"} it back. Tap to match.`
+            : `${owed.waiting.length} work ${owed.waiting.length === 1 ? "expense is" : "expenses are"} waiting to be paid back.`
+        }
+        cta={owed.readyToMatch.length > 0 ? "Match" : "Review"}
+      />,
+    );
+  }
+  if (isCurrentMonth && overBudget.length > 0) {
+    const worst = overBudget[0];
+    attention.push(
+      <AttentionRow
+        key="over"
+        href="/budget"
+        icon={<TriangleAlert className="size-4" strokeWidth={2} />}
+        tone="blush"
+        title={
+          overBudget.length === 1
+            ? `${worst.c.name} is over its limit`
+            : `${overBudget.length} categories are over their limit`
+        }
+        body={`${worst.c.name}: ${formatCents(worst.spent)} of ${formatCents(worst.limit)}.`}
+        cta="Budget"
+      />,
+    );
+  }
+
   return (
     <div>
       <PageHeader
         eyebrow={
           isCurrentMonth
-            ? `${format(now, "EEE · MMM d").toUpperCase()} · ${daysLeft} ${daysLeft === 1 ? "DAY" : "DAYS"} LEFT`
-            : `${format(monthStart, "MMM d").toUpperCase()} – ${format(monthEnd, "MMM d, yyyy").toUpperCase()}`
+            ? `${format(now, "EEE, MMM d")} · ${daysLeft} ${daysLeft === 1 ? "day" : "days"} left`
+            : "Looking back"
         }
         title={format(viewDate, "MMMM yyyy")}
-        subtitle={
-          isCurrentMonth
-            ? "Where your money went this month, what's planned, and what's coming up."
-            : "A look back at where your money went this month."
-        }
         right={
           <div className="flex items-center gap-2">
             <Link
@@ -444,7 +290,7 @@ export default async function DashboardPage({
         {allAccounts.length === 0 ? (
           <EmptyState
             title="No accounts yet"
-            body="Add a checking account or credit card to start tracking. You can also import a CSV right away — Budgetly will create transactions for you to categorize."
+            body="Connect a bank or add an account to start tracking. You can also import a CSV and categorize from there."
             action={
               <div className="flex gap-3 justify-center">
                 <Link href="/accounts">
@@ -458,288 +304,115 @@ export default async function DashboardPage({
           />
         ) : (
           <div className="space-y-7 md:space-y-9">
-            {/* HERO — spent / saved / income + spending breakdown */}
             <SpendingHero
-              slices={spendingSlices}
-              consumption={consumption}
-              saved={saved}
+              slices={slices}
+              spent={m.spent}
+              saved={m.saved}
               income={incomeBasis}
-              incomeIsExpected={usingExpectedIncome}
+              incomeReceived={m.income}
+              incomeIsExpected={usingExpected}
               isCurrentMonth={isCurrentMonth}
               dayOfMonth={dayOfMonth}
               daysInMonth={daysInMonth}
-              incomeReceived={incomeReceived}
-              upcoming={upcomingBills.map((b) => ({
-                merchant: b.merchant,
+              upcoming={comingUp.map((b) => ({
+                merchant: b.name,
                 amountCents: b.amountCents,
                 date: b.date.toISOString(),
               }))}
               prevMonthHref={`/dashboard?m=${prevMonthParam}`}
             />
 
-            {/* EVERY DOLLAR — reconcile income into spent + saved + leftover,
-                and flag any spending that hasn't landed in a bucket yet. */}
-            {(incomeBasis > 0 || consumption > 0) && (
+            {attention.length > 0 && (
+              <Section title="Needs a look">
+                <Card className="divide-y divide-border overflow-hidden">{attention}</Card>
+              </Section>
+            )}
+
+            {budgetRows.length > 0 && (
               <Section
-                title="Every dollar this month"
-                hint="where your money landed, top to bottom"
+                title="Budget"
+                hint={`${formatCents(spentAgainstPlan)} of ${formatCents(plannedSpending)} planned spending`}
+                right={<SeeAll href="/budget" label="Full budget" />}
               >
-                <Card className="overflow-hidden">
-                  <div className="divide-y divide-border">
-                    <LedgerRow
-                      label={usingExpectedIncome ? "Expected income" : "Income"}
-                      sub={
-                        usingExpectedIncome
-                          ? `${formatCents(incomeReceived)} received so far this month`
-                          : undefined
-                      }
-                      amount={incomeBasis}
-                      sign="+"
-                    />
-                    <LedgerRow
-                      label="Spent"
-                      sub="everyday needs & wants"
-                      amount={consumption}
-                      sign="−"
-                      color="var(--blush-deep)"
-                    />
-                    <LedgerRow
-                      label="Saved"
-                      sub="moved to savings & investments"
-                      amount={saved}
-                      sign="−"
-                      color="var(--blue-deep)"
-                    />
-                    <LedgerRow
-                      label={
-                        noIncomeYet
-                          ? "Income not in yet"
-                          : leftover >= 0
-                            ? isCurrentMonth
-                              ? "Left to allocate"
-                              : "Left over"
-                            : overspent
-                              ? "Over income"
-                              : "From reserves"
-                      }
-                      amount={Math.abs(leftover)}
-                      sign=""
-                      emphasize
-                      note={
-                        noIncomeYet
-                          ? "out so far — your paycheck hasn't landed"
-                          : leftover >= 0
-                            ? isCurrentMonth
-                              ? leftover < 100
-                                ? "every dollar has a home"
-                                : "give this a job"
-                              : leftover < 100
-                                ? "every dollar found a home"
-                                : "stayed in your accounts"
-                            : overspent
-                              ? "spent more than you earned"
-                              : "you dipped into savings"
-                      }
-                      color={
-                        noIncomeYet
-                          ? "var(--foreground)"
-                          : leftover < 0
-                            ? overspent
-                              ? "var(--blush-deep)"
-                              : "var(--blue-deep)"
-                            : "var(--foreground)"
-                      }
-                    />
-                  </div>
-                  {/* Unaccounted check — is every spent dollar in a bucket? */}
-                  <div className="flex items-center gap-2.5 border-t border-border bg-surface-2/40 px-5 py-3.5">
-                    {uncategorizedSpend > 0 ? (
-                      <>
-                        <TriangleAlert
-                          className="size-4 shrink-0 text-blush-deep"
-                          strokeWidth={2}
-                        />
-                        <span className="text-sm text-foreground-muted">
-                          <span className="mono tabular text-blush-deep">
-                            {formatCents(uncategorizedSpend)}
-                          </span>{" "}
-                          spent with no category yet
-                        </span>
-                        <Link
-                          href="/transactions?cat=uncategorized"
-                          className="ml-auto inline-flex shrink-0 items-center gap-1 text-xs tracking-tight text-blush-deep hover:underline"
-                        >
-                          give it a bucket
-                          <ArrowRight className="size-3" strokeWidth={1.5} />
-                        </Link>
-                      </>
-                    ) : (
-                      <>
-                        <Check
-                          className="size-4 shrink-0 text-blue-deep"
-                          strokeWidth={2.5}
-                        />
-                        <span className="text-sm text-foreground-muted">
-                          Every dollar you spent is in a bucket.
-                        </span>
-                      </>
-                    )}
-                  </div>
+                <Card className="divide-y divide-border overflow-hidden">
+                  {budgetRows.slice(0, 6).map(({ c, spent, limit }) => {
+                    const over = spent > limit;
+                    const pct = Math.min(100, (spent / limit) * 100);
+                    return (
+                      <Link
+                        key={c.id}
+                        href={`/budget?c=${c.id}`}
+                        className="flex items-center gap-3.5 px-5 py-3.5 transition-colors hover:bg-surface-2/50"
+                      >
+                        <CategoryGlyph icon={c.icon} color={c.color} size={34} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-baseline justify-between gap-3">
+                            <span className="truncate text-sm tracking-tight">{c.name}</span>
+                            <span className="shrink-0 text-[12px] text-foreground-faint">
+                              <span
+                                className={cn(
+                                  "mono tabular",
+                                  over ? "text-blush-deep" : "text-foreground",
+                                )}
+                              >
+                                {formatCents(spent)}
+                              </span>{" "}
+                              of {formatCents(limit)}
+                            </span>
+                          </div>
+                          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-2">
+                            <div
+                              className="h-full rounded-full"
+                              style={{
+                                width: `${pct}%`,
+                                background: over ? "var(--blush-deep)" : c.color,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </Link>
+                    );
+                  })}
                 </Card>
               </Section>
             )}
 
-            {/* OVERSPENDING FLAGS */}
-            {overspending.length > 0 && (
-              <Section
-                title="Watch these"
-                hint="more than 1.5× your typical category (excludes rent/mortgage)"
-              >
-                <Card className="divide-y divide-border">
-                  {overspending.map((o) => (
-                    <div
-                      key={o.category.id}
-                      className="px-5 py-4 flex items-center gap-3.5"
-                    >
-                      <CategoryGlyph
-                        icon={o.category.icon}
-                        color={o.category.color}
-                        size={38}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm tracking-tight truncate flex items-center gap-2">
-                          {o.category.name}
-                          {o.overLimit && (
-                            <Pill tone="need">over limit</Pill>
-                          )}
-                        </div>
-                        <div className="text-[11px] text-foreground-faint mt-0.5">
-                          {o.multiple.toFixed(1)}× your typical category
-                          {o.overLimit && o.limit != null
-                            ? ` · limit ${formatCentsCompact(o.limit)}`
-                            : ""}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0 text-blush-deep">
-                        <TrendingUp className="size-3.5" strokeWidth={1.5} />
-                        <span className="mono tabular text-sm">
-                          {formatCents(o.value)}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </Card>
-              </Section>
-            )}
-
-            {/* PLANNED vs ACTUAL TABLE */}
-            <Section
-              title="Planned vs actual"
-              hint="categories with spending this month"
-              right={
-                <Link
-                  href="/budget"
-                  className="text-xs text-foreground-muted hover:text-foreground transition-colors tracking-tight inline-flex items-center gap-1"
-                >
-                  edit limits <ArrowRight className="size-3" strokeWidth={1.5} />
-                </Link>
-              }
-            >
-              {rows.length === 0 ? (
-                <Card className="p-8 text-center text-foreground-faint text-sm">
-                  No category limits set and no spending yet. Head to{" "}
-                  <Link href="/budget" className="text-blush-deep hover:underline">
-                    Budget
-                  </Link>{" "}
-                  to plan the month.
-                </Card>
-              ) : (
-                <Card className="overflow-hidden">
-                  {/* Scroll the dense table inside the card on a phone rather
-                      than clipping the Difference column or pushing the page. */}
-                  <div className="overflow-x-auto">
-                  <PlannedActual
-                    groups={groups.map((g) => ({
-                      key: g.key,
-                      label: g.label,
-                      rows: g.rows.map((r) => ({
-                        id: r.category.id,
-                        name: r.category.name,
-                        color: r.category.color,
-                        icon: r.category.icon,
-                        planned: r.planned,
-                        actual: r.actual,
-                        difference: r.difference,
-                      })),
-                    }))}
-                    totals={totals}
-                    merchantsByCategory={merchantsByCategory}
-                  />
-                  </div>
-                </Card>
-              )}
-            </Section>
-
-            {/* SAVINGS GOALS */}
             <SavingsGoalsSection
               goals={goalView}
               totals={goalTotals}
               accounts={allAccounts.map((a) => ({ id: a.id, name: a.name, type: a.type }))}
             />
 
-            {/* COMING UP */}
-            {upcomingBills.length > 0 && (
-              <Section title="Coming up" hint="recurring bills due this month">
-                <Card className="divide-y divide-border">
-                  {upcomingBills.map((b, i) => (
-                    <div
-                      key={`${b.merchant}-${i}`}
-                      className="px-5 py-4 flex items-center gap-4"
-                    >
-                      <Repeat
-                        className="size-3.5 text-foreground-faint shrink-0"
-                        strokeWidth={1.5}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm tracking-tight truncate">
-                          {b.merchant}
-                        </div>
-                        <div className="text-[11px] text-foreground-faint mt-0.5 mono tabular">
-                          {format(b.date, "EEE, MMM d")}
-                        </div>
-                      </div>
-                      <div className="mono tabular text-sm shrink-0">
-                        {formatCents(b.amountCents)}
-                      </div>
-                    </div>
-                  ))}
-                </Card>
-              </Section>
-            )}
-
-            {/* REIMBURSEMENTS — a side ledger kept off spent & income; shown
-                last since it's not part of the month's actual flow */}
-            {(reimbursablePaid > 0 || reimbursableReceived > 0) && (
+            {comingUp.length > 0 && (
               <Section
-                title="Reimbursements"
-                hint="not counted in spending or income"
+                title="Coming up"
+                hint="bills and subscriptions still due this month"
+                right={<SeeAll href="/recurring" label="All bills" />}
               >
-                <Card className="p-5 md:px-7 flex flex-wrap items-center justify-between gap-x-8 gap-y-3">
-                  <div className="flex items-center gap-3">
-                    <CategoryGlyph icon="repeat" color="var(--blue)" size={34} />
-                    <div className="text-sm text-foreground-muted tracking-tight">
-                      What you&apos;ve fronted and what&apos;s owed back.
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-6 md:gap-8 mono tabular">
-                    <ReconStat label="paid out" value={formatCents(reimbursablePaid)} />
-                    <ReconStat label="back" value={formatCents(reimbursableReceived)} />
-                    <ReconStat
-                      label="still owed"
-                      value={formatCents(Math.max(0, reimbursablePaid - reimbursableReceived))}
-                      emphasize
-                    />
-                  </div>
+                <Card className="divide-y divide-border">
+                  {comingUp.map((b, i) => {
+                    const cat = b.categoryId ? catById.get(b.categoryId) : null;
+                    return (
+                      <div key={`${b.name}-${i}`} className="px-5 py-3.5 flex items-center gap-3.5">
+                        {cat ? (
+                          <CategoryGlyph icon={cat.icon} color={cat.color} size={34} />
+                        ) : (
+                          <span className="grid size-[34px] place-items-center rounded-xl bg-surface-2 text-foreground-faint">
+                            <Repeat className="size-4" strokeWidth={1.75} />
+                          </span>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm tracking-tight truncate">{b.name}</div>
+                          <div className="text-[11px] text-foreground-faint mt-0.5">
+                            {format(b.date, "EEE, MMM d")}
+                          </div>
+                        </div>
+                        <div className="mono tabular text-sm shrink-0">
+                          {formatCents(b.amountCents)}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </Card>
               </Section>
             )}
@@ -750,7 +423,6 @@ export default async function DashboardPage({
   );
 }
 
-// Section header with a display-font title, matching the bold dashboard.
 function Section({
   title,
   hint,
@@ -764,13 +436,11 @@ function Section({
 }) {
   return (
     <section>
-      <div className="flex items-baseline justify-between gap-4 mb-4 md:mb-5">
+      <div className="flex items-end justify-between gap-4 mb-3.5 md:mb-4">
         <div className="min-w-0">
           <h2 className="display text-lg md:text-xl tracking-tight">{title}</h2>
           {hint && (
-            <p className="text-[11px] text-foreground-faint tracking-tight mt-1">
-              {hint}
-            </p>
+            <p className="text-[12px] text-foreground-faint tracking-tight mt-0.5">{hint}</p>
           )}
         </div>
         {right && <div className="shrink-0">{right}</div>}
@@ -780,86 +450,52 @@ function Section({
   );
 }
 
-// One line of the "Every dollar" reconciliation ledger.
-function LedgerRow({
-  label,
-  sub,
-  amount,
-  sign,
-  color,
-  note,
-  emphasize = false,
-}: {
-  label: string;
-  sub?: string;
-  amount: number;
-  sign: string;
-  color?: string;
-  note?: string;
-  emphasize?: boolean;
-}) {
+function SeeAll({ href, label }: { href: string; label: string }) {
   return (
-    <div
-      className={cn(
-        "flex items-center gap-3 px-5 py-3.5",
-        emphasize && "bg-surface-2/40",
-      )}
+    <Link
+      href={href}
+      className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs tracking-tight text-foreground-muted transition-colors hover:text-foreground"
     >
-      <div className="min-w-0 flex-1">
-        <div
-          className={cn(
-            "tracking-tight",
-            emphasize
-              ? "text-sm font-medium text-foreground"
-              : "text-sm text-foreground-muted",
-          )}
-        >
-          {label}
-        </div>
-        {sub && (
-          <div className="mt-0.5 text-[11px] text-foreground-faint">{sub}</div>
-        )}
-      </div>
-      {note && (
-        <span className="shrink-0 text-[11px] tracking-tight text-foreground-faint">
-          {note}
-        </span>
-      )}
-      <div
-        className="mono tabular shrink-0 text-sm"
-        style={{ color: color ?? "var(--foreground)" }}
-      >
-        {amount === 0 ? "" : sign}
-        {formatCents(amount)}
-      </div>
-    </div>
+      {label} <ArrowRight className="size-3" strokeWidth={1.75} />
+    </Link>
   );
 }
 
-function ReconStat({
-  label,
-  value,
-  emphasize = false,
+function AttentionRow({
+  href,
+  icon,
+  tone,
+  title,
+  body,
+  cta,
 }: {
-  label: string;
-  value: string;
-  emphasize?: boolean;
+  href: string;
+  icon: ReactNode;
+  tone: "blush" | "blue";
+  title: string;
+  body: string;
+  cta: string;
 }) {
   return (
-    <div className="text-right">
-      <div className="text-[10px] uppercase tracking-[0.08em] font-bold text-foreground-muted">
-        {label}
-      </div>
-      <div
-        className={
-          emphasize
-            ? "text-base font-medium text-blue-deep"
-            : "text-base text-foreground-muted"
-        }
+    <Link
+      href={href}
+      className="flex items-center gap-3.5 px-5 py-4 transition-colors hover:bg-surface-2/50"
+    >
+      <span
+        className={cn(
+          "grid size-9 shrink-0 place-items-center rounded-xl",
+          tone === "blush" ? "bg-blush-tint text-blush-deep" : "bg-blue-tint text-blue-deep",
+        )}
       >
-        {value}
+        {icon}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-medium tracking-tight">{title}</div>
+        <div className="mt-0.5 text-[12px] text-foreground-muted">{body}</div>
       </div>
-    </div>
+      <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium tracking-tight text-foreground-muted">
+        {cta} <ChevronRight className="size-3.5" strokeWidth={2} />
+      </span>
+    </Link>
   );
 }
-

@@ -126,13 +126,13 @@ export function SavingsGoalsSection({
                     <td className="px-3 py-3 text-right mono tabular text-foreground-muted hidden sm:table-cell">
                       {goal.monthlyTargetCents > 0
                         ? formatCents(goal.monthlyTargetCents)
-                        : "—"}
+                        : "–"}
                     </td>
                     <td className="px-3 py-3 text-right mono tabular">
                       {formatCents(current)}
                     </td>
                     <td className="px-3 py-3 text-right mono tabular text-foreground-muted hidden md:table-cell">
-                      {target > 0 ? formatCents(target) : "—"}
+                      {target > 0 ? formatCents(target) : "–"}
                     </td>
                     <td
                       className={cn(
@@ -290,7 +290,7 @@ function GoalModal({
           </div>
         </div>
         <div>
-          <Label>Current balance ($) — manual only</Label>
+          <Label>Current balance ($), manual only</Label>
           <Input
             name="manualBalance"
             type="number"

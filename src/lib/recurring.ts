@@ -1,96 +1,114 @@
-import { db } from "@/db";
-import { transactions, type Transaction } from "@/db/schema";
-import { desc } from "drizzle-orm";
-import { differenceInDays } from "date-fns";
+import { addDays, addMonths, addYears, differenceInCalendarDays } from "date-fns";
 
-export type RecurringSuggestion = {
-  merchantKey: string;
-  displayName: string;
-  expectedAmountCents: number;
-  cadence: "weekly" | "monthly" | "yearly";
-  occurrences: number;
-  lastSeen: Date;
-  txIds: number[];
+// Bills and subscriptions, found in your history instead of typed in by hand.
+// A merchant counts as recurring when it charged you at least twice at a steady
+// rhythm (weekly, every two weeks, monthly or yearly) for a similar amount,
+// and it's still active (the next charge isn't long overdue).
+
+export type RecurringTxLike = {
+  id: number;
+  date: Date;
+  amountCents: number;
+  merchantRaw: string;
+  merchantClean: string | null;
+  categoryId: number | null;
+  isTransfer: boolean;
+  reimbursable: boolean;
 };
 
-function key(t: Transaction): string {
-  // Use first 3 words of the cleaned merchant, lowercased, as a stable key
-  const m = (t.merchantClean || t.merchantRaw)
+export type Cadence = "weekly" | "biweekly" | "monthly" | "yearly";
+
+export type RecurringCharge = {
+  key: string;
+  name: string;
+  categoryId: number | null;
+  amountCents: number; // typical charge, positive
+  cadence: Cadence;
+  lastDate: Date;
+  nextDate: Date;
+  occurrences: number;
+  // Rough monthly cost, for a "what your subscriptions cost" total.
+  monthlyCents: number;
+};
+
+function keyOf(t: RecurringTxLike): string {
+  return (t.merchantClean || t.merchantRaw)
     .toLowerCase()
-    .replace(/[^a-z0-9 ]/g, " ")
+    .replace(/[^a-z ]/g, " ")
     .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 3)
+    .filter((w) => w.length > 1)
+    .slice(0, 2)
     .join(" ");
-  return m;
 }
 
-export async function detectRecurring(
-  opts: { lookbackMonths?: number } = {},
-): Promise<RecurringSuggestion[]> {
-  const months = opts.lookbackMonths ?? 6;
-  const since = new Date();
-  since.setMonth(since.getMonth() - months);
+const CADENCES: { cadence: Cadence; min: number; max: number; perMonth: number }[] = [
+  { cadence: "weekly", min: 6, max: 8, perMonth: 52 / 12 },
+  { cadence: "biweekly", min: 13, max: 16, perMonth: 26 / 12 },
+  { cadence: "monthly", min: 26, max: 35, perMonth: 1 },
+  { cadence: "yearly", min: 350, max: 380, perMonth: 1 / 12 },
+];
 
-  const all = await db
-    .select()
-    .from(transactions)
-    .orderBy(desc(transactions.date));
+function step(d: Date, c: Cadence): Date {
+  if (c === "weekly") return addDays(d, 7);
+  if (c === "biweekly") return addDays(d, 14);
+  if (c === "monthly") return addMonths(d, 1);
+  return addYears(d, 1);
+}
 
-  const buckets = new Map<string, Transaction[]>();
-  for (const t of all) {
-    if (t.isTransfer) continue;
-    if (new Date(t.date) < since) continue;
-    if (t.amountCents > 0) continue; // recurring = outflow for now
-    const k = key(t);
+export function findRecurring(
+  txns: readonly RecurringTxLike[],
+  opts: { now?: Date; skipCategoryIds?: ReadonlySet<number> } = {},
+): RecurringCharge[] {
+  const now = opts.now ?? new Date();
+  const since = addMonths(now, -13);
+  const buckets = new Map<string, RecurringTxLike[]>();
+  for (const t of txns) {
+    if (t.isTransfer || t.reimbursable || t.amountCents >= 0) continue;
+    if (t.date < since) continue;
+    if (t.categoryId != null && opts.skipCategoryIds?.has(t.categoryId)) continue;
+    const k = keyOf(t);
     if (!k) continue;
-    const arr = buckets.get(k) ?? [];
-    arr.push(t);
-    buckets.set(k, arr);
+    const arr = buckets.get(k);
+    if (arr) arr.push(t);
+    else buckets.set(k, [t]);
   }
 
-  const suggestions: RecurringSuggestion[] = [];
-  for (const [k, txs] of buckets) {
-    if (txs.length < 2) continue;
-    // Amounts must be similar (within 10% or $1)
-    const amounts = txs.map((t) => Math.abs(t.amountCents));
-    const avg = amounts.reduce((s, v) => s + v, 0) / amounts.length;
-    const tol = Math.max(100, avg * 0.1);
-    const consistent = amounts.every((a) => Math.abs(a - avg) <= tol);
-    if (!consistent) continue;
-
-    // Detect cadence: median gap between consecutive occurrences (sorted desc -> reverse)
-    const sortedAsc = [...txs].sort(
-      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-    );
+  const out: RecurringCharge[] = [];
+  for (const [key, list] of buckets) {
+    if (list.length < 2) continue;
+    const asc = [...list].sort((a, b) => a.date.getTime() - b.date.getTime());
     const gaps: number[] = [];
-    for (let i = 1; i < sortedAsc.length; i++) {
-      gaps.push(
-        differenceInDays(
-          new Date(sortedAsc[i].date),
-          new Date(sortedAsc[i - 1].date),
-        ),
-      );
+    for (let i = 1; i < asc.length; i++) {
+      gaps.push(differenceInCalendarDays(asc[i].date, asc[i - 1].date));
     }
-    const median = gaps.sort((a, b) => a - b)[Math.floor(gaps.length / 2)];
-    let cadence: "weekly" | "monthly" | "yearly";
-    if (median <= 10) cadence = "weekly";
-    else if (median <= 45) cadence = "monthly";
-    else if (median >= 300 && median <= 400) cadence = "yearly";
-    else continue;
+    const median = [...gaps].sort((a, b) => a - b)[Math.floor(gaps.length / 2)];
+    const match = CADENCES.find((c) => median >= c.min && median <= c.max);
+    if (!match) continue;
+    if (match.cadence === "weekly" && asc.length < 3) continue;
 
-    suggestions.push({
-      merchantKey: k,
-      displayName: txs[0].merchantClean || txs[0].merchantRaw,
-      expectedAmountCents: Math.round(avg),
-      cadence,
-      occurrences: txs.length,
-      lastSeen: new Date(sortedAsc[sortedAsc.length - 1].date),
-      txIds: txs.map((t) => t.id),
+    // Steady amount: the last few charges sit within 15% (or $2) of each
+    // other. Only recent ones count, so an old plan price doesn't hide it.
+    const recent = asc.slice(-3).map((t) => Math.abs(t.amountCents));
+    const typical = recent[recent.length - 1];
+    const tol = Math.max(200, typical * 0.15);
+    if (!recent.every((a) => Math.abs(a - typical) <= tol)) continue;
+
+    const last = asc[asc.length - 1];
+    const nextDate = step(last.date, match.cadence);
+    // Gone quiet: the next charge is overdue by more than half a cycle.
+    if (differenceInCalendarDays(now, nextDate) > match.max / 2 + 3) continue;
+
+    out.push({
+      key,
+      name: last.merchantClean || last.merchantRaw,
+      categoryId: last.categoryId,
+      amountCents: typical,
+      cadence: match.cadence,
+      lastDate: last.date,
+      nextDate,
+      occurrences: asc.length,
+      monthlyCents: Math.round(typical * match.perMonth),
     });
   }
-
-  return suggestions.sort(
-    (a, b) => b.expectedAmountCents - a.expectedAmountCents,
-  );
+  return out.sort((a, b) => b.monthlyCents - a.monthlyCents);
 }
