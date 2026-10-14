@@ -34,6 +34,7 @@ export default async function RulesPage() {
       db
         .select({
           merchantRaw: transactions.merchantRaw,
+          merchantClean: transactions.merchantClean,
           amountCents: transactions.amountCents,
         })
         .from(transactions)
@@ -102,9 +103,8 @@ export default async function RulesPage() {
   return (
     <>
       <PageHeader
-        eyebrow="SETUP"
         title="Rules"
-        subtitle="Everything that categorizes, renames, or flags transactions automatically. Rules run on import and when you hit Run all rules; manual picks are never overwritten."
+        subtitle="Teach Budgetly once and it handles every future charge: which category, what name to show, and what's a work expense. Picks you make by hand are never overwritten."
       />
       <Container className="pb-32 md:pb-16">
         <RulesClient
@@ -112,10 +112,15 @@ export default async function RulesPage() {
           merchantRules={mRules.map(slimMerchant)}
           reimbursableRules={rRules.map(slimReimb)}
           categories={allCategories.map((c) => ({
-            id: c.id,
-            name: c.name,
-            color: c.color,
-            icon: c.icon,
+              id: c.id,
+              name: c.name,
+              color: c.color,
+              icon: c.icon,
+            }))}
+          samples={recentTx.map((t) => ({
+            raw: t.merchantRaw,
+            name: t.merchantClean || t.merchantRaw,
+            amountCents: t.amountCents,
           }))}
           sampleSize={Math.min(SAMPLE, recentTx.length)}
         />
