@@ -6,12 +6,23 @@ import {
   type RecurringSchedule,
 } from "@/db/schema";
 import { Card, Container, PageHeader } from "@/components/ui";
-import {
-  computeOccurrences,
-  expectedMonthlyIncome,
-} from "@/lib/recurring-schedules";
-import { addDays, endOfMonth, format, startOfMonth } from "date-fns";
+import { StatStrip } from "@/components/stat-strip";
+import { CategoryGlyph } from "@/components/category-glyph";
+import { computeOccurrences } from "@/lib/recurring-schedules";
+import { findRecurring, type Cadence } from "@/lib/recurring";
+import { formatCents } from "@/lib/utils";
+import { addDays, differenceInCalendarDays, endOfMonth, format, isBefore } from "date-fns";
+import { Repeat } from "lucide-react";
+import Link from "next/link";
+import { transactions } from "@/db/schema";
 import { RecurringClient } from "./client";
+
+const cadenceWord: Record<Cadence, string> = {
+  weekly: "every week",
+  biweekly: "every 2 weeks",
+  monthly: "every month",
+  yearly: "every year",
+};
 
 export const dynamic = "force-dynamic";
 
@@ -27,18 +38,30 @@ export default async function RecurringPage() {
     schedules = null;
   }
 
-  const [allAccounts, allCategories] = await Promise.all([
+  const [allAccounts, allCategories, allTx] = await Promise.all([
     db.select().from(accounts),
     db.select().from(categories),
+    db.select().from(transactions),
   ]);
+  const catById = new Map(allCategories.map((c) => [c.id, c]));
+  const incomeCats = new Set(
+    allCategories.filter((c) => c.classification === "income").map((c) => c.id),
+  );
+  // Found in your history: anything that charged you on a steady rhythm.
+  const detected = findRecurring(allTx, { now, skipCategoryIds: incomeCats }).sort(
+    (a, b) => a.nextDate.getTime() - b.nextDate.getTime(),
+  );
+  const monthlyTotal = detected.reduce((s, r) => s + r.monthlyCents, 0);
+  const restOfMonth = detected
+    .filter((r) => isBefore(r.nextDate, endOfMonth(now)))
+    .reduce((s, r) => s + r.amountCents, 0);
 
   if (schedules === null) {
     return (
       <>
         <PageHeader
-          eyebrow="SETUP"
           title="Recurring"
-          subtitle="Paychecks and bills on a rhythm — they power the budget's expected income and the upcoming-bills forecasts."
+          subtitle="Bills and subscriptions that repeat."
         />
         <Container>
           <Card className="p-6 md:p-8">
@@ -67,20 +90,70 @@ export default async function RecurringPage() {
     nextByScheduleId[s.id] = next ? format(next, "yyyy-MM-dd") : null;
   }
 
-  const { cents: expectedIncome, paycheckCount } = expectedMonthlyIncome(
-    schedules.filter((s) => s.isActive),
-    startOfMonth(now),
-    endOfMonth(now),
-  );
 
   return (
     <>
       <PageHeader
-        eyebrow="SETUP"
         title="Recurring"
-        subtitle="Paychecks and bills on a rhythm. These power the budget's expected income, the upcoming-bills forecast, and the dashboard's Coming up list."
+        subtitle="Bills and subscriptions that repeat, found automatically in your transactions. The ones due soon show up under Coming up on Home."
       />
-      <Container className="pb-32 md:pb-16">
+      <Container className="pb-32 md:pb-16 space-y-8">
+        <StatStrip
+          items={[
+            {
+              label: "About this much a month",
+              value: formatCents(monthlyTotal),
+              accent: "var(--blush-deep)",
+              dominant: true,
+              hint: `${detected.length} ${detected.length === 1 ? "charge repeats" : "charges repeat"}`,
+            },
+            {
+              label: `Still due in ${format(now, "MMMM")}`,
+              value: formatCents(restOfMonth),
+              accent: "var(--blue-deep)",
+            },
+          ]}
+        />
+        {detected.length === 0 ? (
+          <Card className="p-6 text-sm text-foreground-muted">
+            Nothing repeats yet. Once something charges you at least twice on a steady schedule (a
+            subscription, rent, a phone bill), it shows up here on its own.
+          </Card>
+        ) : (
+          <Card className="divide-y divide-border overflow-hidden">
+            {detected.map((r) => {
+              const cat = r.categoryId ? catById.get(r.categoryId) : null;
+              const days = differenceInCalendarDays(r.nextDate, now);
+              return (
+                <Link
+                  key={r.key}
+                  href={`/transactions?q=${encodeURIComponent(r.name)}`}
+                  className="flex items-center gap-3.5 px-4 py-3.5 transition-colors hover:bg-surface-2/50 md:px-5"
+                >
+                  {cat ? (
+                    <CategoryGlyph icon={cat.icon} color={cat.color} size={36} />
+                  ) : (
+                    <span className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-surface-2 text-foreground-faint">
+                      <Repeat className="size-4" strokeWidth={1.75} />
+                    </span>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm tracking-tight">{r.name}</div>
+                    <div className="mt-0.5 text-[11px] text-foreground-faint">
+                      {cadenceWord[r.cadence]} ·{" "}
+                      {days < 0
+                        ? `was due ${format(r.nextDate, "MMM d")}`
+                        : days === 0
+                          ? "due today"
+                          : `next around ${format(r.nextDate, "MMM d")}`}
+                    </div>
+                  </div>
+                  <span className="mono tabular shrink-0 text-sm">{formatCents(r.amountCents)}</span>
+                </Link>
+              );
+            })}
+          </Card>
+        )}
         <RecurringClient
           schedules={schedules.map((s) => ({
             id: s.id,
@@ -103,8 +176,6 @@ export default async function RecurringPage() {
             name: c.name,
             classification: c.classification,
           }))}
-          expectedIncome={expectedIncome}
-          paycheckCount={paycheckCount}
         />
       </Container>
     </>

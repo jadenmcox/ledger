@@ -59,14 +59,10 @@ export function RecurringClient({
   schedules,
   accounts,
   categories,
-  expectedIncome,
-  paycheckCount,
 }: {
   schedules: ScheduleRow[];
   accounts: AccountOpt[];
   categories: CategoryOpt[];
-  expectedIncome: number;
-  paycheckCount: number;
 }) {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<ScheduleRow | null>(null);
@@ -135,7 +131,7 @@ export function RecurringClient({
                 >
                   {formatCents(s.amountCents, { signed: s.amountCents > 0 })}
                 </div>
-                <div className="flex items-center gap-1 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                <div className="flex items-center gap-1">
                   <button
                     onClick={() => setEditing(s)}
                     className="size-8 inline-flex items-center justify-center rounded-md hover:bg-surface-2 text-foreground-faint hover:text-foreground"
@@ -182,34 +178,17 @@ export function RecurringClient({
   );
 
   return (
-    <div className="space-y-10">
-      <Card className="p-5 md:p-6 flex flex-wrap items-center justify-between gap-x-8 gap-y-3">
-        <div>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.08em] font-bold text-foreground-muted">
-            Expected monthly income
-          </div>
-          <div className="mt-1.5 flex items-baseline gap-3">
-            <span className="display text-3xl">
-              {formatCents(expectedIncome)}
-            </span>
-            <span className="text-[11px] text-foreground-faint">
-              {paycheckCount > 0
-                ? `${paycheckCount} paycheck${paycheckCount === 1 ? "" : "s"} a month, from the schedules below`
-                : "add a paycheck schedule and the budget can plan against it"}
-            </span>
-          </div>
-        </div>
-        <Button variant="primary" onClick={() => setAdding(true)}>
-          <Plus className="size-4" strokeWidth={1.75} /> New schedule
+    <div className="space-y-8">
+      {income.length > 0 && section("Paychecks", "forecast your expected income", income)}
+      {bills.length > 0 && section("Bills", "added by hand", bills)}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-dashed border-border px-4 py-3.5">
+        <span className="text-[12px] text-foreground-muted">
+          Something not showing up above, like a bill that just started? Add it by hand.
+        </span>
+        <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
+          <Plus className="size-3.5" strokeWidth={1.75} /> Add by hand
         </Button>
-      </Card>
-
-      {section(
-        "Income",
-        "counts toward expected income",
-        income,
-      )}
-      {section("Bills", "feeds the upcoming-bills forecast", bills)}
+      </div>
 
       {(adding || editing) && (
         <ScheduleForm
@@ -361,7 +340,7 @@ function ScheduleForm({
               defaultValue={initial?.categoryId ?? ""}
               className="h-11 w-full bg-surface border border-border rounded-field px-3 text-sm"
             >
-              <option value="">— None —</option>
+              <option value="">None</option>
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -440,7 +419,7 @@ function ScheduleForm({
           <span>
             <span className="font-medium text-foreground">Forecast only.</span>{" "}
             Shapes expected income and upcoming bills but never creates
-            transactions — the real ones arrive from your bank. Uncheck for
+            transactions; the real ones arrive from your bank. Uncheck for
             hand-tracked accounts where nothing else records them.
           </span>
         </label>
