@@ -1,12 +1,5 @@
 import { db } from "@/db";
-import {
-  accounts,
-  balanceSnapshots,
-  categories,
-  transactions,
-  type Account,
-} from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { accounts, balanceSnapshots, type Account } from "@/db/schema";
 import { format, subDays } from "date-fns";
 import Link from "next/link";
 import {
@@ -18,8 +11,7 @@ import {
   SectionHeader,
 } from "@/components/ui";
 import { formatCents, formatCentsCompact } from "@/lib/utils";
-import { createMonthBucketer } from "@/lib/month-bucket";
-import { categoryParts, loadSplitsByTx } from "@/lib/splits";
+import { loadLedgerData } from "@/lib/ledger-data";
 import { Heatmap } from "@/components/charts/Heatmap";
 import { NetWorthArea, YearStackedArea } from "./charts";
 import { YearHero } from "./year-hero";
@@ -44,78 +36,35 @@ const MONTHS = [
 export default async function YearPage() {
   const now = new Date();
 
-  const [allTx, allCats, allAccts, allSnaps, splitsByTx] = await Promise.all([
-    // Full non-transfer history: rent rolls in from the prior December and a
-    // refund can credit back to a purchase in any earlier month. Rows whose
-    // effective month falls outside this year are dropped below.
-    db
-      .select()
-      .from(transactions)
-      .where(eq(transactions.isTransfer, false)),
-    db.select().from(categories),
+  const [{ allCategories: allCats, ledger }, allAccts, allSnaps] = await Promise.all([
+    loadLedgerData(),
     db.select().from(accounts),
     db.select().from(balanceSnapshots),
-    loadSplitsByTx(),
   ]);
 
-  // Shared refund-aware, rent-aware month bucketing (same on every page).
-  const catById = new Map(allCats.map((c) => [c.id, c]));
-  const { monthKeyOf } = createMonthBucketer(allTx, allCats);
-
-  // Net grid: purchases add, refunds subtract, per category × month.
+  // One shared ledger pass per month, so this page agrees with Home and
+  // Budget on every number (refunds, paybacks, rent roll-forward, splits).
+  const months = MONTHS.map((_, i) => ledger.summarize(new Date(now.getFullYear(), i, 15)));
   const grid = new Map<number, number[]>();
-  let totalIncome = 0;
-  for (const t of allTx) {
-    // Reimbursable charges/paybacks wash out — keep them off spend + income.
-    if (t.reimbursable) continue;
-    const eff = monthKeyOf(t);
-    if (eff.getFullYear() !== now.getFullYear()) continue;
-    const month = eff.getMonth();
-    const parentCat = t.categoryId ? catById.get(t.categoryId) : null;
-    // Income stays whole (splits are spending-only); its own category drives it.
-    if (parentCat?.classification === "income") {
-      const arr = grid.get(parentCat.id) ?? Array(12).fill(0);
-      arr[month] += t.amountCents;
-      totalIncome += t.amountCents;
-      grid.set(parentCat.id, arr);
-      continue;
-    }
-    // Split transactions add each part to its category's cell for this month.
-    for (const part of categoryParts(t, splitsByTx)) {
-      if (part.categoryId == null) continue;
-      const cat = catById.get(part.categoryId);
-      if (!cat || cat.classification === "income") continue;
-      const arr = grid.get(part.categoryId) ?? Array(12).fill(0);
-      arr[month] +=
-        part.amountCents < 0 ? Math.abs(part.amountCents) : -part.amountCents;
-      grid.set(part.categoryId, arr);
-    }
-  }
-
-  // Clamp each spending cell at zero (a month can't net negative), then derive
-  // the per-month and per-classification totals from the netted grid.
-  let totalSpend = 0;
-  const monthTotals = Array(12).fill(0);
-  const monthByClassification = Array.from({ length: 12 }, () => ({
-    need: 0,
-    want: 0,
-    savings: 0,
-  }));
-  for (const [catId, arr] of grid) {
-    const cat = catById.get(catId);
-    if (!cat || cat.classification === "income") continue;
-    for (let m = 0; m < 12; m++) {
-      if (arr[m] < 0) arr[m] = 0;
-      const v = arr[m];
+  months.forEach((m, i) => {
+    for (const [id, v] of m.spendByCategory) {
       if (v <= 0) continue;
-      totalSpend += v;
-      monthTotals[m] += v;
-      if (cat.classification === "need") monthByClassification[m].need += v;
-      else if (cat.classification === "want") monthByClassification[m].want += v;
-      else if (cat.classification === "savings")
-        monthByClassification[m].savings += v;
+      const arr = grid.get(id) ?? Array(12).fill(0);
+      arr[i] = v;
+      grid.set(id, arr);
     }
-  }
+    for (const [id, v] of m.incomeByCategory) {
+      const arr = grid.get(id) ?? Array(12).fill(0);
+      arr[i] = v;
+      grid.set(id, arr);
+    }
+  });
+  // "Spent" means needs + wants + uncategorized everywhere in the app;
+  // saving and investing is tracked separately.
+  const monthTotals = months.map((m) => m.spent);
+  const monthByClassification = months.map((m) => m.byClass);
+  const totalSpend = monthTotals.reduce((s, v) => s + v, 0);
+  const totalIncome = months.reduce((s, m) => s + m.income, 0);
 
   const rows = allCats
     .filter((c) => grid.has(c.id))
@@ -124,7 +73,6 @@ export default async function YearPage() {
       return order[a.classification] - order[b.classification];
     });
 
-  const net = totalIncome - totalSpend;
   const monthsElapsed = now.getMonth() + 1;
   const avgMonthlySpend = totalSpend / Math.max(1, monthsElapsed);
 
@@ -245,11 +193,11 @@ export default async function YearPage() {
                                   : "text-foreground-muted"
                             }`}
                           >
-                            {v === 0 ? "—" : formatCentsCompact(v)}
+                            {v === 0 ? "–" : formatCentsCompact(v)}
                           </td>
                         ))}
                         <td className="text-right p-3 border-l border-border text-foreground">
-                          {total === 0 ? "—" : formatCentsCompact(total)}
+                          {total === 0 ? "–" : formatCentsCompact(total)}
                         </td>
                       </tr>
                     );
@@ -265,7 +213,7 @@ export default async function YearPage() {
                         key={i}
                         className={`text-right p-3 ${i === now.getMonth() ? "text-blush-deep" : "text-foreground"}`}
                       >
-                        {v === 0 ? "—" : formatCentsCompact(v)}
+                        {v === 0 ? "–" : formatCentsCompact(v)}
                       </td>
                     ))}
                     <td className="text-right p-3 border-l border-border text-foreground">

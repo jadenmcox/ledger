@@ -137,6 +137,36 @@ export const transactionSplits = sqliteTable(
   (t) => [index("transaction_splits_tx_idx").on(t.transactionId)],
 );
 
+// Ties an incoming payment to the charge it pays back: a FieldPulse deposit
+// reimbursing a Sweetgreen lunch, or Jaya's Zelle covering her share of
+// parking. The linked amount never counts as income. If the charge is a
+// reimbursable work expense it simply settles what's owed; otherwise it nets
+// out of the charge's category in the charge's month, like a refund, so $25
+// parking minus a $6.25 payback reads as $18.75 spent.
+export const paybackLinks = sqliteTable(
+  "payback_links",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    paybackId: integer("payback_id")
+      .notNull()
+      .references(() => transactions.id, { onDelete: "cascade" }),
+    chargeId: integer("charge_id")
+      .notNull()
+      .references(() => transactions.id, { onDelete: "cascade" }),
+    // Positive cents of the payback applied to this charge.
+    amountCents: integer("amount_cents").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (t) => [
+    index("payback_links_payback_idx").on(t.paybackId),
+    index("payback_links_charge_idx").on(t.chargeId),
+  ],
+);
+
+export type PaybackLink = typeof paybackLinks.$inferSelect;
+
 export const categoryRules = sqliteTable("category_rules", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   matchType: text("match_type", {

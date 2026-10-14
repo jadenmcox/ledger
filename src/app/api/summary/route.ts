@@ -1,17 +1,12 @@
 import { NextResponse } from "next/server";
-import { db } from "@/db";
-import { categories, transactions } from "@/db/schema";
-import { eq } from "drizzle-orm";
-import { startOfMonth, endOfMonth } from "date-fns";
-import { monthConsumption, monthConsumptionByCategory } from "@/lib/month-bucket";
-import { loadSplitsByTx } from "@/lib/splits";
+import { loadLedgerData } from "@/lib/ledger-data";
 import { formatCentsCompact } from "@/lib/utils";
 
 // Read-only summary for the Dashboard app's tile. Protected by a shared
 // static API key (this is a single-user personal app, not multi-tenant) —
-// see DASHBOARD_API_KEY in .env.example. Reuses the same refund/rent-aware
-// month bucketing as the real dashboard (src/lib/month-bucket.ts) so the
-// number shown here never drifts from what /dashboard shows.
+// see DASHBOARD_API_KEY in .env.example. Reads the same shared ledger as the
+// real dashboard (src/lib/ledger.ts) so the number shown here never drifts
+// from what /dashboard shows.
 export async function GET(request: Request) {
   const apiKey = request.headers.get("x-api-key");
   if (!apiKey || apiKey !== process.env.DASHBOARD_API_KEY) {
@@ -19,18 +14,13 @@ export async function GET(request: Request) {
   }
 
   const now = new Date();
-  const monthStart = startOfMonth(now);
-  const monthEnd = endOfMonth(now);
+  const { allCategories, ledger } = await loadLedgerData();
+  const month = ledger.summarize(now);
 
-  const [allTx, allCategories, splitsByTx] = await Promise.all([
-    db.select().from(transactions).where(eq(transactions.isTransfer, false)),
-    db.select().from(categories),
-    loadSplitsByTx(),
-  ]);
-
-  const actualCents = monthConsumption(allTx, allCategories, monthStart, splitsByTx);
+  // Spending against planned spending (needs + wants), same numbers as Home.
+  const actualCents = month.spent;
   const plannedCents = allCategories
-    .filter((c) => c.classification !== "income" && !c.isArchived)
+    .filter((c) => (c.classification === "need" || c.classification === "want") && !c.isArchived)
     .reduce((sum, c) => sum + (c.monthlyLimitCents ?? 0), 0);
 
   const ratio = plannedCents > 0 ? actualCents / plannedCents : null;
@@ -38,12 +28,7 @@ export async function GET(request: Request) {
 
   // Categories currently over their monthly limit, worst first — same
   // bucketing as the headline number, so the two can never disagree.
-  const { byCategory } = monthConsumptionByCategory(
-    allTx,
-    allCategories,
-    monthStart,
-    splitsByTx,
-  );
+  const byCategory = month.spendByCategory;
   const overspent = allCategories
     .filter(
       (c) =>
