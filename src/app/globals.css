@@ -10,6 +10,17 @@
 /* Scan the kit so its utility classes get generated. */
 @source "../_design";
 
+/* iOS zooms the whole page into any field under 16px when you tap it. The
+   kit's own fields handle this; this covers the app's inputs and selects too.
+   Unlayered on purpose so it beats text-sm and friends, phones only. */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
 :root {
   color-scheme: light;
 

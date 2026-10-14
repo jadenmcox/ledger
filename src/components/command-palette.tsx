@@ -73,13 +73,10 @@ export function CommandPalette({
         group: "Go to",
         icon: Wallet,
       },
-      {
-        id: "go-cats",
-        label: "Categories",
-        href: "/categories",
-        group: "Go to",
-        icon: Tag,
-      },
+      { id: "go-budget", label: "Budget", href: "/budget", group: "Go to", icon: Tag },
+      { id: "go-paybacks", label: "Paybacks", href: "/paybacks", group: "Go to" },
+      { id: "go-recurring", label: "Recurring", href: "/recurring", group: "Go to" },
+      { id: "go-rules", label: "Rules", href: "/rules", group: "Go to" },
       {
         id: "act-add",
         label: "Add transaction",
@@ -100,7 +97,7 @@ export function CommandPalette({
         id: `cat-${c.id}`,
         label: c.name,
         hint: "category",
-        href: `/categories/${c.id}`,
+        href: `/budget?c=${c.id}`,
         group: "Categories",
         icon: Tag,
       });

@@ -63,7 +63,7 @@ export function DonutChart({
             data={
               hasData
                 ? filtered
-                : [{ name: "—", value: 1, color: "var(--surface-2)" }]
+                : [{ name: "", value: 1, color: "var(--surface-2)" }]
             }
             dataKey="value"
             cx="50%"

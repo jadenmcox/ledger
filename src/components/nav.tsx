@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
@@ -8,12 +8,17 @@ import {
   LayoutDashboard,
   ListOrdered,
   Wallet,
-  Tag,
   CalendarRange,
   CalendarClock,
   PiggyBank,
   Zap,
+  HandCoins,
+  Menu,
+  Upload,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
+import { Sheet } from "@/components/sheet";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -27,20 +32,30 @@ const items: NavItem[] = [
   { href: "/dashboard", label: "Home", icon: LayoutDashboard, group: "primary" },
   { href: "/transactions", label: "Transactions", icon: ListOrdered, group: "primary" },
   { href: "/budget", label: "Budget", icon: PiggyBank, group: "primary" },
+  { href: "/paybacks", label: "Paybacks", icon: HandCoins, group: "primary" },
   { href: "/year", label: "Year", icon: CalendarRange, group: "primary" },
   { href: "/accounts", label: "Accounts", icon: Wallet, group: "setup" },
   { href: "/recurring", label: "Recurring", icon: CalendarClock, group: "setup" },
-  { href: "/categories", label: "Categories", icon: Tag, group: "setup" },
   { href: "/rules", label: "Rules", icon: Zap, group: "setup" },
 ];
 
-// First 5 items shown in mobile bottom nav (all of them, conveniently)
-const mobileItems = items.slice(0, 5);
+// Phone tab bar: the four you use most, then More for the rest.
+const mobileTabs = ["/dashboard", "/transactions", "/budget", "/year"].map(
+  (h) => items.find((i) => i.href === h)!,
+);
+const moreItems: (NavItem & { blurb: string })[] = [
+  { ...items.find((i) => i.href === "/paybacks")!, blurb: "What you're owed back" },
+  { ...items.find((i) => i.href === "/accounts")!, blurb: "Balances and banks" },
+  { ...items.find((i) => i.href === "/recurring")!, blurb: "Bills and subscriptions" },
+  { ...items.find((i) => i.href === "/rules")!, blurb: "Auto-categorize and rename" },
+  { href: "/import", label: "Import a CSV", icon: Upload, group: "setup", blurb: "Upload a bank export" },
+];
+
+const isActive = (pathname: string, href: string) =>
+  pathname === href || pathname.startsWith(href + "/");
 
 function titleFor(pathname: string): string {
-  const match = items.find(
-    (i) => pathname === i.href || pathname.startsWith(i.href + "/"),
-  );
+  const match = items.find((i) => isActive(pathname, i.href));
   return match?.label ?? "Budgetly";
 }
 
@@ -78,8 +93,7 @@ export function DesktopNav() {
         {items.map((item, idx) => {
           const prev = items[idx - 1];
           const showDivider = prev && prev.group !== item.group;
-          const active =
-            pathname === item.href || pathname.startsWith(item.href + "/");
+          const active = isActive(pathname, item.href);
           const Icon = item.icon;
           return (
             <Fragment key={item.href}>
@@ -132,63 +146,121 @@ export function DesktopNav() {
 
 export function MobileNav() {
   const pathname = usePathname();
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreActive = moreItems.some((i) => isActive(pathname, i.href));
+  const tab = (
+    key: string,
+    label: string,
+    Icon: typeof LayoutDashboard,
+    active: boolean,
+    inner: (content: React.ReactNode) => React.ReactNode,
+  ) =>
+    inner(
+      <>
+        <span className="relative flex items-center justify-center size-9 rounded-full">
+          {active && (
+            <motion.span
+              layoutId="mobile-nav-pill"
+              className="absolute inset-0 bg-blush-tint rounded-full"
+              transition={{ type: "spring", stiffness: 400, damping: 32 }}
+            />
+          )}
+          <Icon className="size-5 relative z-10" strokeWidth={1.75} />
+        </span>
+        <span className={cn("text-[10px] tracking-wide", active && "text-blush-deep font-medium")}>
+          {label}
+        </span>
+      </>,
+    );
+  const cls = (active: boolean) =>
+    cn(
+      "flex flex-col items-center justify-center gap-1 py-2.5 transition-colors relative",
+      active ? "text-blush-deep" : "text-foreground-faint",
+    );
   return (
-    <nav className="md:hidden fixed bottom-3 inset-x-3 z-30">
-      <div className="relative bg-surface/95 backdrop-blur-2xl rounded-full border border-border shadow-[0_12px_36px_-12px] shadow-foreground/20">
-        <div className="pointer-events-none absolute inset-0 rounded-full ring-1 ring-inset ring-white/40" />
-        <div className="grid grid-cols-5 px-1 pb-[env(safe-area-inset-bottom)]">
-          {mobileItems.map((item) => {
-            const active =
-              pathname === item.href || pathname.startsWith(item.href + "/");
+    <>
+      <nav className="md:hidden fixed bottom-3 inset-x-3 z-30">
+        <div className="relative bg-surface/95 backdrop-blur-2xl rounded-full border border-border shadow-[0_12px_36px_-12px] shadow-foreground/20">
+          <div className="pointer-events-none absolute inset-0 rounded-full ring-1 ring-inset ring-white/40" />
+          <div className="grid grid-cols-5 px-1 pb-[env(safe-area-inset-bottom)]">
+            {mobileTabs.map((item) => {
+              const active = isActive(pathname, item.href);
+              return tab(item.href, item.label, item.icon, active, (content) => (
+                <Link key={item.href} href={item.href} aria-label={item.label} className={cls(active)}>
+                  {content}
+                </Link>
+              ));
+            })}
+            {tab("more", "More", Menu, moreActive, (content) => (
+              <button
+                key="more"
+                onClick={() => setMoreOpen(true)}
+                aria-label="More"
+                className={cls(moreActive)}
+              >
+                {content}
+              </button>
+            ))}
+          </div>
+        </div>
+      </nav>
+      <Sheet open={moreOpen} onClose={() => setMoreOpen(false)}>
+        <div className="space-y-1 pb-2">
+          {moreItems.map((item) => {
             const Icon = item.icon;
+            const active = isActive(pathname, item.href);
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                aria-label={item.label}
+                onClick={() => setMoreOpen(false)}
                 className={cn(
-                  "flex flex-col items-center justify-center gap-1 py-2.5 transition-colors relative",
-                  active ? "text-blush-deep" : "text-foreground-faint",
+                  "flex items-center gap-3.5 rounded-2xl px-3 py-3 transition-colors",
+                  active ? "bg-blush-tint/70" : "hover:bg-surface-2",
                 )}
               >
-                <span className="relative flex items-center justify-center size-9 rounded-full">
-                  {active && (
-                    <motion.span
-                      layoutId="mobile-nav-pill"
-                      className="absolute inset-0 bg-blush-tint rounded-full"
-                      transition={{ type: "spring", stiffness: 400, damping: 32 }}
-                    />
-                  )}
-                  <Icon
-                    className="size-5 relative z-10"
-                    strokeWidth={1.75}
-                  />
-                </span>
                 <span
                   className={cn(
-                    "text-[10px] tracking-wide transition-colors",
-                    active ? "text-sage-deep font-medium" : "",
+                    "grid size-10 place-items-center rounded-xl",
+                    active ? "bg-blush-deep text-white" : "bg-surface-2 text-foreground-muted",
                   )}
                 >
-                  {item.label}
+                  <Icon className="size-[18px]" strokeWidth={1.75} />
                 </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[15px] font-medium tracking-tight">{item.label}</span>
+                  <span className="block text-[12px] text-foreground-faint">{item.blurb}</span>
+                </span>
+                <ChevronRight className="size-4 text-foreground-faint" strokeWidth={2} />
               </Link>
             );
           })}
         </div>
-      </div>
-    </nav>
+      </Sheet>
+    </>
   );
 }
 
 export function MobileHeader() {
   const pathname = usePathname();
   const title = titleFor(pathname);
+  // A detail page (/accounts/12) gets a back button instead of the logo.
+  const parent = items.find((i) => pathname.startsWith(i.href + "/"));
   return (
-    <header className="md:hidden sticky top-0 z-20 bg-background/85 backdrop-blur-xl px-5 py-4 flex items-baseline justify-between">
-      <Link href="/dashboard" className="block">
-        <Wordmark size="md" />
-      </Link>
+    <header className="md:hidden sticky top-0 z-20 bg-background/85 backdrop-blur-xl px-5 py-4 flex items-center justify-between">
+      {parent ? (
+        <Link
+          href={parent.href}
+          className="-ml-2 inline-flex items-center gap-0.5 rounded-full px-2 py-1 text-[15px] font-medium tracking-tight text-foreground"
+        >
+          <ChevronLeft className="size-5" strokeWidth={2} />
+          {parent.label}
+        </Link>
+      ) : (
+        <Link href="/dashboard" className="block">
+          <Wordmark size="md" />
+        </Link>
+      )}
       <div className="text-[10px] tracking-[0.08em] font-bold uppercase text-foreground-muted">
         {title}
       </div>

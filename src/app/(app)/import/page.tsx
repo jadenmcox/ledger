@@ -43,7 +43,7 @@ export default async function ImportPage() {
         {active.length === 0 ? (
           <EmptyState
             title="Add an account first"
-            body="Imports land in an account. Add one — even just the name — and come back."
+            body="Imports land in an account. Add one (even just the name) and come back."
             action={
               <Link href="/accounts">
                 <Button variant="primary">Add an account</Button>

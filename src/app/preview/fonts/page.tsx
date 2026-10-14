@@ -19,7 +19,7 @@ const OPTIONS: Option[] = [
     name: "Geist",
     pairing: "Geist Sans + Geist Mono",
     pros: [
-      "Vercel/Linear feel — disciplined, technical",
+      "Vercel/Linear feel: disciplined, technical",
       "Pairs natively with Geist Mono for numbers",
       "Tight letter-spacing reads dense and modern",
     ],
@@ -35,7 +35,7 @@ const OPTIONS: Option[] = [
     pros: [
       "Stripe / Ramp / Linear standard",
       "Extremely tight at display sizes",
-      "Most familiar — readers don't 'see' it",
+      "Most familiar: readers don't 'see' it",
     ],
     fontVar: "var(--font-inter)",
     wordmarkClass: "tracking-[-0.05em]",
@@ -47,7 +47,7 @@ const OPTIONS: Option[] = [
     name: "Plus Jakarta Sans",
     pairing: "Plus Jakarta Sans",
     pros: [
-      "Cleo / Monzo feel — friendlier, less corporate",
+      "Cleo / Monzo feel: friendlier, less corporate",
       "Round terminals feel softer next to blush palette",
       "More personality than Inter, less austere than Geist",
     ],
@@ -110,7 +110,7 @@ export default function FontsPreviewPage() {
             className="text-sm text-foreground-muted space-y-2 leading-relaxed"
             style={{ fontFamily: "var(--font-sans)" }}
           >
-            <li>• Numbers use a mono ({"Geist Mono"}) in every option — chart axes and
+            <li>• Numbers use a mono ({"Geist Mono"}) in every option: chart axes and
               currency lock-up are the same regardless of the body font choice.</li>
             <li>• The wordmark drops the italic <code className="font-mono text-foreground">d</code> and the trailing dot in all three.</li>
             <li>• Once you pick one, the full app (dashboard, nav, charts, drill-downs, login) all swap.</li>

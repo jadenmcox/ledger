@@ -127,7 +127,7 @@ export default async function AccountsPage() {
       <PageHeader
         eyebrow="ACCOUNTS"
         title="Accounts"
-        subtitle="Checking, savings, credit cards, retirement, investments — every balance in one place."
+        subtitle="Checking, savings, credit cards, retirement, and investments. Every balance in one place."
         right={<PlaidConnectButton />}
       />
       <Container>

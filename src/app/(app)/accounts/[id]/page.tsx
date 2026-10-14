@@ -14,7 +14,6 @@ import { formatCents } from "@/lib/utils";
 import { format, subDays, startOfDay } from "date-fns";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { BalanceArea } from "./charts";
 
 export const dynamic = "force-dynamic";
@@ -121,21 +120,14 @@ export default async function AccountDetailPage({
   return (
     <>
       <PageHeader
-        eyebrow={
-          <Link
-            href="/accounts"
-            className="inline-flex items-center gap-1 hover:text-blush-deep transition-colors"
-          >
-            <ArrowLeft className="size-3" strokeWidth={1.5} /> Accounts
-          </Link>
-        }
+        back={{ href: "/accounts", label: "Accounts" }}
         title={acct.name}
         subtitle={`${typeLabel[acct.type] || acct.type}${acct.institution ? ` at ${acct.institution}` : ""}. The last 90 days, every dollar moved.`}
         right={<Pill>{typeLabel[acct.type] || acct.type}</Pill>}
       />
       <Container className="pb-32 md:pb-16">
         <div className="space-y-12">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-10">
+          <div className="grid grid-cols-2 gap-6 lg:grid-cols-4 lg:gap-10">
             <Stat
               label="Current balance"
               value={formatCents(acct.currentBalanceCents)}

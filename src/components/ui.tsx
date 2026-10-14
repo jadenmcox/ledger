@@ -1,4 +1,6 @@
 import * as React from "react";
+import Link from "next/link";
+import { ChevronLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function PageHeader({
@@ -7,15 +9,27 @@ export function PageHeader({
   italic,
   subtitle,
   right,
+  back,
 }: {
   eyebrow?: React.ReactNode;
   title: string;
   italic?: string;
   subtitle?: string;
   right?: React.ReactNode;
+  // A detail page's way home, shown as a real button above the title.
+  back?: { href: string; label: string };
 }) {
   return (
     <div className="px-5 md:px-12 pt-6 md:pt-14 pb-4 md:pb-10 relative">
+      {back && (
+        <Link
+          href={back.href}
+          className="mb-4 inline-flex items-center gap-1 rounded-full border border-border bg-surface py-1.5 pl-2 pr-3.5 text-[13px] font-medium tracking-tight text-foreground-muted transition-colors hover:text-foreground md:mb-5"
+        >
+          <ChevronLeft className="size-4" strokeWidth={2} />
+          {back.label}
+        </Link>
+      )}
       <div className="flex items-start md:items-end justify-between gap-3 md:gap-6">
         <div className="min-w-0 flex-1">
           {eyebrow && (

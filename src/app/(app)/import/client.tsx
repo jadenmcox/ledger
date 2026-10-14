@@ -97,7 +97,7 @@ export function ImportClient({ accounts }: { accounts: Account[] }) {
           <div className="serif text-2xl mb-2">Drop a CSV</div>
           <div className="text-foreground-muted text-sm">
             Most banks let you download one from your transaction history. Any
-            shape works — we'll map the columns.
+            shape works; we'll map the columns.
           </div>
         </label>
       </Card>
@@ -191,7 +191,7 @@ export function ImportClient({ accounts }: { accounts: Account[] }) {
                   className="h-10 w-full bg-surface border border-border rounded-field px-3.5 text-sm focus:border-sage focus:ring-2 focus:ring-sage-tint focus:outline-none transition-all"
                 >
                   <option value="" className="bg-surface">
-                    — none —
+                    None
                   </option>
                   {headers.map((h) => (
                     <option key={h} value={h} className="bg-surface">

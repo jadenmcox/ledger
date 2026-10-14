@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { formatCents } from "@/lib/utils";
 import { HeroStat } from "@/components/hero-stat";
+import { ChevronRight } from "lucide-react";
 
 export type AccountSlice = {
   id: number;
@@ -11,10 +12,9 @@ export type AccountSlice = {
   color: string;
 };
 
-// Accounts hero. Stats on the left; on the right, a ranked set of horizontal
-// balance bars (one per account, scaled to the largest) instead of a donut —
-// so you can actually compare which accounts hold the most at a glance. Click a
-// bar to open that account.
+// Accounts hero. Stats on the left; on the right, one bar per account whose
+// length is its share of everything you own, so the bar and the percent next
+// to it always agree. Tap a row to open that account.
 export function AccountsHero({
   slices,
   totalAssets,
@@ -27,7 +27,6 @@ export function AccountsHero({
   const router = useRouter();
   const netWorth = totalAssets - totalDebt;
   const sorted = [...slices].sort((a, b) => b.value - a.value);
-  const max = sorted[0]?.value ?? 1;
 
   return (
     <section className="rise overflow-hidden rounded-card bg-surface p-6 md:p-8">
@@ -49,7 +48,7 @@ export function AccountsHero({
             label="Net worth"
             value={formatCents(netWorth, { signed: true })}
             accent={netWorth >= 0 ? "var(--sage-deep)" : "var(--blush-deep)"}
-            hint={netWorth >= 0 ? "assets − debt" : "debt exceeds assets"}
+            hint={netWorth >= 0 ? "assets minus debt" : "debt exceeds assets"}
           />
         </div>
 
@@ -60,7 +59,7 @@ export function AccountsHero({
               Where your assets sit
             </h2>
             <span className="text-[11px] tracking-tight text-foreground-faint">
-              click to open
+              share of total
             </span>
           </div>
 
@@ -71,16 +70,13 @@ export function AccountsHero({
           ) : (
             <div className="flex flex-col gap-3.5">
               {sorted.map((s) => {
-                const pct = Math.max(4, Math.round((s.value / max) * 100));
-                const share =
-                  totalAssets > 0
-                    ? Math.round((s.value / totalAssets) * 100)
-                    : 0;
+                const exact = totalAssets > 0 ? (s.value / totalAssets) * 100 : 0;
+                const shareLabel = exact > 0 && exact < 1 ? "<1%" : `${Math.round(exact)}%`;
                 return (
                   <button
                     key={s.id}
                     onClick={() => router.push(`/accounts/${s.id}`)}
-                    className="group text-left"
+                    className="group -mx-2 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-surface-2/60"
                   >
                     <div className="mb-1.5 flex items-baseline justify-between gap-3">
                       <span className="truncate text-[13px] tracking-tight text-foreground-muted transition-colors group-hover:text-foreground">
@@ -90,7 +86,8 @@ export function AccountsHero({
                         <span className="mono tabular text-foreground">
                           {formatCents(s.value)}
                         </span>{" "}
-                        · {share}%
+                        · {shareLabel}
+                        <ChevronRight className="ml-1 inline size-3.5 align-[-2px]" strokeWidth={2} />
                       </span>
                     </div>
                     <div
@@ -99,7 +96,7 @@ export function AccountsHero({
                     >
                       <div
                         className="h-full rounded-full transition-all group-hover:brightness-95"
-                        style={{ width: `${pct}%`, background: s.color }}
+                        style={{ width: `${Math.max(1, exact)}%`, background: s.color }}
                       />
                     </div>
                   </button>
