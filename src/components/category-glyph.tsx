@@ -64,6 +64,11 @@ const ICONS: Record<string, LucideIcon> = {
   tag: Tag,
 };
 
+// Icons offered when creating or editing a category (system ones left out).
+export const CATEGORY_ICON_NAMES = Object.keys(ICONS).filter(
+  (n) => n !== "alert-circle" && n !== "more-horizontal",
+);
+
 // A rounded tile tinted with the category's color, holding its icon. Replaces
 // the old bare color dots: still color-codes, but reads as a real object and
 // carries meaning. Works in both server and client components.

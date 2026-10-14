@@ -1,390 +1,122 @@
 import { db } from "@/db";
-import {
-  budgetSettings,
-  categories,
-  savingsGoals,
-  transactions,
-} from "@/db/schema";
-import type { Classification } from "@/db/schema";
-import { and, eq, gte, lte } from "drizzle-orm";
+import { budgetSettings } from "@/db/schema";
 import { Container, PageHeader } from "@/components/ui";
-import {
-  endOfMonth,
-  format,
-  getDate,
-  getDaysInMonth,
-  startOfMonth,
-  subMonths,
-} from "date-fns";
-import { isSameMonth } from "date-fns";
-import {
-  computeOccurrences,
-  expectedMonthlyIncome,
-  getActiveSchedules,
-} from "@/lib/recurring-schedules";
-import { createMonthBucketer } from "@/lib/month-bucket";
-import { categoryParts, loadSplitsByTx } from "@/lib/splits";
-import { BudgetClient } from "./client";
-import type { SmartFillRow } from "./smart-fill";
-import type { CategoryTx } from "../categories/client";
+import { endOfMonth, format, getDate, getDaysInMonth, startOfMonth, subMonths } from "date-fns";
+import { expectedMonthlyIncome, getActiveSchedules } from "@/lib/recurring-schedules";
+import { loadLedgerData } from "@/lib/ledger-data";
+import { BudgetClient, NewCategoryButton, type BudgetCategory } from "./client";
 
 export const dynamic = "force-dynamic";
 
-export default async function BudgetPage() {
+export default async function BudgetPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ c?: string }>;
+}) {
+  const sp = await searchParams;
   const now = new Date();
-  const monthEnd = endOfMonth(now);
-  const daysInMonth = getDaysInMonth(now);
-  const dayOfMonth = getDate(now);
-  // Smart-fill basis: the 6 *complete* months before this one. The current
-  // month is partial so it would drag every average down — exclude it.
-  const histStart = startOfMonth(subMonths(now, 6));
-  const histEnd = endOfMonth(subMonths(now, 1));
-
-  // Kicked off alongside the rest so a pre-migration prod DB (missing
-  // is_forecast_only) can't 500 this page — see getActiveSchedules.
-  const schedulesPromise = getActiveSchedules();
-  const [allCategories, allTx, histTx, settingsRows, goals, splitsByTx] =
-    await Promise.all([
-      db.select().from(categories),
-      // Full non-transfer history: a refund can credit back to a purchase in
-      // any earlier month, so a single-month window isn't enough. Narrowed to
-      // this month (refund- and rent-aware) in memory below.
-      db
-        .select()
-        .from(transactions)
-        .where(eq(transactions.isTransfer, false)),
-      db
-        .select({
-          id: transactions.id,
-          date: transactions.date,
-          amountCents: transactions.amountCents,
-          categoryId: transactions.categoryId,
-        })
-        .from(transactions)
-        .where(
-          and(
-            gte(transactions.date, histStart),
-            lte(transactions.date, histEnd),
-            eq(transactions.isTransfer, false),
-          ),
-        ),
-      db.select().from(budgetSettings).limit(1),
-      db
-        .select()
-        .from(savingsGoals)
-        .where(eq(savingsGoals.isArchived, false)),
-      loadSplitsByTx(),
-    ]);
-  const schedules = await schedulesPromise;
-
-  const framework = settingsRows[0]?.framework ?? "custom";
-
-  const catById = new Map(allCategories.map((c) => [c.id, c]));
-
-  // Shared refund-aware, rent-aware month bucketing (same on every page).
-  const { monthKeyOf } = createMonthBucketer(allTx, allCategories);
-  const txThisMonth = allTx.filter((t) => isSameMonth(monthKeyOf(t), now));
-
-  // Income + spend aggregates. Refunds net back out of spend in the month of
-  // the purchase they offset; a category is clamped at zero if more was
-  // refunded than bought this month.
-  let income = 0;
-  let uncategorizedSpend = 0;
-  const spendByCategory = new Map<number, number>();
-  // Per-category drill-down: the actual transactions behind each row's spend.
-  const txByCategory: Record<number, CategoryTx[]> = {};
-  for (const t of txThisMonth) {
-    // Reimbursable charges/paybacks net out — keep them off spend + income.
-    if (t.reimbursable) continue;
-    const parentCat = t.categoryId ? catById.get(t.categoryId) : null;
-    // Income stays whole (splits are spending-only); its own category drives it.
-    if (parentCat?.classification === "income") {
-      (txByCategory[parentCat.id] ??= []).push({
-        id: t.id,
-        date: t.date instanceof Date ? t.date.toISOString() : String(t.date),
-        merchant: t.merchantClean || t.merchantRaw,
-        amountCents: t.amountCents,
-      });
-      if (t.amountCents > 0) income += t.amountCents;
-      continue;
-    }
-    // Split transactions drill down and spend per category part; unsplit ones
-    // yield a single whole-amount part, so the drill-down still reconciles with
-    // each row's spend total. Purchase adds to spend; a refund nets back out.
-    const merchant = t.merchantClean || t.merchantRaw;
-    const dateStr =
-      t.date instanceof Date ? t.date.toISOString() : String(t.date);
-    for (const part of categoryParts(t, splitsByTx)) {
-      const cat = part.categoryId ? catById.get(part.categoryId) : null;
-      if (cat) {
-        (txByCategory[cat.id] ??= []).push({
-          id: t.id,
-          date: dateStr,
-          merchant,
-          amountCents: part.amountCents,
-        });
-      }
-      if (part.amountCents === 0) continue;
-      const delta =
-        part.amountCents < 0 ? Math.abs(part.amountCents) : -part.amountCents;
-      if (cat) {
-        spendByCategory.set(cat.id, (spendByCategory.get(cat.id) ?? 0) + delta);
-      } else if (delta > 0) {
-        uncategorizedSpend += delta;
-      }
-    }
-  }
-  // A category can't net below zero for the month (more refunded than bought).
-  for (const [id, v] of spendByCategory) {
-    if (v < 0) spendByCategory.set(id, 0);
-  }
-  const spendByClassification = { need: 0, want: 0, savings: 0 };
-  for (const [id, v] of spendByCategory) {
-    const c = catById.get(id);
-    if (c?.classification === "need") spendByClassification.need += v;
-    else if (c?.classification === "want") spendByClassification.want += v;
-    else if (c?.classification === "savings") spendByClassification.savings += v;
-  }
-  const spend =
-    spendByClassification.need +
-    spendByClassification.want +
-    spendByClassification.savings +
-    uncategorizedSpend;
-  // Newest first within each category, matching the /categories drill-down.
-  for (const id in txByCategory) {
-    txByCategory[id].sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
-    );
-  }
-
-  // Forecast: still-expected recurring outflows between today and end-of-month.
-  const tomorrow = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate() + 1,
-  );
-  const upcomingByCategory = new Map<number, number>();
-  let upcomingTotal = 0;
-  type UpcomingItem = {
-    merchant: string;
-    amountCents: number;
-    date: string;
-    categoryId: number | null;
-  };
-  const upcomingList: UpcomingItem[] = [];
-  for (const s of schedules) {
-    const occs = computeOccurrences(s, tomorrow, monthEnd);
-    for (const d of occs) {
-      // Negative amounts are outflows; treat as spend.
-      if (s.amountCents < 0) {
-        const abs = Math.abs(s.amountCents);
-        upcomingTotal += abs;
-        if (s.categoryId) {
-          upcomingByCategory.set(
-            s.categoryId,
-            (upcomingByCategory.get(s.categoryId) ?? 0) + abs,
-          );
-        }
-        upcomingList.push({
-          merchant: s.merchantRaw,
-          amountCents: s.amountCents,
-          date: d.toISOString(),
-          categoryId: s.categoryId,
-        });
-      }
-    }
-  }
-  upcomingList.sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-  );
-
-  // Expected monthly income for the planner. Derived from recurring paycheck
-  // schedules (their occurrences across the whole month), so it counts every
-  // scheduled check regardless of today's date — being paid on the 15th/30th
-  // never makes it read as "no income yet" — and one-off income like a bonus
-  // is excluded because it isn't a schedule. A manual override wins when set.
   const monthStart = startOfMonth(now);
-  const { cents: derivedIncome, paycheckCount } = expectedMonthlyIncome(
-    schedules,
-    monthStart,
-    monthEnd,
-  );
+  const monthEnd = endOfMonth(now);
+
+  const [{ allCategories, ledger }, settingsRows, schedules] = await Promise.all([
+    loadLedgerData(),
+    db.select().from(budgetSettings).limit(1),
+    getActiveSchedules(),
+  ]);
+  const m = ledger.summarize(now);
+
+  // Expected income: your manual figure, else recurring paycheck schedules.
+  const { cents: derivedIncome } = expectedMonthlyIncome(schedules, monthStart, monthEnd);
   const incomeOverride = settingsRows[0]?.expectedIncomeOverrideCents ?? null;
   const expectedIncome = incomeOverride ?? derivedIncome;
-  // Smart-fill scaling still needs a basis before any schedule/override exists;
-  // fall back to income actually received this month.
-  const incomeBasis = expectedIncome > 0 ? expectedIncome : income;
+  const framework = settingsRows[0]?.framework ?? "custom";
 
-  const totalLimit = allCategories.reduce(
-    (s, c) =>
-      c.classification !== "income" && c.monthlyLimitCents
-        ? s + c.monthlyLimitCents
-        : s,
-    0,
-  );
-
-  // Zero-based reconciliation: every expected dollar should be assigned to a
-  // category limit. Positive => still to allocate; negative => over-allocated.
-  const toAllocate = expectedIncome - totalLimit;
-
-  // What the savings goals say should move to savings each month, to compare
-  // against the savings-class limits actually assigned.
-  const goalsMonthlyTarget = goals.reduce(
-    (s, g) => s + g.monthlyTargetCents,
-    0,
-  );
-  const savingsLimitTotal = allCategories.reduce(
-    (s, c) =>
-      c.classification === "savings" && !c.isArchived && c.monthlyLimitCents
-        ? s + c.monthlyLimitCents
-        : s,
-    0,
-  );
-
-  const calendarPct = (dayOfMonth / daysInMonth) * 100;
-
-  // Plain-data shape for the client component.
-  const cats = allCategories
-    .filter((c) => !c.isArchived)
-    .map((c) => ({
-      id: c.id,
-      name: c.name,
-      color: c.color,
-      icon: c.icon,
-      classification: c.classification,
-      monthlyLimitCents: c.monthlyLimitCents,
-      spent: spendByCategory.get(c.id) ?? 0,
-      upcoming: upcomingByCategory.get(c.id) ?? 0,
-    }));
-
-  // ---- Smart-fill basis: average monthly spend per category ----
-  // Bucket the trailing window by the stored noon-UTC Date (date-fns format on
-  // the Date is safe — never parse a bare yyyy-MM-dd string here).
-  const histByCategory = new Map<number, number>();
-  const monthsSeen = new Set<string>();
-  for (const t of histTx) {
-    if (t.amountCents > 0) continue;
-    // Fan a split purchase into each category's trailing average, matching how
-    // the current-month spend is attributed.
-    let counted = false;
-    for (const part of categoryParts(t, splitsByTx)) {
-      if (part.amountCents >= 0) continue;
-      const c = part.categoryId ? catById.get(part.categoryId) : null;
-      if (!c || c.classification === "income") continue;
-      histByCategory.set(
-        c.id,
-        (histByCategory.get(c.id) ?? 0) + Math.abs(part.amountCents),
-      );
-      counted = true;
-    }
-    if (counted) monthsSeen.add(format(t.date, "yyyy-MM"));
-  }
-  // Divide each category's trailing total by how many months actually had
-  // activity (capped to the 6-month window). A two-month-old account shouldn't
-  // have its spend averaged over six empty months.
-  const basisMonths = Math.max(1, Math.min(6, monthsSeen.size));
-
-  const suggestRows = allCategories.filter(
-    (c) => c.classification !== "income" && !c.isArchived,
-  );
+  // Typical month per category, from the last six complete months that had
+  // any spending (a new account shouldn't average over empty months).
+  const history = Array.from({ length: 6 }, (_, i) => ledger.summarize(subMonths(now, i + 1)));
+  const active = history.filter((h) => h.spent + h.saved > 0);
+  const basisMonths = Math.max(1, active.length);
   const avgByCategory = new Map<number, number>();
-  for (const c of suggestRows) {
-    avgByCategory.set(
-      c.id,
-      Math.round((histByCategory.get(c.id) ?? 0) / basisMonths),
-    );
+  for (const h of active) {
+    for (const [id, v] of h.spendByCategory) {
+      avgByCategory.set(id, (avgByCategory.get(id) ?? 0) + v);
+    }
   }
+  for (const [id, v] of avgByCategory) avgByCategory.set(id, Math.round(v / basisMonths));
 
-  // Framework scaling: keep each category's relative share of its class but
-  // stretch class totals to respect the chosen framework. Custom leaves the
-  // raw averages alone.
-  const scaledByCategory = new Map<number, number>();
-  for (const c of suggestRows)
-    scaledByCategory.set(c.id, avgByCategory.get(c.id) ?? 0);
-  if (framework === "50_30_20" && incomeBasis > 0) {
-    const splits: Record<string, number> = { need: 0.5, want: 0.3, savings: 0.2 };
-    for (const cls of ["need", "want", "savings"] as Exclude<
-      Classification,
-      "income"
-    >[]) {
-      const clsCats = suggestRows.filter((c) => c.classification === cls);
-      if (clsCats.length === 0) continue;
-      const target = Math.round(incomeBasis * splits[cls]);
-      const rawTotal = clsCats.reduce(
-        (s, c) => s + (avgByCategory.get(c.id) ?? 0),
-        0,
-      );
-      if (rawTotal > 0) {
-        for (const c of clsCats) {
-          scaledByCategory.set(
-            c.id,
-            Math.round(((avgByCategory.get(c.id) ?? 0) * target) / rawTotal),
-          );
-        }
-      } else {
-        const per = Math.round(target / clsCats.length);
-        for (const c of clsCats) scaledByCategory.set(c.id, per);
+  const live = allCategories.filter((c) => !c.isArchived);
+  const spendable = live.filter((c) => c.classification !== "income");
+  const incomeBasis = expectedIncome > 0 ? expectedIncome : m.income;
+
+  // Suggestions: your averages as-is, the 50/30/20 split of income, or your
+  // averages stretched so the plan uses exactly your income.
+  const avg = (id: number) => avgByCategory.get(id) ?? 0;
+  const split5030: Record<number, number> = {};
+  const fitIncome: Record<number, number> = {};
+  if (incomeBasis > 0) {
+    const shares = { need: 0.5, want: 0.3, savings: 0.2 } as const;
+    for (const cls of ["need", "want", "savings"] as const) {
+      const group = spendable.filter((c) => c.classification === cls);
+      const raw = group.reduce((s, c) => s + avg(c.id), 0);
+      const target = Math.round(incomeBasis * shares[cls]);
+      for (const c of group) {
+        split5030[c.id] =
+          raw > 0 ? Math.round((avg(c.id) * target) / raw) : Math.round(target / group.length);
       }
     }
-  } else if (framework === "zero_based" && incomeBasis > 0) {
-    const rawTotal = suggestRows.reduce(
-      (s, c) => s + (avgByCategory.get(c.id) ?? 0),
-      0,
-    );
-    if (rawTotal > 0) {
-      const ratio = incomeBasis / rawTotal;
-      for (const c of suggestRows) {
-        scaledByCategory.set(
-          c.id,
-          Math.round((avgByCategory.get(c.id) ?? 0) * ratio),
-        );
-      }
+    const rawAll = spendable.reduce((s, c) => s + avg(c.id), 0);
+    for (const c of spendable) {
+      fitIncome[c.id] = rawAll > 0 ? Math.round((avg(c.id) * incomeBasis) / rawAll) : 0;
     }
   }
 
-  const smartFillRows: SmartFillRow[] = suggestRows.map((c) => ({
+  const categories: BudgetCategory[] = live.map((c) => ({
     id: c.id,
     name: c.name,
     color: c.color,
     icon: c.icon,
     classification: c.classification,
-    currentLimitCents: c.monthlyLimitCents,
-    avgCents: avgByCategory.get(c.id) ?? 0,
-    scaledCents: scaledByCategory.get(c.id) ?? 0,
+    isSystem: c.isSystem,
+    limitCents: c.monthlyLimitCents,
+    spent:
+      c.classification === "income"
+        ? m.incomeByCategory.get(c.id) ?? 0
+        : m.spendByCategory.get(c.id) ?? 0,
+    entries: m.entriesByCategory[c.id] ?? [],
+    suggest: {
+      average: avg(c.id),
+      split5030: split5030[c.id] ?? 0,
+      fitIncome: fitIncome[c.id] ?? 0,
+    },
   }));
+
+  const openId = Number(sp.c);
 
   return (
     <>
       <PageHeader
-        eyebrow="BUDGET"
-        title="What's left to "
-        italic="spend."
-        subtitle="Pick a framework, set a monthly limit on each category, and see what's left before month-end."
+        eyebrow={`${format(now, "MMMM")} plan`}
+        title="Budget"
+        subtitle="How much you plan to spend in each category this month, and how it's going. Tap a category to see its transactions or change it."
+        right={<NewCategoryButton />}
       />
       <Container className="pb-32 md:pb-16">
         <BudgetClient
-          framework={framework}
-          income={income}
-          incomeBasis={incomeBasis}
+          categories={categories}
+          spent={m.spent}
+          saved={m.saved}
+          incomeReceived={m.income}
           expectedIncome={expectedIncome}
-          derivedIncome={derivedIncome}
           incomeOverride={incomeOverride}
-          paycheckCount={paycheckCount}
-          toAllocate={toAllocate}
-          goalsMonthlyTarget={goalsMonthlyTarget}
-          savingsLimitTotal={savingsLimitTotal}
-          spend={spend}
-          spendByClassification={spendByClassification}
-          totalLimit={totalLimit}
-          upcomingTotal={upcomingTotal}
-          upcomingList={upcomingList}
-          dayOfMonth={dayOfMonth}
-          daysInMonth={daysInMonth}
-          calendarPct={calendarPct}
-          categories={cats}
-          txByCategory={txByCategory}
-          smartFillRows={smartFillRows}
+          derivedIncome={derivedIncome}
+          uncategorizedSpend={m.uncategorizedSpend}
+          uncategorizedCount={m.uncategorizedCount}
+          dayOfMonth={getDate(now)}
+          daysInMonth={getDaysInMonth(now)}
+          framework={framework}
           basisMonths={basisMonths}
+          hasHistory={active.length > 0}
+          initialOpenId={Number.isFinite(openId) && openId > 0 ? openId : null}
         />
       </Container>
     </>

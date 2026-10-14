@@ -1,797 +1,967 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import {
-  Card,
-  Label,
-  Input,
-  Button,
-  Pill,
-  ProgressBar,
-  SectionHeader,
-  Stat,
-} from "@/components/ui";
-import { CategoryGlyph } from "@/components/category-glyph";
-import { formatCents, formatCentsCompact, parseDollarsToCents } from "@/lib/utils";
-import { format } from "date-fns";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { Check, ArrowRight, ChevronRight, Tag, Pencil, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { format } from "date-fns";
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Sparkles,
+  Tag,
+  Trash2,
+  X,
+} from "lucide-react";
+import { Button, Card, Input, Label } from "@/components/ui";
+import { Sheet } from "@/components/sheet";
+import { CategoryGlyph, CATEGORY_ICON_NAMES } from "@/components/category-glyph";
+import { formatCents, parseDollarsToCents, cn } from "@/lib/utils";
 import type { BudgetFramework, Classification } from "@/db/schema";
+import type { LedgerEntry } from "@/lib/ledger";
 import {
   bulkSetMonthlyLimits,
+  createCategory,
+  deleteCategory,
   setBudgetFramework,
   setExpectedIncomeOverride,
+  setMonthlyLimit,
+  updateCategory,
 } from "./actions";
-import { SmartFillBar, type SmartFillRow } from "./smart-fill";
-import { BudgetHero } from "./budget-hero";
-import type { CategoryTx } from "../categories/client";
 
-type CatRow = {
+export type BudgetCategory = {
   id: number;
   name: string;
   color: string;
   icon: string;
   classification: Classification;
-  monthlyLimitCents: number | null;
+  isSystem: boolean;
+  limitCents: number | null;
+  // This month: spending for need/want/savings, money in for income.
   spent: number;
-  upcoming: number;
+  entries: LedgerEntry[];
+  suggest: { average: number; split5030: number; fitIncome: number };
 };
 
-type UpcomingItem = {
-  merchant: string;
-  amountCents: number;
-  date: string;
-  categoryId: number | null;
-};
+type FillMode = "average" | "split5030" | "fitIncome";
 
-const FRAMEWORKS: {
-  id: BudgetFramework;
-  label: string;
-  blurb: string;
-  splits?: { need: number; want: number; savings: number };
-}[] = [
-  {
-    id: "50_30_20",
-    label: "50 / 30 / 20",
-    blurb: "50% needs, 30% wants, 20% savings. Classic Warren / Tyagi.",
-    splits: { need: 0.5, want: 0.3, savings: 0.2 },
-  },
-  {
-    id: "zero_based",
-    label: "Zero-based",
-    blurb: "Every dollar of income assigned to a category. Limits should sum to income.",
-  },
-  {
-    id: "custom",
-    label: "Custom",
-    blurb: "Set whatever limits make sense. No allocation suggestions.",
-  },
+const GROUPS: { cls: Classification; label: string; blurb: string }[] = [
+  { cls: "need", label: "Needs", blurb: "rent, groceries, bills" },
+  { cls: "want", label: "Wants", blurb: "eating out, shopping, fun" },
+  { cls: "savings", label: "Saving & investing", blurb: "money you keep" },
 ];
 
-const editorOrder: Classification[] = ["need", "want", "savings"];
-const classificationLabel: Record<Classification, string> = {
+const TYPE_LABEL: Record<Classification, string> = {
+  need: "Need",
+  want: "Want",
+  savings: "Saving",
   income: "Income",
-  need: "Needs",
-  want: "Wants",
-  savings: "Savings",
 };
-const classificationTone: Record<Classification, "need" | "want" | "savings" | "income"> = {
-  income: "income",
-  need: "need",
-  want: "want",
-  savings: "savings",
-};
+
+const SWATCHES = [
+  "#f0478e",
+  "#e5484d",
+  "#f76b15",
+  "#e5a50a",
+  "#30a46c",
+  "#12a594",
+  "#0090ff",
+  "#3e63dd",
+  "#8e4ec6",
+  "#ab4aba",
+  "#978365",
+  "#6f6e77",
+];
+
+const OPEN_NEW = "budgetly:new-category";
+
+export function NewCategoryButton() {
+  return (
+    <Button variant="outline" size="sm" onClick={() => window.dispatchEvent(new Event(OPEN_NEW))}>
+      <Plus className="size-4" strokeWidth={1.75} />
+      <span className="hidden sm:inline">New category</span>
+    </Button>
+  );
+}
+
+const toDollars = (cents: number | null | undefined) =>
+  cents != null && cents > 0 ? String(Math.round(cents / 100)) : "";
 
 export function BudgetClient({
-  framework,
-  income,
-  incomeBasis,
-  spend,
-  spendByClassification,
-  totalLimit,
+  categories,
+  spent,
+  saved,
+  incomeReceived,
   expectedIncome,
-  derivedIncome,
   incomeOverride,
-  paycheckCount,
-  toAllocate,
-  goalsMonthlyTarget = 0,
-  savingsLimitTotal = 0,
-  upcomingTotal,
-  upcomingList,
+  derivedIncome,
+  uncategorizedSpend,
+  uncategorizedCount,
   dayOfMonth,
   daysInMonth,
-  calendarPct,
-  categories,
-  txByCategory = {},
-  smartFillRows,
+  framework,
   basisMonths,
+  hasHistory,
+  initialOpenId,
 }: {
-  framework: BudgetFramework;
-  income: number;
-  incomeBasis: number;
+  categories: BudgetCategory[];
+  spent: number;
+  saved: number;
+  incomeReceived: number;
   expectedIncome: number;
-  derivedIncome: number;
   incomeOverride: number | null;
-  paycheckCount: number;
-  toAllocate: number;
-  goalsMonthlyTarget?: number;
-  savingsLimitTotal?: number;
-  spend: number;
-  spendByClassification: { need: number; want: number; savings: number };
-  totalLimit: number;
-  upcomingTotal: number;
-  upcomingList: UpcomingItem[];
+  derivedIncome: number;
+  uncategorizedSpend: number;
+  uncategorizedCount: number;
   dayOfMonth: number;
   daysInMonth: number;
-  calendarPct: number;
-  categories: CatRow[];
-  txByCategory?: Record<number, CategoryTx[]>;
-  smartFillRows: SmartFillRow[];
+  framework: BudgetFramework;
   basisMonths: number;
+  hasHistory: boolean;
+  initialOpenId: number | null;
 }) {
-  const [selectedFramework, setSelectedFramework] =
-    useState<BudgetFramework>(framework);
-  const [frameworkOpen, setFrameworkOpen] = useState(false);
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
-  // Which category row in the "Every limit" list is expanded to show its tx.
-  const [expanded, setExpanded] = useState<number | null>(null);
+  const [openId, setOpenId] = useState<number | null>(initialOpenId);
+  const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [showAll, setShowAll] = useState<Record<string, boolean>>({});
 
-  // Expected-income override editor (the pencil on the "Ready to allocate"
-  // panel). Draft is dollars-as-string; empty/clear falls back to paychecks.
-  const [editingIncome, setEditingIncome] = useState(false);
-  const [incomeDraft, setIncomeDraft] = useState("");
-  const openIncomeEditor = () => {
-    setIncomeDraft(expectedIncome > 0 ? (expectedIncome / 100).toFixed(0) : "");
-    setEditingIncome(true);
-  };
-  const saveIncomeOverride = () => {
-    const cents = incomeDraft.trim() === "" ? null : parseDollarsToCents(incomeDraft);
-    startTransition(async () => {
-      await setExpectedIncomeOverride(cents);
-      setEditingIncome(false);
-    });
-  };
-  const resetIncomeToPaychecks = () => {
-    startTransition(async () => {
-      await setExpectedIncomeOverride(null);
-      setEditingIncome(false);
-    });
-  };
+  useEffect(() => {
+    const open = () => setCreating(true);
+    window.addEventListener(OPEN_NEW, open);
+    return () => window.removeEventListener(OPEN_NEW, open);
+  }, []);
 
-  // Local-edited limits for the edit-all view (dollars as strings, persisted on save).
   const initialDrafts = useMemo(() => {
-    const m: Record<number, string> = {};
-    for (const c of categories) {
-      m[c.id] = c.monthlyLimitCents != null
-        ? (c.monthlyLimitCents / 100).toFixed(0)
-        : "";
-    }
-    return m;
+    const d: Record<number, string> = {};
+    for (const c of categories) d[c.id] = toDollars(c.limitCents);
+    return d;
   }, [categories]);
-  const [drafts, setDrafts] = useState<Record<number, string>>(initialDrafts);
-
-  const draftCents = (id: number): number | null => {
+  const [drafts, setDrafts] = useState(initialDrafts);
+  const [fillFramework, setFillFramework] = useState<BudgetFramework | null>(null);
+  // Fresh server data resets the drafts, but never mid-edit.
+  const [syncedFrom, setSyncedFrom] = useState(initialDrafts);
+  if (!editing && syncedFrom !== initialDrafts) {
+    setSyncedFrom(initialDrafts);
+    setDrafts(initialDrafts);
+  }
+  const draftCents = (id: number) => {
     const v = drafts[id];
-    if (v == null || v === "") return null;
-    return parseDollarsToCents(v);
+    return v ? parseDollarsToCents(v) : null;
   };
 
-  const dirty = useMemo(() => {
-    for (const c of categories) {
-      const orig = c.monthlyLimitCents ?? null;
-      const curr = draftCents(c.id);
-      if (orig !== curr) return true;
-    }
-    return false;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [drafts, categories]);
-
-  const byClass: Record<Classification, CatRow[]> = {
-    income: [],
-    need: [],
-    want: [],
-    savings: [],
-  };
-  for (const c of categories) byClass[c.classification].push(c);
-
-  const limitByClass = (cls: Classification) =>
-    byClass[cls].reduce((s, c) => s + (c.monthlyLimitCents ?? 0), 0);
-
-  const remainingByClass = {
-    need: Math.max(
-      0,
-      limitByClass("need") - spendByClassification.need,
-    ),
-    want: Math.max(
-      0,
-      limitByClass("want") - spendByClassification.want,
-    ),
-    savings: Math.max(
-      0,
-      limitByClass("savings") - spendByClassification.savings,
-    ),
-  };
-  const upcomingByClass = (() => {
-    const m: Record<Classification, number> = { income: 0, need: 0, want: 0, savings: 0 };
-    for (const c of categories) m[c.classification] += c.upcoming;
-    return m;
-  })();
+  const spendCats = categories.filter((c) => c.classification === "need" || c.classification === "want");
+  const saveCats = categories.filter((c) => c.classification === "savings");
+  const incomeCats = categories.filter((c) => c.classification === "income");
+  const limitOf = (c: BudgetCategory) => (editing ? draftCents(c.id) : c.limitCents) ?? 0;
+  const plannedSpending = spendCats.reduce((s, c) => s + limitOf(c), 0);
+  const plannedSaving = saveCats.reduce((s, c) => s + limitOf(c), 0);
+  const planTotal = plannedSpending + plannedSaving;
+  const leftToSpend = plannedSpending - spent;
   const daysLeft = daysInMonth - dayOfMonth;
+  const calendarPct = (dayOfMonth / daysInMonth) * 100;
 
-  const onPickFramework = (f: BudgetFramework) => {
-    setSelectedFramework(f);
-    startTransition(async () => {
-      await setBudgetFramework(f);
-    });
-  };
-
-  const onSave = () => {
+  const dirty = categories.some((c) => (c.limitCents ?? null) !== draftCents(c.id));
+  const saveDrafts = () => {
     const updates = categories
-      .map((c) => ({
-        id: c.id,
-        limitCents: draftCents(c.id),
-      }))
-      .filter((u, i) => u.limitCents !== (categories[i].monthlyLimitCents ?? null));
-    if (updates.length === 0) return;
+      .filter((c) => (c.limitCents ?? null) !== draftCents(c.id))
+      .map((c) => ({ id: c.id, limitCents: draftCents(c.id) }));
     startTransition(async () => {
-      await bulkSetMonthlyLimits(updates);
+      if (updates.length) await bulkSetMonthlyLimits(updates);
+      if (fillFramework && fillFramework !== framework) await setBudgetFramework(fillFramework);
+      setFillFramework(null);
+      setEditing(false);
     });
   };
 
-  // Smart-fill pushes suggested values straight into this editor's drafts; the
-  // single Save button below persists them. Reset drops back to saved limits.
-  const applySmartFill = (values: Record<number, string>) =>
-    setDrafts((prev) => ({ ...prev, ...values }));
-  const resetDrafts = () => setDrafts(initialDrafts);
-
-  // "Ready to allocate" reconciliation state.
-  const noIncome = expectedIncome <= 0;
-  const overAllocated = toAllocate < 0;
-  const fullyAllocated = !noIncome && Math.abs(toAllocate) < 100; // within $1
-  const allocateColor = overAllocated
-    ? "var(--blush-deep)"
-    : fullyAllocated
-      ? "var(--blue-deep)"
-      : "var(--foreground)";
-  const allocateLabel = noIncome
-    ? "set your expected income to plan"
-    : overAllocated
-      ? "over-allocated"
-      : fullyAllocated
-        ? "every dollar assigned"
-        : "still to allocate — give it a job";
-  const incomeNote =
-    incomeOverride != null
-      ? "custom"
-      : paycheckCount > 0
-        ? `${paycheckCount} paycheck${paycheckCount === 1 ? "" : "s"}`
-        : "no paychecks scheduled";
-  const assignedCount = categories.filter(
-    (c) => c.classification !== "income" && c.monthlyLimitCents != null,
-  ).length;
+  const open = categories.find((c) => c.id === openId) ?? null;
 
   return (
-    <div className="space-y-10 md:space-y-14">
-      {/* HERO — slim headline strip (spent / planned / left) */}
-      <BudgetHero spent={spend} planned={totalLimit} daysLeft={daysLeft} />
-
-      {/* READY TO ALLOCATE — zero-based reconciliation: expected income minus
-          what's assigned to category limits, driven toward $0. */}
-      <Card className="p-5 md:p-6">
-        <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
-          <div className="min-w-0">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.08em] font-bold text-foreground-muted">
-              Ready to allocate
-            </div>
-            <div className="mt-2 flex items-baseline gap-3">
-              <span
-                className="display text-[2.6rem] leading-none md:text-[3rem]"
-                style={{ color: allocateColor }}
-              >
-                {noIncome ? "—" : formatCents(Math.abs(toAllocate))}
-              </span>
-              <span className="text-sm text-foreground-muted">
-                {allocateLabel}
-              </span>
-            </div>
-          </div>
-          {fullyAllocated && (
-            <Pill tone="savings">
-              <Check className="mr-1 size-3" strokeWidth={2.5} /> balanced
-            </Pill>
-          )}
-        </div>
-
-        {/* Reconciliation lines */}
-        <div className="mt-5 space-y-3 border-t border-border pt-4 text-sm">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-foreground-muted">Expected income</span>
-            {editingIncome ? (
-              <div className="flex items-center gap-2">
-                <div className="w-28">
-                  <Input
-                    autoFocus
-                    inputMode="numeric"
-                    value={incomeDraft}
-                    onChange={(e) => setIncomeDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") saveIncomeOverride();
-                      if (e.key === "Escape") setEditingIncome(false);
+    <div className="space-y-8 md:space-y-10">
+      {/* SUMMARY */}
+      <Card className="overflow-hidden">
+        <div className="p-5 md:p-7">
+          {plannedSpending > 0 ? (
+            <>
+              <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+                <div>
+                  <div
+                    className="text-[10px] font-bold uppercase tracking-[0.08em]"
+                    style={{ color: leftToSpend >= 0 ? "var(--blue-deep)" : "var(--blush-deep)" }}
+                  >
+                    {leftToSpend >= 0 ? "Left to spend" : "Over your plan"}
+                  </div>
+                  <div className="display mt-1.5 text-[2.6rem] leading-none md:text-[3.2rem]">
+                    {formatCents(Math.abs(leftToSpend))}
+                  </div>
+                </div>
+                <div className="pb-1 text-sm text-foreground-muted">
+                  <span className="mono tabular text-foreground">{formatCents(spent)}</span> spent of{" "}
+                  <span className="mono tabular text-foreground">{formatCents(plannedSpending)}</span> planned
+                </div>
+              </div>
+              <div className="relative mt-5">
+                <div className="h-3 overflow-hidden rounded-full bg-surface-2">
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{
+                      width: `${Math.min(100, (spent / plannedSpending) * 100)}%`,
+                      background: leftToSpend >= 0 ? "var(--blush)" : "var(--blush-deep)",
                     }}
-                    placeholder="0"
                   />
                 </div>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={saveIncomeOverride}
-                  disabled={pending}
-                >
-                  Save
-                </Button>
-                {incomeOverride != null && (
-                  <button
-                    onClick={resetIncomeToPaychecks}
-                    className="text-xs text-foreground-muted hover:text-foreground"
-                  >
-                    use paychecks
-                  </button>
-                )}
-                <button
-                  onClick={() => setEditingIncome(false)}
-                  aria-label="Cancel"
-                  className="text-foreground-faint hover:text-foreground"
-                >
-                  <X className="size-4" strokeWidth={1.5} />
-                </button>
+                <div
+                  className="absolute -top-1 h-5 w-0.5 rounded-full bg-foreground/70"
+                  style={{ left: `${calendarPct}%` }}
+                  title="today"
+                />
               </div>
-            ) : (
-              <div className="flex items-center gap-2.5">
-                <span className="mono tabular">{formatCents(expectedIncome)}</span>
-                <span className="text-[11px] text-foreground-faint">
-                  {incomeNote}
+              <div className="mt-2 flex justify-between text-[11px] text-foreground-faint">
+                <span>
+                  {Math.round((spent / plannedSpending) * 100)}% of your spending plan used
                 </span>
-                <button
-                  onClick={openIncomeEditor}
-                  aria-label="Edit expected income"
-                  className="text-foreground-faint transition-colors hover:text-foreground"
-                >
-                  <Pencil className="size-3.5" strokeWidth={1.5} />
-                </button>
+                <span>
+                  today, {daysLeft} {daysLeft === 1 ? "day" : "days"} left
+                </span>
               </div>
-            )}
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-foreground-muted">
-              Assigned to categories
-            </span>
-            <span className="mono tabular flex items-center gap-2.5 text-foreground-muted">
-              {assignedCount > 0 && (
-                <span className="text-[11px] text-foreground-faint">
-                  {assignedCount} {assignedCount === 1 ? "category" : "categories"}
-                </span>
-              )}
-              −{formatCents(totalLimit)}
-            </span>
-          </div>
-          {/* Are the savings goals actually funded by the plan? */}
-          {goalsMonthlyTarget > 0 && (
-            <div className="flex items-center justify-between gap-3">
+            </>
+          ) : (
+            <div className="py-2">
+              <div className="display text-2xl">No plan yet for this month.</div>
+              <p className="mt-2 text-sm text-foreground-muted">
+                Give each category a monthly limit and this shows what&apos;s left to spend.
+              </p>
+              <Button className="mt-4" variant="primary" size="sm" onClick={() => setEditing(true)}>
+                <Pencil className="size-3.5" strokeWidth={1.75} /> Set limits
+              </Button>
+            </div>
+          )}
+        </div>
+        <div className="divide-y divide-border border-t border-border bg-surface-2/40 text-sm">
+          <IncomeLine
+            expectedIncome={expectedIncome}
+            incomeReceived={incomeReceived}
+            incomeOverride={incomeOverride}
+            derivedIncome={derivedIncome}
+          />
+          {plannedSaving > 0 && (
+            <div className="flex items-center justify-between gap-3 px-5 py-3 md:px-7">
+              <span className="text-foreground-muted">Saving & investing</span>
               <span className="text-foreground-muted">
-                Savings goals want
-              </span>
-              <span className="mono tabular flex items-center gap-2.5 text-foreground-muted">
-                {savingsLimitTotal < goalsMonthlyTarget && (
-                  <span className="text-[11px] text-peach-deep">
-                    only {formatCentsCompact(savingsLimitTotal)} assigned to
-                    savings limits
-                  </span>
-                )}
-                {formatCents(goalsMonthlyTarget)}/mo
+                <span className="mono tabular text-foreground">{formatCents(saved)}</span> of{" "}
+                {formatCents(plannedSaving)}
               </span>
             </div>
+          )}
+          {expectedIncome > 0 && planTotal > 0 && (
+            <PlanVsIncome planTotal={planTotal} expectedIncome={expectedIncome} />
           )}
         </div>
       </Card>
 
-      {/* GLANCE — calendar progress + supporting numbers */}
-      <div className="grid grid-cols-1 md:grid-cols-[1.4fr_1fr] gap-8 md:gap-12 items-start">
-        <div>
-          <Label>Calendar progress</Label>
-          <ProgressBar
-            value={dayOfMonth}
-            max={daysInMonth}
-            color="var(--sage-deep)"
-            warnAt={1.1}
-          />
-          <div className="flex items-center justify-between text-[11px] text-foreground-faint mt-1.5 mono tabular">
-            <span>Day {dayOfMonth} of {daysInMonth}</span>
-            <span>{calendarPct.toFixed(0)}%</span>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-px bg-border rounded-card overflow-hidden">
-          <div className="bg-surface p-5">
-            <Stat
-              label="Income in"
-              value={formatCents(income)}
-              hint={income < incomeBasis ? `${formatCentsCompact(incomeBasis)} expected` : undefined}
-            />
-          </div>
-          <div className="bg-surface p-5">
-            <Stat
-              label="Planned"
-              value={formatCents(totalLimit)}
-              hint={
-                incomeBasis > 0
-                  ? `${Math.round((totalLimit / incomeBasis) * 100)}% of ${formatCentsCompact(incomeBasis)} income`
-                  : "your limits, added up"
-              }
-            />
-          </div>
-          <div className="bg-surface p-5">
-            <Stat
-              label="Left to spend"
-              value={formatCents(Math.max(0, totalLimit - spend))}
-              tone={totalLimit > 0 && spend > totalLimit ? "blush" : "default"}
-              hint={
-                totalLimit <= 0
-                  ? "set limits to track this"
-                  : spend > totalLimit
-                    ? "over your plan"
-                    : `for the next ${daysLeft} ${daysLeft === 1 ? "day" : "days"}`
-              }
-            />
-          </div>
-          <div className="bg-surface p-5">
-            <Stat
-              label="Bills still due"
-              value={formatCents(upcomingTotal)}
-              hint={upcomingTotal > 0 ? "before month-end" : "none scheduled"}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* FRAMEWORK — a set-once choice, so it rests as a single line until
-          you actually want to change it. */}
-      <div>
-        {frameworkOpen ? (
-          <>
-            <SectionHeader
-              title="Framework"
-              hint="how you decide what to allocate"
-            />
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {FRAMEWORKS.map((f) => {
-                const active = selectedFramework === f.id;
-                return (
-                  <button
-                    key={f.id}
-                    onClick={() => {
-                      onPickFramework(f.id);
-                      setFrameworkOpen(false);
-                    }}
-                    disabled={pending}
-                    className={`text-left rounded-card border p-5 transition-colors ${
-                      active
-                        ? "border-blush bg-blush-tint/40"
-                        : "border-border bg-surface hover:border-border-strong"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <span className="text-sm font-medium tracking-tight">
-                        {f.label}
-                      </span>
-                      {active && (
-                        <span className="ml-auto inline-flex items-center justify-center size-5 rounded-full bg-blush-deep text-surface">
-                          <Check className="size-3" strokeWidth={2.5} />
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[12px] text-foreground-muted leading-relaxed">
-                      {f.blurb}
-                    </p>
-                  </button>
-                );
-              })}
-            </div>
-          </>
-        ) : (
-          <Card className="px-5 py-3.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-            <span className="text-[10px] uppercase tracking-[0.08em] font-bold text-foreground-muted">
-              Framework
-            </span>
-            <span className="text-sm font-medium tracking-tight">
-              {FRAMEWORKS.find((f) => f.id === selectedFramework)?.label}
-            </span>
-            <span className="text-[11px] text-foreground-faint hidden md:inline">
-              {FRAMEWORKS.find((f) => f.id === selectedFramework)?.blurb}
-            </span>
-            <button
-              onClick={() => setFrameworkOpen(true)}
-              className="ml-auto text-xs text-foreground-muted hover:text-foreground tracking-tight"
-            >
-              change
-            </button>
-          </Card>
-        )}
-      </div>
-
-      {/* FORECASTING */}
-      <div>
-        <SectionHeader
-          title="What's left this month"
-          hint="remaining limit minus upcoming bills"
-        />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {(["need", "want", "savings"] as const).map((cls) => {
-            const limit = limitByClass(cls);
-            const remaining = remainingByClass[cls];
-            const upcoming = upcomingByClass[cls];
-            const afterBills = remaining - upcoming;
-            const spent = spendByClassification[cls];
-            const noLimit = limit <= 0;
-            return (
-              <Card key={cls} className="p-5">
-                <Pill tone={classificationTone[cls]}>
-                  {classificationLabel[cls]}
-                </Pill>
-                {noLimit ? (
-                  <>
-                    <div className="mono tabular text-2xl mt-3 font-medium">
-                      {formatCents(spent)}
-                    </div>
-                    <div className="text-[11px] text-foreground-faint mt-1">
-                      spent this month, no limit set
-                    </div>
-                    {upcoming > 0 && (
-                      <div className="mt-3 text-[11px] text-foreground-muted">
-                        <div className="flex justify-between mono tabular">
-                          <span>Upcoming bills</span>
-                          <span>{formatCentsCompact(upcoming)}</span>
-                        </div>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <div className="mono tabular text-2xl mt-3 font-medium">
-                      {formatCents(afterBills)}
-                    </div>
-                    <div className="text-[11px] text-foreground-faint mt-1">
-                      left for the next {daysLeft} {daysLeft === 1 ? "day" : "days"}
-                    </div>
-                    <div className="mt-3 text-[11px] text-foreground-muted space-y-0.5">
-                      <div className="flex justify-between mono tabular">
-                        <span>Spent so far</span>
-                        <span>{formatCentsCompact(spent)}</span>
-                      </div>
-                      <div className="flex justify-between mono tabular">
-                        <span>Remaining limit</span>
-                        <span>{formatCentsCompact(remaining)}</span>
-                      </div>
-                      {upcoming > 0 && (
-                        <div className="flex justify-between mono tabular">
-                          <span>Upcoming bills</span>
-                          <span>−{formatCentsCompact(upcoming)}</span>
-                        </div>
-                      )}
-                    </div>
-                  </>
-                )}
-              </Card>
-            );
-          })}
-        </div>
-        {upcomingList.length > 0 && (
-          <Card className="mt-4 divide-y divide-border">
-            <div className="px-5 py-3 text-[10px] tracking-[0.08em] font-bold uppercase text-foreground-muted flex justify-between">
-              <span>Upcoming this month</span>
-              <span>{upcomingList.length} {upcomingList.length === 1 ? "bill" : "bills"}</span>
-            </div>
-            {upcomingList.slice(0, 8).map((u, i) => (
-              <div
-                key={`${u.merchant}-${u.date}-${i}`}
-                className="px-5 py-3 flex items-center gap-4"
-              >
-                <div className="text-[11px] text-foreground-faint mono tabular w-12 shrink-0">
-                  {format(new Date(u.date), "MMM d")}
-                </div>
-                <div className="text-sm flex-1 min-w-0 truncate">
-                  {u.merchant}
-                </div>
-                <div className="mono tabular text-sm shrink-0">
-                  {formatCents(u.amountCents)}
-                </div>
-              </div>
-            ))}
-          </Card>
-        )}
-      </div>
-
-      {/* EDIT ALL LIMITS */}
-      <div>
-        <SectionHeader
-          title="Every limit, one place"
-          hint="set a monthly amount on each category"
-          right={
-            <Button
-              size="sm"
-              variant="primary"
-              onClick={onSave}
-              disabled={!dirty || pending}
-            >
-              {pending ? "Saving…" : dirty ? "Save changes" : "Saved"}
-              {!pending && dirty && <ArrowRight className="size-3.5" strokeWidth={1.75} />}
-            </Button>
-          }
-        />
+      {uncategorizedCount > 0 && (
         <Link
-          href="/categories"
-          className="inline-flex items-center gap-1.5 text-xs text-foreground-muted hover:text-blush-deep transition-colors mb-4"
+          href="/transactions?cat=uncategorized"
+          className="flex items-center gap-3 rounded-card bg-surface px-5 py-4 transition-colors hover:bg-surface-2/60"
         >
-          <Tag className="size-3.5" strokeWidth={1.5} />
-          Add or rename a category
-          <ArrowRight className="size-3" strokeWidth={1.5} />
+          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-blush-tint text-blush-deep">
+            <Tag className="size-4" strokeWidth={2} />
+          </span>
+          <span className="min-w-0 flex-1 text-sm">
+            <span className="font-medium">{formatCents(uncategorizedSpend)}</span>
+            <span className="text-foreground-muted">
+              {" "}
+              across {uncategorizedCount} {uncategorizedCount === 1 ? "charge has" : "charges have"} no
+              category, so no limit below sees it.
+            </span>
+          </span>
+          <span className="shrink-0 text-xs font-medium text-foreground-muted">Sort</span>
+          <ChevronRight className="size-4 shrink-0 text-foreground-faint" strokeWidth={2} />
         </Link>
-        <SmartFillBar
-          rows={smartFillRows}
+      )}
+
+      {/* EDIT TOOLBAR */}
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="display text-lg md:text-xl">Categories</h2>
+        {!editing && (
+          <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
+            <Pencil className="size-3.5" strokeWidth={1.75} /> Edit limits
+          </Button>
+        )}
+      </div>
+
+      {editing && (
+        <FillBar
           framework={framework}
-          incomeBasis={incomeBasis}
           basisMonths={basisMonths}
-          onApply={applySmartFill}
-          onReset={resetDrafts}
-          disabled={pending}
+          hasHistory={hasHistory}
+          hasIncome={expectedIncome > 0}
+          onFill={(mode) => {
+            const next: Record<number, string> = { ...drafts };
+            for (const c of [...spendCats, ...saveCats]) {
+              const v = c.suggest[mode];
+              next[c.id] = v > 0 ? String(Math.round(v / 100)) : "";
+            }
+            setDrafts(next);
+            setFillFramework(
+              mode === "split5030" ? "50_30_20" : mode === "fitIncome" ? "zero_based" : "custom",
+            );
+          }}
+          onReset={() => setDrafts(initialDrafts)}
         />
-        <div className="space-y-6">
-          {/* Income categories carry no meaningful "limit" — the expected
-              income figure above is the planning number — so the editor only
-              shows spending classes. */}
-          {editorOrder.map((cls) => {
-            const rows = byClass[cls];
-            if (rows.length === 0) return null;
-            const totalLimit = rows.reduce(
-              (s, r) => s + (draftCents(r.id) ?? 0),
-              0,
-            );
-            const totalSpent = rows.reduce((s, r) => s + r.spent, 0);
-            return (
-              <div key={cls}>
-                <div className="flex items-baseline justify-between mb-2 px-1">
-                  <div className="flex items-center gap-2">
-                    <Pill tone={classificationTone[cls]}>
-                      {classificationLabel[cls]}
-                    </Pill>
-                    <span className="text-[11px] text-foreground-faint">
-                      {rows.length} {rows.length === 1 ? "category" : "categories"}
-                    </span>
-                  </div>
-                  <div className="text-[11px] text-foreground-faint mono tabular">
-                    {formatCentsCompact(totalSpent)} / {formatCentsCompact(totalLimit)}
-                  </div>
-                </div>
-                <Card className="divide-y divide-border">
-                  {rows.map((r) => {
-                    const limit = draftCents(r.id);
-                    const spent = r.spent;
-                    const overspent = limit != null && spent > limit;
-                    const gap = limit != null ? limit - spent : null;
-                    const txs = txByCategory[r.id] ?? [];
-                    const isExpanded = expanded === r.id;
-                    const toggle = () =>
-                      setExpanded((prev) => (prev === r.id ? null : r.id));
-                    return (
-                      <div key={r.id}>
-                        <div
-                          onClick={toggle}
-                          role="button"
-                          tabIndex={0}
-                          aria-expanded={isExpanded}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              toggle();
-                            }
-                          }}
-                          className="px-4 md:px-5 py-3 flex items-center gap-3 md:gap-4 cursor-pointer hover:bg-surface-2/40 transition-colors"
-                        >
-                          <span
-                            aria-hidden
-                            className="size-4 inline-flex items-center justify-center text-foreground-faint shrink-0"
-                          >
-                            <ChevronRight
-                              className={`size-3.5 transition-transform ${isExpanded ? "rotate-90" : ""}`}
-                              strokeWidth={2}
-                            />
-                          </span>
-                          <CategoryGlyph icon={r.icon} color={r.color} size={32} />
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm tracking-tight truncate">
-                              {r.name}
-                            </div>
-                            <div className="mt-1.5 max-w-[280px]">
-                              {limit != null && limit > 0 && cls !== "income" ? (
-                                <ProgressBar
-                                  value={spent}
-                                  max={limit}
-                                  color={r.color}
-                                />
-                              ) : (
-                                <div className="h-1.5" />
-                              )}
-                            </div>
-                          </div>
-                          <div className="hidden md:flex flex-col items-end text-[11px] text-foreground-faint mono tabular w-24 shrink-0">
-                            {cls !== "income" && (
-                              <span className={overspent ? "text-blush-deep" : ""}>
-                                {formatCentsCompact(spent)} spent
-                              </span>
-                            )}
-                            {gap != null && cls !== "income" && (
-                              <span>
-                                {gap >= 0
-                                  ? `${formatCentsCompact(gap)} left`
-                                  : `${formatCentsCompact(Math.abs(gap))} over`}
-                              </span>
-                            )}
-                          </div>
-                          <div
-                            className="flex items-center gap-1.5 shrink-0"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <span className="text-foreground-faint text-sm">$</span>
-                            <Input
-                              value={drafts[r.id] ?? ""}
-                              onChange={(e) =>
-                                setDrafts((p) => ({ ...p, [r.id]: e.target.value }))
-                              }
-                              inputMode="decimal"
-                              placeholder="—"
-                              className="h-9 w-24 md:w-28 text-right mono tabular"
-                            />
-                          </div>
-                        </div>
-                        {isExpanded && (
-                          <div className="px-4 md:px-5 pb-4 pl-[2.75rem] md:pl-[3.5rem] bg-surface-2/40">
-                            {txs.length === 0 ? (
-                              <div className="text-xs text-foreground-faint py-3">
-                                No transactions this month.
-                              </div>
-                            ) : (
-                              <ul className="divide-y divide-border/70">
-                                {txs.map((t) => (
-                                  <li
-                                    key={t.id}
-                                    className="flex items-center gap-3 py-2.5 text-sm"
-                                  >
-                                    <div className="flex-1 min-w-0">
-                                      <div className="tracking-tight truncate">
-                                        {t.merchant}
-                                      </div>
-                                      <div className="text-[11px] text-foreground-faint mt-0.5">
-                                        {format(new Date(t.date), "EEE, MMM d")}
-                                      </div>
-                                    </div>
-                                    <div className="mono tabular text-sm shrink-0">
-                                      {formatCents(t.amountCents, {
-                                        signed: t.amountCents > 0,
-                                      })}
-                                    </div>
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </Card>
+      )}
+
+      {GROUPS.map(({ cls, label, blurb }) => {
+        const rows = categories.filter((c) => c.classification === cls);
+        if (rows.length === 0) return null;
+        const visible =
+          editing || showAll[cls]
+            ? rows
+            : rows.filter((c) => (c.limitCents ?? 0) > 0 || c.spent > 0);
+        const hidden = rows.length - visible.length;
+        const groupPlanned = rows.reduce((s, c) => s + limitOf(c), 0);
+        const groupSpent = rows.reduce((s, c) => s + c.spent, 0);
+        return (
+          <section key={cls}>
+            <div className="mb-2.5 flex items-baseline justify-between gap-3 px-1">
+              <div>
+                <span className="text-sm font-medium tracking-tight">{label}</span>
+                <span className="ml-2 text-[11px] text-foreground-faint">{blurb}</span>
               </div>
-            );
-          })}
+              <span className="text-[12px] text-foreground-faint">
+                <span className="mono tabular text-foreground-muted">{formatCents(groupSpent)}</span>
+                {groupPlanned > 0 && <> of {formatCents(groupPlanned)}</>}
+              </span>
+            </div>
+            <Card className="divide-y divide-border overflow-hidden">
+              {visible.length === 0 && (
+                <div className="px-5 py-4 text-sm text-foreground-faint">
+                  Nothing planned or spent here yet.
+                </div>
+              )}
+              {visible.map((c) => (
+                <CategoryRow
+                  key={c.id}
+                  c={c}
+                  editing={editing}
+                  draft={drafts[c.id] ?? ""}
+                  onDraft={(v) => setDrafts((p) => ({ ...p, [c.id]: v }))}
+                  onOpen={() => setOpenId(c.id)}
+                />
+              ))}
+              {hidden > 0 && (
+                <button
+                  onClick={() => setShowAll((p) => ({ ...p, [cls]: true }))}
+                  className="flex w-full items-center gap-2 px-5 py-3 text-left text-[12px] text-foreground-muted transition-colors hover:bg-surface-2/50 hover:text-foreground"
+                >
+                  <ChevronDown className="size-3.5" strokeWidth={2} />
+                  {hidden} more with no limit and nothing spent
+                </button>
+              )}
+            </Card>
+          </section>
+        );
+      })}
+
+      {incomeCats.some((c) => c.spent > 0) && !editing && (
+        <section>
+          <div className="mb-2.5 flex items-baseline justify-between gap-3 px-1">
+            <span className="text-sm font-medium tracking-tight">Income this month</span>
+            <span className="mono tabular text-[12px] text-foreground-muted">
+              +{formatCents(incomeReceived)}
+            </span>
+          </div>
+          <Card className="divide-y divide-border overflow-hidden">
+            {incomeCats
+              .filter((c) => c.spent > 0)
+              .map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => setOpenId(c.id)}
+                  className="flex w-full items-center gap-3.5 px-4 py-3.5 text-left transition-colors hover:bg-surface-2/50 md:px-5"
+                >
+                  <CategoryGlyph icon={c.icon} color={c.color} size={34} />
+                  <span className="min-w-0 flex-1 truncate text-sm tracking-tight">{c.name}</span>
+                  <span className="mono tabular text-sm text-blue-deep">+{formatCents(c.spent)}</span>
+                  <ChevronRight className="size-4 shrink-0 text-foreground-faint" strokeWidth={2} />
+                </button>
+              ))}
+          </Card>
+        </section>
+      )}
+
+      {editing && (
+        <div className="sticky bottom-24 z-20 md:bottom-6">
+          <Card className="flex items-center justify-between gap-3 px-4 py-3 shadow-[0_12px_36px_-12px] shadow-foreground/25">
+            <span className="text-sm text-foreground-muted">
+              Plan: <span className="mono tabular text-foreground">{formatCents(planTotal)}</span>
+              {expectedIncome > 0 && <> of {formatCents(expectedIncome)} income</>}
+            </span>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setDrafts(initialDrafts);
+                  setEditing(false);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button size="sm" variant="primary" onClick={saveDrafts} disabled={pending || (!dirty && !fillFramework)}>
+                {pending ? "Saving…" : "Save limits"}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {open && (
+        <CategorySheet
+          c={open}
+          onClose={() => {
+            setOpenId(null);
+            if (initialOpenId) router.replace("/budget", { scroll: false });
+          }}
+        />
+      )}
+      {creating && <CategoryFormSheet onClose={() => setCreating(false)} />}
+    </div>
+  );
+}
+
+function IncomeLine({
+  expectedIncome,
+  incomeReceived,
+  incomeOverride,
+  derivedIncome,
+}: {
+  expectedIncome: number;
+  incomeReceived: number;
+  incomeOverride: number | null;
+  derivedIncome: number;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [pending, startTransition] = useTransition();
+  const save = (cents: number | null) =>
+    startTransition(async () => {
+      await setExpectedIncomeOverride(cents);
+      setEditing(false);
+    });
+
+  if (editing) {
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 md:px-7">
+        <span className="text-foreground-muted">Expected monthly income</span>
+        <div className="flex items-center gap-2">
+          <span className="text-foreground-faint">$</span>
+          <Input
+            autoFocus
+            inputMode="decimal"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") save(draft.trim() ? parseDollarsToCents(draft) : null);
+              if (e.key === "Escape") setEditing(false);
+            }}
+            className="h-9 w-28 text-right mono tabular"
+          />
+          <Button
+            size="sm"
+            variant="primary"
+            disabled={pending}
+            onClick={() => save(draft.trim() ? parseDollarsToCents(draft) : null)}
+          >
+            Save
+          </Button>
+          {incomeOverride != null && derivedIncome > 0 && (
+            <button
+              onClick={() => save(null)}
+              className="text-xs text-foreground-muted hover:text-foreground"
+            >
+              use paychecks
+            </button>
+          )}
+          <button
+            onClick={() => setEditing(false)}
+            aria-label="Cancel"
+            className="grid size-8 place-items-center rounded-full text-foreground-faint hover:bg-surface hover:text-foreground"
+          >
+            <X className="size-4" strokeWidth={1.75} />
+          </button>
         </div>
       </div>
+    );
+  }
+  return (
+    <button
+      onClick={() => {
+        setDraft(expectedIncome > 0 ? String(Math.round(expectedIncome / 100)) : "");
+        setEditing(true);
+      }}
+      className="flex w-full items-center justify-between gap-3 px-5 py-3 text-left transition-colors hover:bg-surface-2/60 md:px-7"
+    >
+      <span className="min-w-0 text-foreground-muted">
+        Expected income
+        {expectedIncome > 0 && (
+          <span className="block text-[11px] text-foreground-faint">
+            {formatCents(incomeReceived)} in so far
+          </span>
+        )}
+      </span>
+      <span className="flex items-center gap-2">
+        <span className="mono tabular">
+          {expectedIncome > 0 ? formatCents(expectedIncome) : "Set it"}
+        </span>
+        <Pencil className="size-3.5 text-foreground-faint" strokeWidth={1.5} />
+      </span>
+    </button>
+  );
+}
+
+// Does the plan use your income? One sentence instead of a "ready to
+// allocate" ledger.
+function PlanVsIncome({ planTotal, expectedIncome }: { planTotal: number; expectedIncome: number }) {
+  const gap = expectedIncome - planTotal;
+  let text: string;
+  let color = "var(--foreground-muted)";
+  if (Math.abs(gap) < 100) {
+    text = "Every dollar of expected income has a job in the plan.";
+    color = "var(--blue-deep)";
+  } else if (gap > 0) {
+    text = `${formatCents(gap)} of expected income isn't planned yet. Give it a category, or let it sit as extra savings.`;
+  } else {
+    text = `The plan is ${formatCents(-gap)} more than you expect to earn. Lower a limit or two to make it fit.`;
+    color = "var(--blush-deep)";
+  }
+  return (
+    <div className="flex items-start gap-2.5 px-5 py-3 md:px-7" style={{ color }}>
+      {Math.abs(gap) < 100 && <Check className="mt-0.5 size-4 shrink-0" strokeWidth={2.5} />}
+      <span className="text-[13px]">{text}</span>
     </div>
+  );
+}
+
+function CategoryRow({
+  c,
+  editing,
+  draft,
+  onDraft,
+  onOpen,
+}: {
+  c: BudgetCategory;
+  editing: boolean;
+  draft: string;
+  onDraft: (v: string) => void;
+  onOpen: () => void;
+}) {
+  const limit = c.limitCents ?? 0;
+  const over = limit > 0 && c.spent > limit;
+  const pct = limit > 0 ? Math.min(100, (c.spent / limit) * 100) : 0;
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={editing ? undefined : onOpen}
+      onKeyDown={(e) => {
+        if (!editing && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+      className={cn(
+        "flex items-center gap-3.5 px-4 py-3.5 md:px-5",
+        !editing && "cursor-pointer transition-colors hover:bg-surface-2/50",
+      )}
+    >
+      <CategoryGlyph icon={c.icon} color={c.color} size={36} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="truncate text-sm tracking-tight">{c.name}</span>
+          {!editing && (
+            <span className="shrink-0 text-[12px] text-foreground-faint">
+              <span className={cn("mono tabular", over ? "text-blush-deep" : "text-foreground")}>
+                {formatCents(c.spent)}
+              </span>
+              {limit > 0 ? <> of {formatCents(limit)}</> : " spent"}
+            </span>
+          )}
+        </div>
+        {limit > 0 && !editing ? (
+          <div className="mt-2 flex items-center gap-3">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2">
+              <div
+                className="h-full rounded-full"
+                style={{ width: `${pct}%`, background: over ? "var(--blush-deep)" : c.color }}
+              />
+            </div>
+            <span
+              className={cn(
+                "w-24 shrink-0 text-right text-[11px]",
+                over ? "text-blush-deep" : "text-foreground-faint",
+              )}
+            >
+              {over ? `${formatCents(c.spent - limit)} over` : `${formatCents(limit - c.spent)} left`}
+            </span>
+          </div>
+        ) : (
+          !editing && <div className="mt-0.5 text-[11px] text-foreground-faint">no limit set</div>
+        )}
+        {editing && c.suggest.average > 0 && (
+          <div className="mt-0.5 text-[11px] text-foreground-faint">
+            usually {formatCents(c.suggest.average)}/mo
+          </div>
+        )}
+      </div>
+      {editing && (
+        <div className="flex shrink-0 items-center gap-1.5">
+          <span className="text-sm text-foreground-faint">$</span>
+          <Input
+            value={draft}
+            onChange={(e) => onDraft(e.target.value)}
+            inputMode="decimal"
+            placeholder="none"
+            className="h-9 w-24 text-right mono tabular md:w-28"
+          />
+        </div>
+      )}
+      {!editing && <ChevronRight className="size-4 shrink-0 text-foreground-faint" strokeWidth={2} />}
+    </div>
+  );
+}
+
+function FillBar({
+  framework,
+  basisMonths,
+  hasHistory,
+  hasIncome,
+  onFill,
+  onReset,
+}: {
+  framework: BudgetFramework;
+  basisMonths: number;
+  hasHistory: boolean;
+  hasIncome: boolean;
+  onFill: (mode: FillMode) => void;
+  onReset: () => void;
+}) {
+  const [mode, setMode] = useState<FillMode>(
+    framework === "50_30_20" && hasIncome
+      ? "split5030"
+      : framework === "zero_based" && hasIncome
+        ? "fitIncome"
+        : "average",
+  );
+  const options: { id: FillMode; label: string; note: string; needsIncome?: boolean }[] = [
+    {
+      id: "average",
+      label: "What I usually spend",
+      note: `Your average over the last ${basisMonths} ${basisMonths === 1 ? "month" : "months"}.`,
+    },
+    {
+      id: "split5030",
+      label: "50 / 30 / 20",
+      note: "Half of income to needs, 30% to wants, 20% to saving.",
+      needsIncome: true,
+    },
+    {
+      id: "fitIncome",
+      label: "Fit to my income",
+      note: "Your usual spending, scaled so the plan uses exactly your income.",
+      needsIncome: true,
+    },
+  ];
+  const current = options.find((o) => o.id === mode)!;
+  return (
+    <Card className="p-4 md:p-5">
+      <div className="flex items-center gap-2 text-sm font-medium tracking-tight">
+        <Sparkles className="size-4 text-blush-deep" strokeWidth={1.75} /> Fill in limits for me
+      </div>
+      {!hasHistory ? (
+        <p className="mt-2 text-[12px] text-foreground-muted">
+          Once you have a month of history, this can suggest limits.
+        </p>
+      ) : (
+        <>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {options.map((o) => {
+              const disabled = o.needsIncome && !hasIncome;
+              return (
+                <button
+                  key={o.id}
+                  disabled={disabled}
+                  onClick={() => setMode(o.id)}
+                  className={cn(
+                    "rounded-full border px-3 py-1.5 text-[12px] tracking-tight transition-colors disabled:opacity-40",
+                    mode === o.id
+                      ? "border-blush bg-blush-tint/60 text-foreground"
+                      : "border-border bg-surface text-foreground-muted hover:border-border-strong",
+                  )}
+                >
+                  {o.label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-[12px] text-foreground-muted">
+            {current.note} You can still change any number before saving.
+          </p>
+          <div className="mt-3 flex gap-2">
+            <Button size="sm" variant="primary" onClick={() => onFill(mode)}>
+              Fill in
+            </Button>
+            <Button size="sm" variant="ghost" onClick={onReset}>
+              <RotateCcw className="size-3.5" strokeWidth={1.75} /> Undo changes
+            </Button>
+          </div>
+        </>
+      )}
+    </Card>
+  );
+}
+
+function CategorySheet({ c, onClose }: { c: BudgetCategory; onClose: () => void }) {
+  const [pending, startTransition] = useTransition();
+  const [limit, setLimit] = useState(toDollars(c.limitCents));
+  const [editingDetails, setEditingDetails] = useState(false);
+  const isIncome = c.classification === "income";
+  const limitCents = limit.trim() ? parseDollarsToCents(limit) : null;
+  const limitDirty = (c.limitCents ?? null) !== limitCents;
+
+  if (editingDetails) {
+    return <CategoryFormSheet initial={c} onClose={onClose} />;
+  }
+
+  return (
+    <Sheet open onClose={onClose}>
+      <div className="flex items-center gap-3">
+        <CategoryGlyph icon={c.icon} color={c.color} size={44} />
+        <div className="min-w-0 flex-1">
+          <h3 className="display truncate text-xl">{c.name}</h3>
+          <div className="text-[12px] text-foreground-faint">{TYPE_LABEL[c.classification]}</div>
+        </div>
+        <button
+          onClick={() => setEditingDetails(true)}
+          className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs text-foreground-muted transition-colors hover:bg-surface-2 hover:text-foreground"
+        >
+          <Pencil className="size-3" strokeWidth={1.75} /> Edit
+        </button>
+      </div>
+
+      <div className="mt-5 rounded-2xl bg-surface-2/60 p-4">
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="text-sm text-foreground-muted">
+            {isIncome ? "Came in this month" : "Spent this month"}
+          </span>
+          <span className="mono tabular text-lg">{formatCents(c.spent)}</span>
+        </div>
+        {!isIncome && (
+          <div className="mt-3 flex items-center gap-2">
+            <span className="flex-1 text-sm text-foreground-muted">Monthly limit</span>
+            <span className="text-sm text-foreground-faint">$</span>
+            <Input
+              value={limit}
+              onChange={(e) => setLimit(e.target.value)}
+              inputMode="decimal"
+              placeholder="none"
+              className="h-9 w-28 text-right mono tabular"
+            />
+            {limitDirty && (
+              <Button
+                size="sm"
+                variant="primary"
+                disabled={pending}
+                onClick={() => startTransition(() => setMonthlyLimit(c.id, limitCents))}
+              >
+                Save
+              </Button>
+            )}
+          </div>
+        )}
+        {!isIncome && c.suggest.average > 0 && (
+          <div className="mt-2 text-right text-[11px] text-foreground-faint">
+            you usually spend {formatCents(c.suggest.average)} a month here
+          </div>
+        )}
+      </div>
+
+      <div className="mt-5 mb-2 flex items-baseline justify-between">
+        <Label className="mb-0">This month</Label>
+        <Link
+          href={`/transactions?cat=${c.id}`}
+          className="text-[12px] text-foreground-muted hover:text-foreground"
+        >
+          All transactions
+        </Link>
+      </div>
+      {c.entries.length === 0 ? (
+        <p className="py-3 text-sm text-foreground-faint">Nothing yet this month.</p>
+      ) : (
+        <ul className="divide-y divide-border/70">
+          {c.entries.map((e, i) => (
+            <li key={`${e.id}-${i}`} className="flex items-center gap-3 py-2.5">
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm tracking-tight">{e.merchant}</div>
+                <div className="text-[11px] text-foreground-faint">
+                  {format(new Date(e.date), "EEE, MMM d")}
+                  {e.note && <span className="text-blue-deep"> · {e.note}</span>}
+                </div>
+              </div>
+              <span className={cn("mono tabular shrink-0 text-sm", e.amountCents > 0 && "text-blue-deep")}>
+                {formatCents(e.amountCents, { signed: e.amountCents > 0 })}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Sheet>
+  );
+}
+
+function CategoryFormSheet({
+  initial,
+  onClose,
+}: {
+  initial?: BudgetCategory;
+  onClose: () => void;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [name, setName] = useState(initial?.name ?? "");
+  const [cls, setCls] = useState<Classification>(initial?.classification ?? "want");
+  const [color, setColor] = useState(initial?.color ?? SWATCHES[0]);
+  const [icon, setIcon] = useState(initial?.icon ?? "tag");
+  const [limit, setLimit] = useState(toDollars(initial?.limitCents));
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = () => {
+    setError(null);
+    const input = {
+      name,
+      classification: cls,
+      color,
+      icon,
+      limitCents: limit.trim() ? parseDollarsToCents(limit) : null,
+    };
+    startTransition(async () => {
+      const r = initial ? await updateCategory(initial.id, input) : await createCategory(input);
+      if (r.ok) onClose();
+      else setError(r.error);
+    });
+  };
+
+  return (
+    <Sheet open onClose={onClose}>
+      <Label>{initial ? "Edit category" : "New category"}</Label>
+      <div className="mt-2 flex items-center gap-3">
+        <CategoryGlyph icon={icon} color={color} size={44} />
+        <Input
+          autoFocus={!initial}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Name, like Pets or Climbing"
+        />
+      </div>
+
+      <Label className="mt-5">Type</Label>
+      <div className="grid grid-cols-4 gap-1.5 rounded-2xl bg-surface-2 p-1">
+        {(["need", "want", "savings", "income"] as Classification[]).map((t) => (
+          <button
+            key={t}
+            onClick={() => setCls(t)}
+            className={cn(
+              "rounded-xl py-2 text-[13px] tracking-tight transition-colors",
+              cls === t ? "bg-surface font-medium shadow-sm" : "text-foreground-muted",
+            )}
+          >
+            {TYPE_LABEL[t]}
+          </button>
+        ))}
+      </div>
+
+      <Label className="mt-5">Color</Label>
+      <div className="flex flex-wrap gap-2">
+        {SWATCHES.map((s) => (
+          <button
+            key={s}
+            onClick={() => setColor(s)}
+            aria-label={s}
+            className={cn(
+              "size-8 rounded-full ring-offset-2 ring-offset-surface transition-shadow",
+              color.toLowerCase() === s && "ring-2 ring-foreground",
+            )}
+            style={{ background: s }}
+          />
+        ))}
+      </div>
+
+      <Label className="mt-5">Icon</Label>
+      <div className="grid grid-cols-8 gap-1.5">
+        {CATEGORY_ICON_NAMES.map((n) => (
+          <button
+            key={n}
+            onClick={() => setIcon(n)}
+            aria-label={n}
+            className={cn(
+              "grid place-items-center rounded-xl p-1 transition-colors",
+              icon === n ? "bg-surface-2 ring-1 ring-border-strong" : "hover:bg-surface-2",
+            )}
+          >
+            <CategoryGlyph icon={n} color={icon === n ? color : "var(--foreground-faint)"} size={30} />
+          </button>
+        ))}
+      </div>
+
+      {cls !== "income" && (
+        <>
+          <Label className="mt-5">Monthly limit (optional)</Label>
+          <div className="flex items-center gap-2">
+            <span className="text-foreground-faint">$</span>
+            <Input
+              value={limit}
+              onChange={(e) => setLimit(e.target.value)}
+              inputMode="decimal"
+              placeholder="none"
+            />
+          </div>
+        </>
+      )}
+
+      {error && <p className="mt-3 text-xs text-blush-deep">{error}</p>}
+      <div className="mt-6 flex items-center justify-between gap-2">
+        {initial && !initial.isSystem ? (
+          <button
+            onClick={() => {
+              if (
+                confirm(
+                  `Delete ${initial.name}? Its transactions keep their merchant but become uncategorized.`,
+                )
+              )
+                startTransition(async () => {
+                  await deleteCategory(initial.id);
+                  onClose();
+                });
+            }}
+            className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-xs text-blush-deep hover:bg-blush-tint/60"
+          >
+            <Trash2 className="size-3.5" strokeWidth={1.75} /> Delete
+          </button>
+        ) : (
+          <span />
+        )}
+        <div className="flex gap-2">
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={submit} disabled={pending || !name.trim()}>
+            {pending ? "Saving…" : initial ? "Save" : "Add category"}
+          </Button>
+        </div>
+      </div>
+    </Sheet>
   );
 }
