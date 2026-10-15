@@ -72,3 +72,34 @@ export async function matchAllPaybacks(): Promise<
   revalidateAll();
   return { ok: true, matched: matches.length };
 }
+
+// Clear every pairing on a work expense and match them all again with the
+// current rules. Paybacks you tied to ordinary charges by hand (a friend's
+// share of parking) are left alone. Runs as one batch, so it either fully
+// happens or nothing changes.
+export async function redoWorkMatches(): Promise<
+  { ok: true; cleared: number; matched: number } | { ok: false; error: string }
+> {
+  const [allTx, links] = await Promise.all([db.select().from(transactions), loadPaybackLinks()]);
+  const work = new Set(allTx.filter((t) => t.reimbursable && t.amountCents < 0).map((t) => t.id));
+  const clear = links.filter((l) => work.has(l.chargeId));
+  const keep = links.filter((l) => !work.has(l.chargeId));
+  const matches = autoMatches(allTx, paybackState(keep));
+  try {
+    const del = db.delete(paybackLinks).where(
+      inArray(
+        paybackLinks.id,
+        clear.length ? clear.map((l) => l.id) : [-1],
+      ),
+    );
+    if (matches.length) {
+      await db.batch([del, db.insert(paybackLinks).values(matches)]);
+    } else {
+      await db.batch([del]);
+    }
+  } catch {
+    return { ok: false, error: NOT_MIGRATED };
+  }
+  revalidateAll();
+  return { ok: true, cleared: clear.length, matched: matches.length };
+}

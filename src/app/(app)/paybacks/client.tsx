@@ -8,7 +8,7 @@ import { StatStrip } from "@/components/stat-strip";
 import { PaybackPicker, type PickerTx } from "@/components/payback-picker";
 import { formatCents, cn } from "@/lib/utils";
 import type { PaybackLinkLike } from "@/lib/paybacks";
-import { linkPayback, matchAllPaybacks, unlinkPayback } from "./actions";
+import { linkPayback, matchAllPaybacks, redoWorkMatches, unlinkPayback } from "./actions";
 
 export type PaybackView = PickerTx;
 
@@ -23,7 +23,9 @@ export function PaybacksClient({
   loose,
   pool,
   links,
+  hasWorkMatches,
 }: {
+  hasWorkMatches: boolean;
   owedCents: number;
   backLast90: number;
   waiting: { tx: PaybackView; remaining: number }[];
@@ -46,6 +48,25 @@ export function PaybacksClient({
       const r = await matchAllPaybacks();
       setFlash(r.ok ? `Matched ${r.matched}.` : r.error);
     });
+  const redo = () => {
+    if (
+      !confirm(
+        "Redo every work expense match? Pairings are cleared and made again, preferring the closest dates. Friend paybacks you linked by hand stay as they are.",
+      )
+    )
+      return;
+    startTransition(async () => {
+      const r = await redoWorkMatches();
+      setFlash(
+        r.ok
+          ? `Redid the matches: ${r.matched} work ${r.matched === 1 ? "expense" : "expenses"} paired with a payment.`
+          : r.error,
+      );
+    });
+  };
+  const OVERDUE_DAYS = 30;
+  const overdue = waiting.filter((w) => differenceInCalendarDays(today, w.tx.date) > OVERDUE_DAYS);
+  const recent = waiting.filter((w) => differenceInCalendarDays(today, w.tx.date) <= OVERDUE_DAYS);
   const matchOne = (paybackId: number, chargeId: number) =>
     startTransition(async () => {
       const r = await linkPayback(paybackId, chargeId);
@@ -75,6 +96,17 @@ export function PaybacksClient({
           },
         ]}
       />
+
+      {hasWorkMatches && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-dashed border-border px-4 py-3">
+          <span className="text-[12px] text-foreground-muted">
+            Pairings look off? Redo them all, closest dates first.
+          </span>
+          <Button size="sm" variant="outline" onClick={redo} disabled={pending}>
+            {pending ? "Working…" : "Redo matches"}
+          </Button>
+        </div>
+      )}
 
       {flash && (
         <div className="rounded-xl bg-surface px-4 py-3 text-sm text-foreground-muted">{flash}</div>
@@ -138,40 +170,23 @@ export function PaybacksClient({
         </section>
       )}
 
-      {waiting.length > 0 && (
+      {overdue.length > 0 && (
         <section>
-          <SectionTitle title="Waiting to be paid back" hint="oldest first. Tap one to find its payback." />
-          <Card className="divide-y divide-border overflow-hidden">
-            {waiting.map(({ tx, remaining }) => {
-              const days = differenceInCalendarDays(today, tx.date);
-              return (
-                <button
-                  key={tx.id}
-                  onClick={() => setPicking(tx)}
-                  className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-surface-2/50 md:px-5"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm tracking-tight">{nameOf(tx)}</div>
-                    <div className="mt-0.5 text-[11px] text-foreground-faint">
-                      {format(tx.date, "MMM d")} ·{" "}
-                      <span className={cn(days > 30 && "text-blush-deep")}>
-                        {days === 0 ? "today" : `${days} ${days === 1 ? "day" : "days"} ago`}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <div className="mono tabular text-sm">{formatCents(remaining)}</div>
-                    {remaining !== Math.abs(tx.amountCents) && (
-                      <div className="text-[10px] text-foreground-faint">
-                        of {formatCents(Math.abs(tx.amountCents))}
-                      </div>
-                    )}
-                  </div>
-                  <ChevronRight className="size-4 shrink-0 text-foreground-faint" strokeWidth={2} />
-                </button>
-              );
-            })}
-          </Card>
+          <SectionTitle
+            title="Overdue"
+            hint={`no payment after ${OVERDUE_DAYS}+ days, ${formatCents(overdue.reduce((t, w) => t + w.remaining, 0))} total. Missed on an expense report, or not a work expense?`}
+          />
+          <WaitingList rows={overdue} today={today} onPick={setPicking} />
+        </section>
+      )}
+
+      {recent.length > 0 && (
+        <section>
+          <SectionTitle
+            title="Waiting"
+            hint="from the last month. These usually come back within a few weeks."
+          />
+          <WaitingList rows={recent} today={today} onPick={setPicking} />
         </section>
       )}
 
@@ -224,11 +239,13 @@ export function PaybacksClient({
                       </div>
                     ))}
                     <div className="text-[11px] text-foreground-faint">
-                      {charge.reimbursable
-                        ? back >= full
+                      {!charge.reimbursable
+                        ? `Your share: ${formatCents(yourShare)}. That's what counts as spending.`
+                        : back >= full - 2
                           ? "Fully paid back."
-                          : `${formatCents(full - back)} still owed.`
-                        : `Your share: ${formatCents(yourShare)}. That's what counts as spending.`}
+                          : back % 100 === 0 && full <= back * 1.15
+                            ? `Paid back up to a ${formatCents(back)} cap. The other ${formatCents(full - back)} is on you.`
+                            : `${formatCents(full - back)} still owed.`}
                     </div>
                   </div>
                 </div>
@@ -247,6 +264,48 @@ export function PaybacksClient({
         />
       )}
     </div>
+  );
+}
+
+function WaitingList({
+  rows,
+  today,
+  onPick,
+}: {
+  rows: { tx: PaybackView; remaining: number }[];
+  today: Date;
+  onPick: (tx: PaybackView) => void;
+}) {
+  return (
+    <Card className="divide-y divide-border overflow-hidden">
+      {rows.map(({ tx, remaining }) => {
+        const days = differenceInCalendarDays(today, tx.date);
+        return (
+          <button
+            key={tx.id}
+            onClick={() => onPick(tx)}
+            className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-surface-2/50 md:px-5"
+          >
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm tracking-tight">{nameOf(tx)}</div>
+              <div className="mt-0.5 text-[11px] text-foreground-faint">
+                {format(tx.date, "MMM d")} ·{" "}
+                {days === 0 ? "today" : `${days} ${days === 1 ? "day" : "days"} ago`}
+              </div>
+            </div>
+            <div className="shrink-0 text-right">
+              <div className="mono tabular text-sm">{formatCents(remaining)}</div>
+              {remaining !== Math.abs(tx.amountCents) && (
+                <div className="text-[10px] text-foreground-faint">
+                  of {formatCents(Math.abs(tx.amountCents))}
+                </div>
+              )}
+            </div>
+            <ChevronRight className="size-4 shrink-0 text-foreground-faint" strokeWidth={2} />
+          </button>
+        );
+      })}
+    </Card>
   );
 }
 

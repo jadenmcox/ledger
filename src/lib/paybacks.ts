@@ -196,36 +196,84 @@ export type AutoMatch = {
   amountCents: number;
 };
 
-// Confident one-to-one matches for reimbursable work expenses: an incoming
-// payment for the exact unsettled amount, landing on or after the charge.
-// Charges are settled oldest first and each payment is used at most once, so
-// two $14.34 lunches pair with two $14.34 deposits in date order.
+// How long after a work expense its reimbursement usually lands. Matching
+// prefers this window and only reaches further for a payment nothing nearer
+// could explain (a one-of-a-kind amount, like the only $14.18 lunch).
+const USUAL_LAG = 30;
+const LONGEST_LAG = 90;
+
+// A reimbursement capped by policy: a whole-dollar payment (FieldPulse pays at
+// most $15.00 a meal) against a slightly bigger work expense.
+function isCappedPayback(paid: number, charged: number): boolean {
+  return paid % 100 === 0 && charged > paid && charged <= paid * 1.15;
+}
+
+// Confident matches for reimbursable work expenses, in three passes:
+//   1. exact amount, landing 0 to 30 days after the charge, oldest charge
+//      first (an expense report covers everything since the last one);
+//   2. exact amount, up to 90 days, nearest charge first, for leftovers;
+//   3. whole-dollar payments that cover a capped meal ($15.00 for $15.43).
+// Each payment is used once, payments are taken oldest first, and a same-
+// store refund is never mistaken for a reimbursement.
 export function autoMatches(
   txns: readonly PaybackTx[],
   state: PaybackState,
 ): AutoMatch[] {
+  const owed = new Map<number, number>();
+  for (const t of txns) {
+    if (t.reimbursable && !t.isTransfer && t.amountCents < 0) {
+      const left = state.chargeRemaining(t);
+      if (left > 2) owed.set(t.id, left);
+    }
+  }
   const charges = txns
-    .filter((t) => t.reimbursable && t.amountCents < 0 && state.chargeRemaining(t) > 0)
+    .filter((t) => owed.has(t.id))
     .sort((a, b) => a.date.getTime() - b.date.getTime());
   const inflows = txns
     .filter((t) => t.amountCents > 0 && state.paybackRemaining(t) > 0)
     .sort((a, b) => a.date.getTime() - b.date.getTime());
-  const used = new Set<number>();
+  const usedPayback = new Set<number>();
   const matches: AutoMatch[] = [];
-  for (const c of charges) {
-    const owed = state.chargeRemaining(c);
-    const hit = inflows.find((p) => {
-      if (used.has(p.id)) return false;
-      const days = differenceInCalendarDays(p.date, c.date);
-      if (days < 0 || days > WINDOW_BEFORE) return false;
-      if (sameMerchant(p, c)) return false;
-      return closeTo(state.paybackRemaining(p), owed);
-    });
-    if (!hit) continue;
-    used.add(hit.id);
-    matches.push({ paybackId: hit.id, chargeId: c.id, amountCents: owed });
-  }
+
+  const pass = (
+    maxLag: number,
+    nearestFirst: boolean,
+    fits: (paid: number, charged: number) => boolean,
+  ) => {
+    for (const p of inflows) {
+      if (usedPayback.has(p.id)) continue;
+      const paid = state.paybackRemaining(p);
+      let best: PaybackTx | null = null;
+      for (const c of charges) {
+        const left = owed.get(c.id);
+        if (left == null) continue;
+        const lag = differenceInCalendarDays(p.date, c.date);
+        if (lag < 0 || lag > maxLag) continue;
+        if (!fits(paid, left) || sameMerchant(p, c)) continue;
+        // charges are oldest first: keep the first hit, or the last for nearest
+        if (!best || nearestFirst) best = c;
+        if (!nearestFirst) break;
+      }
+      if (!best) continue;
+      const left = owed.get(best.id)!;
+      usedPayback.add(p.id);
+      owed.delete(best.id);
+      matches.push({ paybackId: p.id, chargeId: best.id, amountCents: Math.min(paid, left) });
+    }
+  };
+  pass(USUAL_LAG, false, (paid, left) => closeTo(paid, left));
+  pass(LONGEST_LAG, true, (paid, left) => closeTo(paid, left));
+  pass(USUAL_LAG, true, isCappedPayback);
   return matches;
+}
+
+// A work expense counts as settled once it's paid back to within a couple of
+// cents, or paid up to a policy cap (got $15.00 back on a $15.43 lunch).
+function isSettled(t: PaybackTx, state: PaybackState): boolean {
+  const left = state.chargeRemaining(t);
+  if (left <= 2) return true;
+  const back = (state.linkedToCharge.get(t.id) ?? 0);
+  return back > 0 && isCappedPayback(back, Math.abs(t.amountCents));
 }
 
 export function describeMatch(c: Pick<PaybackCandidate, "kind" | "shareOf">): string {
@@ -257,7 +305,7 @@ export function owedSummary(
         !t.isTransfer &&
         t.amountCents < 0 &&
         t.date.getTime() >= since &&
-        state.chargeRemaining(t) > 0,
+        !isSettled(t, state),
     )
     .map((tx) => ({ tx, remaining: state.chargeRemaining(tx) }))
     .sort((a, b) => a.tx.date.getTime() - b.tx.date.getTime());

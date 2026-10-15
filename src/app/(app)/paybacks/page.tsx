@@ -91,6 +91,7 @@ export default async function PaybacksPage() {
           settled={settled}
           loose={loose}
           pool={pool}
+          hasWorkMatches={links.some((l) => byId.get(l.chargeId)?.reimbursable)}
           links={links.map((l) => ({
             id: l.id,
             paybackId: l.paybackId,
