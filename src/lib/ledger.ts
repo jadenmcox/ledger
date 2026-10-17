@@ -1,7 +1,7 @@
 import { isSameMonth } from "date-fns";
 import { createMonthBucketer, type BucketCategory } from "./month-bucket";
 import { categoryParts, type SplitPart } from "./splits";
-import type { PaybackLinkLike } from "./paybacks";
+import { expectedBack, type PaybackLinkLike } from "./paybacks";
 import type { RefundTxLike } from "./refunds";
 
 // The one place monthly money math happens. Home, Budget, Year, the
@@ -103,8 +103,13 @@ export function createLedger<T extends Tx>(
 
       if (t.reimbursable) {
         if (!inMonth(t)) continue;
-        if (amount < 0) paidOut += -amount;
-        else back += amount; // legacy: flagged payback that was never linked
+        if (amount < 0) {
+          // Only the capped part comes back; anything over is your spending.
+          const covered = expectedBack(t);
+          paidOut += covered;
+          const over = -amount - covered;
+          if (over > 0) addSpend(t.categoryId, over, nameOf(t), true);
+        } else back += amount; // legacy: flagged payback that was never linked
         continue;
       }
       if (amount === 0 || !inMonth(t)) continue;

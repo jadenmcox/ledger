@@ -7,7 +7,7 @@ import { Button, Card } from "@/components/ui";
 import { StatStrip } from "@/components/stat-strip";
 import { PaybackPicker, type PickerTx } from "@/components/payback-picker";
 import { formatCents, cn } from "@/lib/utils";
-import type { PaybackLinkLike } from "@/lib/paybacks";
+import { expectedBack, WORK_EXPENSE_CAP_CENTS, type PaybackLinkLike } from "@/lib/paybacks";
 import { linkPayback, matchAllPaybacks, redoWorkMatches, unlinkPayback } from "./actions";
 
 export type PaybackView = PickerTx;
@@ -241,11 +241,11 @@ export function PaybacksClient({
                     <div className="text-[11px] text-foreground-faint">
                       {!charge.reimbursable
                         ? `Your share: ${formatCents(yourShare)}. That's what counts as spending.`
-                        : back >= full - 2
-                          ? "Fully paid back."
-                          : back % 100 === 0 && full <= back * 1.15
-                            ? `Paid back up to a ${formatCents(back)} cap. The other ${formatCents(full - back)} is on you.`
-                            : `${formatCents(full - back)} still owed.`}
+                        : back < expectedBack(charge) - 2
+                          ? `${formatCents(expectedBack(charge) - back)} still owed.`
+                          : full > expectedBack(charge)
+                            ? `Paid back the ${formatCents(WORK_EXPENSE_CAP_CENTS)} cap. The other ${formatCents(full - expectedBack(charge))} counts as your spending.`
+                            : "Fully paid back."}
                     </div>
                   </div>
                 </div>

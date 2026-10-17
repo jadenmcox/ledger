@@ -18,6 +18,17 @@ export type PaybackTx = {
   reimbursable: boolean;
 };
 
+// FieldPulse reimburses a work meal up to $15.00. A work expense over that is
+// only ever paid back to the cap; the rest is your own spending from day one.
+export const WORK_EXPENSE_CAP_CENTS = 1500;
+
+// What you can expect back on a charge: the cap for a work expense, the whole
+// amount for anything else (a friend can cover any share of a shared cost).
+export function expectedBack(t: { amountCents: number; reimbursable: boolean }): number {
+  const abs = Math.abs(t.amountCents);
+  return t.reimbursable ? Math.min(abs, WORK_EXPENSE_CAP_CENTS) : abs;
+}
+
 export type PaybackLinkLike = {
   id?: number;
   paybackId: number;
@@ -51,7 +62,7 @@ export function paybackState(links: readonly PaybackLinkLike[]): PaybackState {
     chargeRemaining: (t) =>
       t.amountCents >= 0
         ? 0
-        : Math.max(0, Math.abs(t.amountCents) - (linkedToCharge.get(t.id) ?? 0)),
+        : Math.max(0, expectedBack(t) - (linkedToCharge.get(t.id) ?? 0)),
     paybackRemaining: (t) =>
       t.amountCents <= 0
         ? 0
@@ -202,17 +213,11 @@ export type AutoMatch = {
 const USUAL_LAG = 30;
 const LONGEST_LAG = 90;
 
-// A reimbursement capped by policy: a whole-dollar payment (FieldPulse pays at
-// most $15.00 a meal) against a slightly bigger work expense.
-function isCappedPayback(paid: number, charged: number): boolean {
-  return paid % 100 === 0 && charged > paid && charged <= paid * 1.15;
-}
-
-// Confident matches for reimbursable work expenses, in three passes:
-//   1. exact amount, landing 0 to 30 days after the charge, oldest charge
-//      first (an expense report covers everything since the last one);
-//   2. exact amount, up to 90 days, nearest charge first, for leftovers;
-//   3. whole-dollar payments that cover a capped meal ($15.00 for $15.43).
+// Confident matches for reimbursable work expenses, in two passes. "Amount"
+// is what's expected back, so a $15.43 lunch matches a $15.00 payment.
+//   1. landing 0 to 30 days after the charge, oldest charge first (an
+//      expense report covers everything since the last one);
+//   2. up to 90 days, nearest charge first, for leftovers.
 // Each payment is used once, payments are taken oldest first, and a same-
 // store refund is never mistaken for a reimbursement.
 export function autoMatches(
@@ -263,17 +268,12 @@ export function autoMatches(
   };
   pass(USUAL_LAG, false, (paid, left) => closeTo(paid, left));
   pass(LONGEST_LAG, true, (paid, left) => closeTo(paid, left));
-  pass(USUAL_LAG, true, isCappedPayback);
   return matches;
 }
 
-// A work expense counts as settled once it's paid back to within a couple of
-// cents, or paid up to a policy cap (got $15.00 back on a $15.43 lunch).
+// Paid back to within a couple of cents (a $14.60 payment on a $14.61 lunch).
 function isSettled(t: PaybackTx, state: PaybackState): boolean {
-  const left = state.chargeRemaining(t);
-  if (left <= 2) return true;
-  const back = (state.linkedToCharge.get(t.id) ?? 0);
-  return back > 0 && isCappedPayback(back, Math.abs(t.amountCents));
+  return state.chargeRemaining(t) <= 2;
 }
 
 export function describeMatch(c: Pick<PaybackCandidate, "kind" | "shareOf">): string {
