@@ -1,5 +1,6 @@
 import { DesktopNav, MobileHeader, MobileNav } from "@/components/nav";
 import { CommandPalette } from "@/components/command-palette";
+import { DialogHost } from "@/components/confirm";
 import { db } from "@/db";
 import { accounts, categories, transactions } from "@/db/schema";
 import { desc, eq } from "drizzle-orm";
@@ -55,6 +56,7 @@ export default async function AppLayout({
         accounts={accts}
         recentMerchants={recentMerchants}
       />
+      <DialogHost />
     </div>
   );
 }

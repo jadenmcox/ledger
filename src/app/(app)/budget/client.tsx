@@ -1,5 +1,6 @@
 "use client";
 
+import { confirmDialog } from "@/components/confirm";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -935,12 +936,14 @@ function CategoryFormSheet({
       <div className="mt-6 flex items-center justify-between gap-2">
         {initial && !initial.isSystem ? (
           <button
-            onClick={() => {
-              if (
-                confirm(
-                  `Delete ${initial.name}? Its transactions keep their merchant but become uncategorized.`,
-                )
-              )
+            onClick={async () => {
+              const ok = await confirmDialog({
+                title: `Delete ${initial.name}?`,
+                body: "Its transactions keep their merchant but lose their category.",
+                confirmLabel: "Delete category",
+                danger: true,
+              });
+              if (ok)
                 startTransition(async () => {
                   await deleteCategory(initial.id);
                   onClose();

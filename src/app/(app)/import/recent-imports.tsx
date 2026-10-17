@@ -1,5 +1,6 @@
 "use client";
 
+import { confirmDialog } from "@/components/confirm";
 import { useTransition } from "react";
 import { Card } from "@/components/ui";
 import { deleteImportBatch } from "./actions";
@@ -59,13 +60,14 @@ export function RecentImports({ batches }: { batches: ImportBatch[] }) {
             </div>
             <button
               disabled={pending}
-              onClick={() => {
-                if (
-                  confirm(
-                    `Undo this import? The ${b.rowCount} transactions it created will be deleted. Rules and categories stay.`,
-                  )
-                )
-                  startTransition(() => deleteImportBatch(b.id).then(() => undefined));
+              onClick={async () => {
+                const ok = await confirmDialog({
+                  title: "Undo this import?",
+                  body: `The ${b.rowCount} transactions it created will be deleted. Rules and categories stay.`,
+                  confirmLabel: "Undo import",
+                  danger: true,
+                });
+                if (ok) startTransition(() => deleteImportBatch(b.id).then(() => undefined));
               }}
               className="size-8 inline-flex items-center justify-center rounded-md hover:bg-surface-2 text-foreground-faint hover:text-blush-deep md:opacity-0 md:group-hover:opacity-100 transition-opacity"
               title="Undo import (delete its transactions)"

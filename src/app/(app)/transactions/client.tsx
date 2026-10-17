@@ -1,5 +1,6 @@
 "use client";
 
+import { confirmDialog } from "@/components/confirm";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Account, Category, Transaction } from "@/db/schema";
@@ -935,8 +936,14 @@ function MobileActionsSheet({
         {item(
           <Trash2 className="size-4" strokeWidth={1.5} />,
           "Delete",
-          () => {
-            if (confirm("Delete this transaction?")) {
+          async () => {
+            const ok = await confirmDialog({
+              title: "Delete this transaction?",
+              body: `${tx.merchantClean || tx.merchantRaw}, ${formatCents(tx.amountCents, { signed: tx.amountCents > 0 })}. This can't be undone.`,
+              confirmLabel: "Delete",
+              danger: true,
+            });
+            if (ok) {
               startTransition(() => deleteTransaction(tx.id));
               onClose();
             }

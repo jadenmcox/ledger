@@ -1,5 +1,6 @@
 "use client";
 
+import { confirmDialog } from "@/components/confirm";
 import { useState, useTransition } from "react";
 import { differenceInCalendarDays, format } from "date-fns";
 import { ArrowDown, Check, ChevronRight, HandCoins } from "lucide-react";
@@ -48,13 +49,13 @@ export function PaybacksClient({
       const r = await matchAllPaybacks();
       setFlash(r.ok ? `Matched ${r.matched}.` : r.error);
     });
-  const redo = () => {
-    if (
-      !confirm(
-        "Redo every work expense match? Pairings are cleared and made again, preferring the closest dates. Friend paybacks you linked by hand stay as they are.",
-      )
-    )
-      return;
+  const redo = async () => {
+    const ok = await confirmDialog({
+      title: "Redo every work expense match?",
+      body: "Pairings are cleared and made again, closest dates first. Paybacks from friends that you linked by hand stay as they are.",
+      confirmLabel: "Redo matches",
+    });
+    if (!ok) return;
     startTransition(async () => {
       const r = await redoWorkMatches();
       setFlash(

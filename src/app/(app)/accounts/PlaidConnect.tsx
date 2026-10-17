@@ -1,5 +1,6 @@
 "use client";
 
+import { alertDialog, confirmDialog } from "@/components/confirm";
 import { useCallback, useEffect, useState } from "react";
 import {
   usePlaidLink,
@@ -52,7 +53,10 @@ export function PlaidConnectButton() {
         });
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
-          alert("Plaid exchange failed: " + (err.error ?? res.statusText));
+          await alertDialog({
+            title: "Couldn't connect that bank",
+            body: String(err.error ?? res.statusText),
+          });
         }
         router.refresh();
         fetchLinkToken();
@@ -94,7 +98,7 @@ export function PlaidItemsList({ items }: { items: PlaidItemRow[] }) {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        alert("Sync failed: " + (err.error ?? res.statusText));
+        await alertDialog({ title: "Sync failed", body: String(err.error ?? res.statusText) });
       }
       router.refresh();
     } finally {
@@ -146,7 +150,7 @@ export function PlaidItemsList({ items }: { items: PlaidItemRow[] }) {
                 </span>
               </div>
             </div>
-            <div className="hidden md:flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="flex items-center gap-1">
               <button
                 onClick={() => sync(it.id)}
                 className="size-8 inline-flex items-center justify-center text-foreground-faint hover:text-foreground rounded-md hover:bg-surface-2"
@@ -157,18 +161,19 @@ export function PlaidItemsList({ items }: { items: PlaidItemRow[] }) {
               </button>
               <button
                 onClick={async () => {
-                  if (
-                    !confirm(
-                      "Disconnect this bank? Linked accounts and synced transactions stay; future syncs stop.",
-                    )
-                  )
-                    return;
+                  const ok = await confirmDialog({
+                    title: `Disconnect ${it.institutionName ?? "this bank"}?`,
+                    body: "Its accounts and synced transactions stay. Future syncs stop.",
+                    confirmLabel: "Disconnect",
+                    danger: true,
+                  });
+                  if (!ok) return;
                   setBusy("Disconnecting...");
                   try {
                     const res = await fetch(`/api/plaid/items/${it.id}`, {
                       method: "DELETE",
                     });
-                    if (!res.ok) alert("Disconnect failed");
+                    if (!res.ok) await alertDialog({ title: "Couldn't disconnect that bank" });
                     router.refresh();
                   } finally {
                     setBusy(null);

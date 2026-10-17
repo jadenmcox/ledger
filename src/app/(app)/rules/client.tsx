@@ -1,5 +1,6 @@
 "use client";
 
+import { confirmDialog } from "@/components/confirm";
 import { useMemo, useState, useTransition } from "react";
 import { Button, Card, Input, Label } from "@/components/ui";
 import { Sheet } from "@/components/sheet";
@@ -658,8 +659,14 @@ function RuleSheet({
         <div className="flex items-center justify-between gap-2 pt-2">
           <button
             type="button"
-            onClick={() => {
-              if (confirm("Delete this rule? Transactions it already handled stay as they are."))
+            onClick={async () => {
+              const ok = await confirmDialog({
+                title: "Delete this rule?",
+                body: "Transactions it already handled stay as they are.",
+                confirmLabel: "Delete rule",
+                danger: true,
+              });
+              if (ok)
                 startTransition(async () => {
                   await onDelete();
                   onClose();

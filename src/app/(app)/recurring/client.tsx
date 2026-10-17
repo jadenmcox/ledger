@@ -1,5 +1,6 @@
 "use client";
 
+import { confirmDialog } from "@/components/confirm";
 import { useState, useTransition } from "react";
 import { Button, Card, Input, Label, Pill } from "@/components/ui";
 import { Sheet } from "@/components/sheet";
@@ -155,13 +156,14 @@ export function RecurringClient({
                     )}
                   </button>
                   <button
-                    onClick={() => {
-                      if (
-                        confirm(
-                          `Delete "${s.merchantRaw}"? Transactions it already created stay; only future forecasting stops.`,
-                        )
-                      )
-                        startTransition(() => deleteSchedule(s.id));
+                    onClick={async () => {
+                      const ok = await confirmDialog({
+                        title: `Delete ${s.merchantRaw}?`,
+                        body: "Transactions it already created stay. Only future forecasting stops.",
+                        confirmLabel: "Delete",
+                        danger: true,
+                      });
+                      if (ok) startTransition(() => deleteSchedule(s.id));
                     }}
                     className="size-8 inline-flex items-center justify-center rounded-md hover:bg-surface-2 text-foreground-faint hover:text-blush-deep"
                     title="Delete"

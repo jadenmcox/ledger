@@ -17,16 +17,24 @@ export function Sheet({
   children: React.ReactNode;
   className?: string;
 }) {
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
   useEffect(() => {
     if (!open) return;
+    // With a confirm stacked on another sheet, Escape closes only the top one.
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape") return;
+      const dialogs = document.querySelectorAll('[data-sheet="true"]');
+      if (dialogs[dialogs.length - 1] === rootRef.current) onClose();
     };
     document.addEventListener("keydown", onKey);
+    // Restore whatever was there, so closing a stacked sheet doesn't unlock
+    // scrolling under the one still open.
+    const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
+      document.body.style.overflow = previous;
     };
   }, [open, onClose]);
 
@@ -36,6 +44,8 @@ export function Sheet({
 
   return (
     <div
+      ref={rootRef}
+      data-sheet="true"
       role="dialog"
       aria-modal="true"
       className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex md:items-center justify-center items-end animate-in fade-in duration-150"

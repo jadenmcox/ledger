@@ -1,5 +1,6 @@
 "use client";
 
+import { confirmDialog } from "@/components/confirm";
 import { useState, useTransition } from "react";
 import {
   Card,
@@ -135,13 +136,14 @@ export function AccountsClient({
             onEdit={openEdit}
             onAdjust={openAdjust}
             onUnarchive={(id) => unarchiveAccount(id)}
-            onDelete={(id) => {
-              if (
-                confirm(
-                  "Delete this account and all its transactions? This cannot be undone.",
-                )
-              )
-                deleteAccount(id);
+            onDelete={async (id) => {
+              const ok = await confirmDialog({
+                title: "Delete this account?",
+                body: "All of its transactions are deleted too. This can't be undone.",
+                confirmLabel: "Delete account",
+                danger: true,
+              });
+              if (ok) deleteAccount(id);
             }}
             faded
           />
