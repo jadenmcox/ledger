@@ -37,6 +37,15 @@ export async function createManualTransaction(form: FormData) {
   const signed = direction === "in" ? Math.abs(cents) : -Math.abs(cents);
   const date = new Date(dateStr + "T12:00:00Z");
 
+  // The plain account/day/amount hash lets the bank's copy claim this row when
+  // it syncs. If another transaction already holds it (two $6.25 Venmos the
+  // same day), this one is still real: give it a hash of its own.
+  const hash = dedupeHash(accountId, date, signed, merchantRaw);
+  const [taken] = await db
+    .select({ id: transactions.id })
+    .from(transactions)
+    .where(eq(transactions.dedupeHash, hash))
+    .limit(1);
   await db.insert(transactions).values({
     accountId,
     date,
@@ -47,10 +56,9 @@ export async function createManualTransaction(form: FormData) {
     categoryLocked: categoryId !== null,
     notes,
     source: "manual",
-    dedupeHash: dedupeHash(accountId, date, signed, merchantRaw),
+    dedupeHash: taken ? `${hash}:manual:${crypto.randomUUID()}` : hash,
   });
-  revalidatePath("/transactions");
-  revalidatePath("/dashboard");
+  revalidatePath("/", "layout");
 }
 
 export async function setCategory(txId: number, categoryId: number | null) {

@@ -6,6 +6,7 @@ import { eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { loadPaybackLinks } from "@/lib/ledger-data";
 import { autoMatches, paybackState } from "@/lib/paybacks";
+import { recoverAllMergedTransactions } from "@/lib/plaid-sync";
 
 const NOT_MIGRATED =
   "Paybacks need a one-time database update (the payback_links table). Run drizzle/0008_payback_links.sql in the Turso console, then try again.";
@@ -102,4 +103,16 @@ export async function redoWorkMatches(): Promise<
   }
   revalidateAll();
   return { ok: true, cleared: clear.length, matched: matches.length };
+}
+
+// For lunches Ramp says are paid but Budgetly shows overdue: pull back any
+// reimbursement deposits the bank sync merged away, then redo the matches.
+export async function recoverDepositsAndRematch(): Promise<
+  | { ok: true; restored: number; matched: number; errors: string[] }
+  | { ok: false; error: string }
+> {
+  const { restored, errors } = await recoverAllMergedTransactions();
+  const r = await redoWorkMatches();
+  if (!r.ok) return r;
+  return { ok: true, restored: restored.length, matched: r.matched, errors };
 }

@@ -59,13 +59,20 @@ export async function runImport(args: {
   let duplicates = 0;
   let categorized = 0;
 
+  // Two identical rows in one file (two $14.34 deposits the same day) are two
+  // transactions. Number repeats within the file, so the 2nd copy gets its own
+  // hash, and re-importing the same file still lines up and skips them all.
+  const seenInFile = new Map<string, number>();
   for (const m of mapped) {
-    const hash = dedupeHash(
+    const base = dedupeHash(
       args.accountId,
       m.date,
       m.amountCents,
       m.merchantRaw,
     );
+    const nth = (seenInFile.get(base) ?? 0) + 1;
+    seenInFile.set(base, nth);
+    const hash = nth === 1 ? base : `${base}:${nth}`;
     const matchedCategoryId = applyRules(m.merchantRaw, rules, m.amountCents);
     try {
       await db.insert(transactions).values({

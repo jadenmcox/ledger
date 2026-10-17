@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { format } from "date-fns";
 import { parseDollarsToCents } from "@/lib/utils";
+import { recoverAllMergedTransactions } from "@/lib/plaid-sync";
 
 export async function createAccount(form: FormData) {
   const name = String(form.get("name") || "").trim();
@@ -137,4 +138,12 @@ export async function adjustBalance(form: FormData) {
     });
   revalidatePath("/accounts");
   revalidatePath("/dashboard");
+}
+
+// Bring back transactions the old bank sync merged into a same-day,
+// same-amount twin (see recoverMergedTransactions).
+export async function recoverMissingTransactions() {
+  const result = await recoverAllMergedTransactions();
+  revalidatePath("/", "layout");
+  return result;
 }

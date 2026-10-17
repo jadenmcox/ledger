@@ -9,7 +9,13 @@ import { StatStrip } from "@/components/stat-strip";
 import { PaybackPicker, type PickerTx } from "@/components/payback-picker";
 import { formatCents, cn } from "@/lib/utils";
 import { expectedBack, WORK_EXPENSE_CAP_CENTS, type PaybackLinkLike } from "@/lib/paybacks";
-import { linkPayback, matchAllPaybacks, redoWorkMatches, unlinkPayback } from "./actions";
+import {
+  linkPayback,
+  matchAllPaybacks,
+  recoverDepositsAndRematch,
+  redoWorkMatches,
+  unlinkPayback,
+} from "./actions";
 
 export type PaybackView = PickerTx;
 
@@ -65,6 +71,21 @@ export function PaybacksClient({
       );
     });
   };
+  const recover = () =>
+    startTransition(async () => {
+      const r = await recoverDepositsAndRematch();
+      if (!r.ok) {
+        setFlash(r.error);
+        return;
+      }
+      setFlash(
+        (r.restored === 0
+          ? "Checked your banks: no missing deposits. "
+          : `Found ${r.restored} ${r.restored === 1 ? "deposit" : "deposits"} the bank sync had dropped. `) +
+          `Redid the matches: ${r.matched} work ${r.matched === 1 ? "expense" : "expenses"} paired.` +
+          (r.errors.length ? ` Couldn't check: ${r.errors.join("; ")}` : ""),
+      );
+    });
   const OVERDUE_DAYS = 30;
   const overdue = waiting.filter((w) => differenceInCalendarDays(today, w.tx.date) > OVERDUE_DAYS);
   const recent = waiting.filter((w) => differenceInCalendarDays(today, w.tx.date) <= OVERDUE_DAYS);
@@ -175,7 +196,12 @@ export function PaybacksClient({
         <section>
           <SectionTitle
             title="Overdue"
-            hint={`no payment after ${OVERDUE_DAYS}+ days, ${formatCents(overdue.reduce((t, w) => t + w.remaining, 0))} total. Missed on an expense report, or not a work expense?`}
+            hint={`no payment after ${OVERDUE_DAYS}+ days, ${formatCents(overdue.reduce((t, w) => t + w.remaining, 0))} total. Ramp says paid? Check the bank for deposits that didn't come through.`}
+            right={
+              <Button size="sm" variant="outline" onClick={recover} disabled={pending}>
+                {pending ? "Checking…" : "Check the bank"}
+              </Button>
+            }
           />
           <WaitingList rows={overdue} today={today} onPick={setPicking} />
         </section>

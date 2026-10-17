@@ -298,7 +298,13 @@ export async function applyTransactionsDelta(
     // Dedupe: prefer existing Plaid row by transaction_id, otherwise
     // match an existing CSV/manual row by (account, date, amount) — the
     // same hash the CSV importer uses — and upgrade it to plaid source.
-    const existingByExt = await findExistingByExternalId(t.transaction_id);
+    // The same Plaid transaction, or the pending version this posted one
+    // replaces (keeps its category, splits and payback links).
+    const existingByExt =
+      (await findExistingByExternalId(t.transaction_id)) ??
+      (t.pending_transaction_id
+        ? await findExistingByExternalId(t.pending_transaction_id)
+        : undefined);
     if (existingByExt) {
       // Backfill the category if the existing row is still uncategorized —
       // a rule or Plaid PFC hint may now resolve to something.
@@ -323,6 +329,7 @@ export async function applyTransactionsDelta(
           date,
           isPending: !!t.pending,
           categoryId: backfilledCategoryId,
+          externalId: t.transaction_id,
         })
         .where(eq(transactions.id, existingByExt.id));
       continue;
@@ -338,7 +345,11 @@ export async function applyTransactionsDelta(
       cents,
     );
 
-    if (existingByHash) {
+    // A CSV or hand-entered row for the same account, day and amount is this
+    // transaction arriving from the bank: upgrade it. A row that already has
+    // its own Plaid id is a different transaction that happens to match, like
+    // two $14.34 reimbursements paid the same day, so it gets its own row.
+    if (existingByHash && !existingByHash.externalId) {
       if (!existingByHash.categoryId && categoryId) backfilled++;
       await db
         .update(transactions)
@@ -368,7 +379,7 @@ export async function applyTransactionsDelta(
         reimbursable: cents < 0 ? checkReimbursable(merchant, reimbRules, cents) : false,
         source: "plaid",
         externalId: t.transaction_id,
-        dedupeHash: hash,
+        dedupeHash: existingByHash ? `${hash}:${t.transaction_id}` : hash,
         isPending: !!t.pending,
       })
       .onConflictDoNothing();
@@ -525,3 +536,99 @@ export async function syncAllItems(): Promise<SyncItemResult[]> {
 // Silences unused-import warning when nothing else references crypto.
 void crypto;
 void and;
+
+
+// Before the fix above, a second Plaid transaction with the same account, day
+// and amount as one already stored was merged into it and never saved (two
+// $14.34 FieldPulse reimbursements paid on Sep 17 became one). This replays the
+// bank's full history and adds back only those merged-away transactions: an
+// id we don't have, whose account/day/amount row already belongs to another
+// Plaid id. Nothing else changes, rows you deleted stay deleted, and the
+// item's sync cursor is left alone.
+export async function recoverMergedTransactions(itemRowId: number): Promise<{
+  restored: { date: string; amountCents: number; merchant: string }[];
+}> {
+  const [item] = await db
+    .select()
+    .from(plaidItems)
+    .where(eq(plaidItems.id, itemRowId))
+    .limit(1);
+  if (!item) throw new Error("plaid item not found");
+
+  const acctRes = await plaid.accountsGet({ access_token: item.accessToken });
+  const accountMap = new Map<string, number>();
+  for (const a of acctRes.data.accounts) {
+    const [row] = await db
+      .select({ id: accounts.id })
+      .from(accounts)
+      .where(eq(accounts.plaidAccountId, a.account_id))
+      .limit(1);
+    if (row) accountMap.set(a.account_id, row.id);
+  }
+
+  const rules = await getRules();
+  const reimbRules = await getReimbursableRules();
+  const renameRules = await getMerchantRules();
+  const userCategories = await db.select().from(categories);
+  const restored: { date: string; amountCents: number; merchant: string }[] = [];
+
+  let cursor: string | undefined = undefined;
+  let hasMore = true;
+  while (hasMore) {
+    const res = await plaid.transactionsSync({
+      access_token: item.accessToken,
+      cursor,
+      count: 500,
+    });
+    for (const t of res.data.added) {
+      if (t.pending) continue;
+      const accountId = accountMap.get(t.account_id);
+      if (!accountId) continue;
+      if (await findExistingByExternalId(t.transaction_id)) continue;
+      const date = new Date(t.date + "T12:00:00Z");
+      const cents = plaidAmountToCents(t.amount ?? 0, "other");
+      const merchant = t.merchant_name || t.name || "Unknown";
+      const hash = dedupeHash(accountId, date, cents, merchant);
+      const twin = await findExistingByHash(hash);
+      if (!twin || !twin.externalId || twin.accountId !== accountId) continue;
+      await db
+        .insert(transactions)
+        .values({
+          accountId,
+          date,
+          amountCents: cents,
+          merchantRaw: merchant,
+          merchantClean: applyMerchantRules(merchant, renameRules),
+          categoryId: pickCategory(merchant, t.personal_finance_category, rules, userCategories, cents),
+          reimbursable: cents < 0 ? checkReimbursable(merchant, reimbRules, cents) : false,
+          source: "plaid",
+          externalId: t.transaction_id,
+          dedupeHash: `${hash}:${t.transaction_id}`,
+          isPending: false,
+        })
+        .onConflictDoNothing();
+      restored.push({ date: t.date, amountCents: cents, merchant });
+    }
+    cursor = res.data.next_cursor;
+    hasMore = res.data.has_more;
+  }
+  return { restored };
+}
+
+// Recovery across every linked bank. One bank failing doesn't stop the rest.
+export async function recoverAllMergedTransactions(): Promise<{
+  restored: { date: string; amountCents: number; merchant: string }[];
+  errors: string[];
+}> {
+  const items = await db.select().from(plaidItems);
+  const restored: { date: string; amountCents: number; merchant: string }[] = [];
+  const errors: string[] = [];
+  for (const it of items) {
+    try {
+      restored.push(...(await recoverMergedTransactions(it.id)).restored);
+    } catch (e) {
+      errors.push(`${it.institutionName ?? "A bank"}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  return { restored, errors };
+}

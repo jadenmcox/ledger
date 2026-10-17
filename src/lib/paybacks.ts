@@ -266,8 +266,14 @@ export function autoMatches(
       matches.push({ paybackId: p.id, chargeId: best.id, amountCents: Math.min(paid, left) });
     }
   };
-  pass(USUAL_LAG, false, (paid, left) => closeTo(paid, left));
-  pass(LONGEST_LAG, true, (paid, left) => closeTo(paid, left));
+  // Exact cents first, so a $14.60 payback for a Bellagreen lunch never
+  // claims a $14.61 Sweetgreen; a cent or two off only fills what's left.
+  const exact = (paid: number, left: number) => paid === left;
+  const near = (paid: number, left: number) => closeTo(paid, left);
+  pass(USUAL_LAG, false, exact);
+  pass(LONGEST_LAG, true, exact);
+  pass(USUAL_LAG, false, near);
+  pass(LONGEST_LAG, true, near);
   return matches;
 }
 

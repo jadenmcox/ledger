@@ -1,6 +1,7 @@
 "use client";
 
 import { alertDialog, confirmDialog } from "@/components/confirm";
+import { recoverMissingTransactions } from "./actions";
 import { useCallback, useEffect, useState } from "react";
 import {
   usePlaidLink,
@@ -106,6 +107,32 @@ export function PlaidItemsList({ items }: { items: PlaidItemRow[] }) {
     }
   };
 
+  // Transactions the old sync merged into a same-day, same-amount twin.
+  const recover = async () => {
+    setBusy("Checking...");
+    try {
+      const r = await recoverMissingTransactions();
+      const list = r.restored
+        .slice(0, 6)
+        .map((t) => `${t.date} ${t.merchant} ${(t.amountCents / 100).toFixed(2)}`)
+        .join(", ");
+      await alertDialog({
+        title:
+          r.restored.length === 0
+            ? "Nothing was missing"
+            : `Found ${r.restored.length} missing ${r.restored.length === 1 ? "transaction" : "transactions"}`,
+        body:
+          (r.restored.length === 0
+            ? "Every transaction your banks sent is in Budgetly."
+            : `Added back: ${list}${r.restored.length > 6 ? ", and more" : ""}.`) +
+          (r.errors.length ? ` Couldn't check: ${r.errors.join("; ")}` : ""),
+      });
+      router.refresh();
+    } finally {
+      setBusy(null);
+    }
+  };
+
   if (items.length === 0) return null;
 
   return (
@@ -117,15 +144,20 @@ export function PlaidItemsList({ items }: { items: PlaidItemRow[] }) {
             {items.length}
           </span>
         </div>
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={() => sync()}
-          disabled={!!busy}
-        >
-          <RefreshCw className="size-4" strokeWidth={1.5} />
-          Sync all
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button type="button" variant="ghost" onClick={recover} disabled={!!busy}>
+            Find missing
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => sync()}
+            disabled={!!busy}
+          >
+            <RefreshCw className="size-4" strokeWidth={1.5} />
+            Sync all
+          </Button>
+        </div>
       </div>
 
       <Card className="divide-y divide-border">
