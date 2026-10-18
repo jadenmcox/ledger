@@ -223,10 +223,15 @@ const LONGEST_LAG = 90;
 // What a (charge, payment) pairing costs: days between them, with landing
 // early made expensive so a payment never jumps ahead to a lunch charged after
 // it while an older lunch still waits, and very late payments made pricier.
+// The tiny squared term only breaks ties. Identical lunches often have
+// several pairings with the same total lag; squaring prefers the one where no
+// pairing crosses another (earlier lunch, earlier payment), which is the order
+// Ramp pays them in. It never outweighs a whole day of lag.
 function pairCost(lag: number, maxLag = LONGEST_LAG): number {
   if (lag < EARLIEST_LAG || lag > maxLag) return Infinity;
-  if (lag < 0) return 20 + 10 * -lag;
-  return lag <= 30 ? lag : 30 + (lag - 30) * 2;
+  const tie = lag * lag * 1e-6;
+  if (lag < 0) return 20 + 10 * -lag + tie;
+  return (lag <= 30 ? lag : 30 + (lag - 30) * 2) + tie;
 }
 
 // Minimum-cost assignment (Hungarian method) on a square matrix. Returns, for
