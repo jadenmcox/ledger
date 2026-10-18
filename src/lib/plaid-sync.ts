@@ -9,7 +9,7 @@ import {
   type AccountType,
   type Category,
 } from "@/db/schema";
-import { eq, and, gte, inArray } from "drizzle-orm";
+import { eq, and, gte, inArray, isNotNull } from "drizzle-orm";
 import { plaid } from "./plaid";
 import { applyRules, getRules, checkReimbursable, getReimbursableRules } from "./categorize";
 import {
@@ -39,6 +39,19 @@ import type {
   Transaction as PlaidTransaction,
   RemovedTransaction,
 } from "plaid";
+
+// The day you made the purchase. Plaid's `date` is the day the bank posted a
+// charge, usually a day or two after you swiped the card, so a Thursday lunch
+// would show on Friday and disagree with your card statement and with Ramp.
+// `authorized_date` is the purchase day; deposits and older rows may not have
+// one, and then the posted day is the best there is.
+//
+// Plaid gives a plain YYYY-MM-DD. Anchor it to noon UTC so the calendar day
+// survives display in any (esp. US, UTC-negative) timezone. Bare
+// new Date("YYYY-MM-DD") is midnight UTC, which renders as the prior day.
+function purchaseDay(t: Pick<PlaidTransaction, "date" | "authorized_date">): Date {
+  return new Date((t.authorized_date ?? t.date) + "T12:00:00Z");
+}
 
 // Plaid's `personal_finance_category.primary` enum → keywords we look for in
 // the user's own category names. First hit wins. Keeps the mapping decoupled
@@ -282,10 +295,7 @@ export async function applyTransactionsDelta(
   for (const t of added) {
     const accountId = accountMap.get(t.account_id);
     if (!accountId) continue;
-    // Plaid gives a plain YYYY-MM-DD. Anchor to noon UTC so the calendar day
-    // survives display in any (esp. US, UTC-negative) timezone. Bare
-    // new Date("YYYY-MM-DD") is midnight UTC, which renders as the prior day.
-    const date = new Date(t.date + "T12:00:00Z");
+    const date = purchaseDay(t);
     // Account type for sign handling
     const [acct] = await db
       .select()
@@ -390,10 +400,7 @@ export async function applyTransactionsDelta(
   for (const t of modified) {
     const existing = await findExistingByExternalId(t.transaction_id);
     if (!existing) continue;
-    // Plaid gives a plain YYYY-MM-DD. Anchor to noon UTC so the calendar day
-    // survives display in any (esp. US, UTC-negative) timezone. Bare
-    // new Date("YYYY-MM-DD") is midnight UTC, which renders as the prior day.
-    const date = new Date(t.date + "T12:00:00Z");
+    const date = purchaseDay(t);
     const [acct] = await db
       .select()
       .from(accounts)
@@ -585,7 +592,7 @@ export async function recoverMergedTransactions(itemRowId: number): Promise<{
       const accountId = accountMap.get(t.account_id);
       if (!accountId) continue;
       if (await findExistingByExternalId(t.transaction_id)) continue;
-      const date = new Date(t.date + "T12:00:00Z");
+      const date = purchaseDay(t);
       const cents = plaidAmountToCents(t.amount ?? 0, "other");
       const merchant = t.merchant_name || t.name || "Unknown";
       const hash = dedupeHash(accountId, date, cents, merchant);
@@ -633,6 +640,80 @@ export async function recoverAllMergedTransactions(): Promise<{
     }
   }
   return { restored, errors };
+}
+
+export type DateFix = {
+  id: number;
+  merchant: string;
+  amountCents: number;
+  from: string;
+  to: string;
+};
+
+// Rows saved before Budgetly used purchase dates carry the day the bank
+// posted them. This replays each bank's history and moves every stored bank
+// row onto its purchase day (see purchaseDay). Only the date changes. With
+// `apply` false it just lists what would move.
+export async function realignPurchaseDates(
+  apply: boolean,
+): Promise<{ checked: number; moved: DateFix[] }> {
+  const stored = await db
+    .select({
+      id: transactions.id,
+      externalId: transactions.externalId,
+      date: transactions.date,
+      amountCents: transactions.amountCents,
+      merchantRaw: transactions.merchantRaw,
+      merchantClean: transactions.merchantClean,
+    })
+    .from(transactions)
+    .where(isNotNull(transactions.externalId));
+  const byExternalId = new Map(stored.map((r) => [r.externalId!, r]));
+  const dayOf = (d: Date) => d.toISOString().slice(0, 10);
+
+  const items = await db.select().from(plaidItems);
+  const moved: DateFix[] = [];
+  const updates: Date[] = [];
+  let checked = 0;
+  for (const item of items) {
+    let cursor: string | undefined = undefined;
+    let hasMore = true;
+    while (hasMore) {
+      const res = await plaid.transactionsSync({
+        access_token: item.accessToken,
+        cursor,
+        count: 500,
+      });
+      for (const t of res.data.added) {
+        const row = byExternalId.get(t.transaction_id);
+        if (!row) continue;
+        checked++;
+        const day = purchaseDay(t);
+        if (dayOf(row.date) === dayOf(day)) continue;
+        moved.push({
+          id: row.id,
+          merchant: row.merchantClean || row.merchantRaw,
+          amountCents: row.amountCents,
+          from: dayOf(row.date),
+          to: dayOf(day),
+        });
+        updates.push(day);
+      }
+      cursor = res.data.next_cursor;
+      hasMore = res.data.has_more;
+    }
+  }
+
+  if (apply) {
+    const statements = moved.map((m, i) =>
+      db.update(transactions).set({ date: updates[i] }).where(eq(transactions.id, m.id)),
+    );
+    for (let i = 0; i < statements.length; i += 100) {
+      const chunk = statements.slice(i, i + 100);
+      if (chunk.length) await db.batch(chunk as [typeof chunk[0], ...typeof chunk]);
+    }
+  }
+  return { checked, moved };
 }
 
 export type BankGap = {
@@ -700,7 +781,7 @@ export async function findBankGaps(): Promise<{
         const cents = plaidAmountToCents(t.amount ?? 0, "other");
         let why = "no account in Budgetly";
         if (accountId) {
-          const date = new Date(t.date + "T12:00:00Z");
+          const date = purchaseDay(t);
           const twin = await findExistingByHash(dedupeHash(accountId, date, cents, ""));
           why = twin
             ? `same-day twin #${twin.id} (${twin.externalId ? "bank id" : "no bank id"}, ${twin.source})`

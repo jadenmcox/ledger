@@ -207,10 +207,10 @@ export type AutoMatch = {
   amountCents: number;
 };
 
-// Ramp pays a work lunch a few days after it, and the card charge posts a day
-// or two after the lunch. So a payment almost always lands on or after the
-// charge's date; a day or so before can happen (a lunch on Friday, paid and
-// posted on Monday). Since August every payment landed within two weeks of its
+// Ramp pays a work lunch a few days after it, so a payment almost always lands
+// on or after the lunch. A day or so before can still show up: rows synced
+// before Budgetly used purchase dates carry the card's posted day, which is
+// often a day after the lunch and sometimes after Ramp paid. Since August every payment landed within two weeks of its
 // charge, so matching stays inside three weeks. That keeps a deposit that
 // never reached the bank feed from shuffling every later pairing: the
 // shortfall stays where it happened instead of sliding onto the newest lunch.
