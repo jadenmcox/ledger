@@ -632,3 +632,67 @@ export async function recoverAllMergedTransactions(): Promise<{
   }
   return { restored, errors };
 }
+
+export type BankGap = {
+  bank: string;
+  date: string;
+  amountCents: number;
+  name: string;
+  why: string;
+};
+
+// Read only. Replays each bank's full history and lists every posted
+// transaction the bank has that Budgetly doesn't, with a guess at why (a
+// same-day twin, or a row whose stored hash no longer matches its date).
+// Nothing is written.
+export async function findBankGaps(): Promise<{ checked: number; gaps: BankGap[] }> {
+  const items = await db.select().from(plaidItems);
+  const gaps: BankGap[] = [];
+  let checked = 0;
+  for (const item of items) {
+    const acctRes = await plaid.accountsGet({ access_token: item.accessToken });
+    const accountMap = new Map<string, number>();
+    for (const a of acctRes.data.accounts) {
+      const [row] = await db
+        .select({ id: accounts.id })
+        .from(accounts)
+        .where(eq(accounts.plaidAccountId, a.account_id))
+        .limit(1);
+      if (row) accountMap.set(a.account_id, row.id);
+    }
+    let cursor: string | undefined = undefined;
+    let hasMore = true;
+    while (hasMore) {
+      const res = await plaid.transactionsSync({
+        access_token: item.accessToken,
+        cursor,
+        count: 500,
+      });
+      for (const t of res.data.added) {
+        if (t.pending) continue;
+        checked++;
+        if (await findExistingByExternalId(t.transaction_id)) continue;
+        const accountId = accountMap.get(t.account_id);
+        const cents = plaidAmountToCents(t.amount ?? 0, "other");
+        let why = "no account in Budgetly";
+        if (accountId) {
+          const date = new Date(t.date + "T12:00:00Z");
+          const twin = await findExistingByHash(dedupeHash(accountId, date, cents, ""));
+          why = twin
+            ? `same-day twin #${twin.id} (${twin.externalId ? "bank id" : "no bank id"}, ${twin.source})`
+            : "no same-day twin";
+        }
+        gaps.push({
+          bank: item.institutionName ?? "bank",
+          date: t.date,
+          amountCents: cents,
+          name: `${t.merchant_name ?? ""} / ${t.name ?? ""}`,
+          why,
+        });
+      }
+      cursor = res.data.next_cursor;
+      hasMore = res.data.has_more;
+    }
+  }
+  return { checked, gaps };
+}
