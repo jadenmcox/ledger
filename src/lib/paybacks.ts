@@ -274,8 +274,8 @@ function hungarian(cost: number[][]): number[] {
 
 // Pairs work expenses with the payments that paid them back. For each amount
 // (what's expected back, so a $15.43 lunch looks for $15.00), it finds the
-// assignment that pays back as many lunches as possible and, among those,
-// keeps each payment closest after its own lunch. Solving it as a whole,
+// assignment that pays back as many lunches as possible, pays the oldest
+// lunches first, and keeps each payment closest after its own lunch. Solving it as a whole,
 // rather than grabbing the nearest pair first, means a run of identical
 // $14.34 lunches lines up with its deposits, a lunch still awaiting approval
 // is the one left waiting, and a lunch that was never submitted doesn't steal
@@ -297,10 +297,20 @@ export function autoMatches(
   const usedPayback = new Set<number>();
   const matches: AutoMatch[] = [];
 
-  const UNPAID = 1000; // cost of leaving a charge unpaired
+  // Leaving a charge unpaired costs more the older it is. Ramp pays lunches in
+  // the order they were submitted, so when there are fewer payments than
+  // lunches the ones left waiting should be the newest (still awaiting
+  // approval), not an older lunch that a closer-dated payment skipped over.
+  // The age weight (3 per day) outweighs a day of payment lag (1), which is
+  // what makes "pay the oldest first" win over "pay the nearest".
+  const UNPAID = 1000;
+  const AGE_WEIGHT = 3;
 
   const solve = (cs: PaybackTx[], ps: PaybackTx[]) => {
     if (cs.length === 0 || ps.length === 0) return;
+    const newest = Math.max(...cs.map((c) => c.date.getTime()));
+    const unpaidCost = (c: PaybackTx) =>
+      UNPAID + AGE_WEIGHT * differenceInCalendarDays(new Date(newest), c.date);
     const n = cs.length + ps.length;
     const cost: number[][] = [];
     for (let i = 0; i < n; i++) {
@@ -314,7 +324,7 @@ export function autoMatches(
             : pairCost(differenceInCalendarDays(p.date, c.date));
           row[j] = Number.isFinite(pc) ? pc : 1e9;
         } else if (i < cs.length) {
-          row[j] = UNPAID; // charge stays unpaired
+          row[j] = unpaidCost(cs[i]); // charge stays unpaired
         } else {
           row[j] = 0; // a payment that isn't for any of these lunches
         }

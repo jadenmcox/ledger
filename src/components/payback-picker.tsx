@@ -17,7 +17,7 @@ import {
 import { linkPayback, unlinkPayback } from "@/app/(app)/paybacks/actions";
 import { setReimbursable } from "@/app/(app)/transactions/actions";
 
-export type PickerTx = PaybackTx & { accountName?: string | null };
+export type PickerTx = PaybackTx & { accountName?: string | null; isPending?: boolean };
 
 const nameOf = (t: PaybackTx) => t.merchantClean || t.merchantRaw;
 

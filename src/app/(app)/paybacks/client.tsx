@@ -219,6 +219,7 @@ function WaitingList({
               <div className="mt-0.5 text-[11px] text-foreground-faint">
                 {format(tx.date, "MMM d")} ·{" "}
                 {days === 0 ? "today" : `${days} ${days === 1 ? "day" : "days"} ago`}
+                {tx.isPending && " · pending at the bank"}
               </div>
             </div>
             <div className="shrink-0 text-right">

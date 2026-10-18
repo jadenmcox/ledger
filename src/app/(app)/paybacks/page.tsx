@@ -32,6 +32,7 @@ export default async function PaybacksPage() {
       isTransfer: t.isTransfer,
       reimbursable: t.reimbursable,
       accountName: acctName.get(t.accountId) ?? null,
+      isPending: t.isPending,
     };
   };
 

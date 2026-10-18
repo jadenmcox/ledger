@@ -717,6 +717,7 @@ function Row({
           <span className="text-[15px] md:text-sm tracking-tight truncate font-medium md:font-normal">
             {tx.merchantClean || tx.merchantRaw}
           </span>
+          {tx.isPending && <Pill>pending</Pill>}
           {tx.isTransfer && <Pill>transfer</Pill>}
           {tx.reimbursable && <Pill tone="savings">work expense</Pill>}
           {isCredit && <Pill tone="income">credit</Pill>}
