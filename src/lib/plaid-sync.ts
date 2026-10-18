@@ -9,7 +9,7 @@ import {
   type AccountType,
   type Category,
 } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, gte, inArray } from "drizzle-orm";
 import { plaid } from "./plaid";
 import { applyRules, getRules, checkReimbursable, getReimbursableRules } from "./categorize";
 import {
@@ -590,7 +590,9 @@ export async function recoverMergedTransactions(itemRowId: number): Promise<{
       const merchant = t.merchant_name || t.name || "Unknown";
       const hash = dedupeHash(accountId, date, cents, merchant);
       const twin = await findExistingByHash(hash);
-      if (!twin || !twin.externalId || twin.accountId !== accountId) continue;
+      // A pending twin is this same transaction before it posted (the next
+      // sync swaps it over), not a second one that got merged away.
+      if (!twin || !twin.externalId || twin.isPending || twin.accountId !== accountId) continue;
       await db
         .insert(transactions)
         .values({
@@ -641,13 +643,31 @@ export type BankGap = {
   why: string;
 };
 
+export type BankExtra = {
+  id: number;
+  date: string;
+  amountCents: number;
+  merchant: string;
+  isPending: boolean;
+  externalId: string;
+};
+
 // Read only. Replays each bank's full history and lists every posted
 // transaction the bank has that Budgetly doesn't, with a guess at why (a
 // same-day twin, or a row whose stored hash no longer matches its date).
 // Nothing is written.
-export async function findBankGaps(): Promise<{ checked: number; gaps: BankGap[] }> {
+//
+// Also lists the reverse: rows Budgetly got from the bank whose bank id the
+// bank no longer has (within the history it still returns), like a pending
+// charge that posted under a new id but stayed behind as a second copy.
+export async function findBankGaps(): Promise<{
+  checked: number;
+  gaps: BankGap[];
+  extras: BankExtra[];
+}> {
   const items = await db.select().from(plaidItems);
   const gaps: BankGap[] = [];
+  const extras: BankExtra[] = [];
   let checked = 0;
   for (const item of items) {
     const acctRes = await plaid.accountsGet({ access_token: item.accessToken });
@@ -660,6 +680,8 @@ export async function findBankGaps(): Promise<{ checked: number; gaps: BankGap[]
         .limit(1);
       if (row) accountMap.set(a.account_id, row.id);
     }
+    const bankIds = new Set<string>();
+    let earliest = "9999-12-31";
     let cursor: string | undefined = undefined;
     let hasMore = true;
     while (hasMore) {
@@ -669,6 +691,8 @@ export async function findBankGaps(): Promise<{ checked: number; gaps: BankGap[]
         count: 500,
       });
       for (const t of res.data.added) {
+        bankIds.add(t.transaction_id);
+        if (t.date < earliest) earliest = t.date;
         if (t.pending) continue;
         checked++;
         if (await findExistingByExternalId(t.transaction_id)) continue;
@@ -693,6 +717,29 @@ export async function findBankGaps(): Promise<{ checked: number; gaps: BankGap[]
       cursor = res.data.next_cursor;
       hasMore = res.data.has_more;
     }
+
+    const accountIds = [...accountMap.values()];
+    if (accountIds.length === 0) continue;
+    const stored = await db
+      .select()
+      .from(transactions)
+      .where(
+        and(
+          inArray(transactions.accountId, accountIds),
+          gte(transactions.date, new Date(earliest + "T00:00:00Z")),
+        ),
+      );
+    for (const r of stored) {
+      if (!r.externalId || bankIds.has(r.externalId)) continue;
+      extras.push({
+        id: r.id,
+        date: r.date.toISOString().slice(0, 10),
+        amountCents: r.amountCents,
+        merchant: r.merchantClean || r.merchantRaw,
+        isPending: r.isPending,
+        externalId: r.externalId,
+      });
+    }
   }
-  return { checked, gaps };
+  return { checked, gaps, extras };
 }

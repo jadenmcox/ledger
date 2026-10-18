@@ -210,15 +210,21 @@ export type AutoMatch = {
 // Ramp pays a work lunch a few days after it, and the card charge posts a day
 // or two after the lunch. So a payment almost always lands on or after the
 // charge's date; a day or so before can happen (a lunch on Friday, paid and
-// posted on Monday). The longer reach covers the odd one paid weeks later.
+// posted on Monday). Since August every payment landed within two weeks of its
+// charge, so matching stays inside three weeks. That keeps a deposit that
+// never reached the bank feed from shuffling every later pairing: the
+// shortfall stays where it happened instead of sliding onto the newest lunch.
+// Only what's left over gets the longer reach (the odd lunch paid two months
+// late).
 const EARLIEST_LAG = -3;
+const USUAL_LAG = 21;
 const LONGEST_LAG = 90;
 
 // What a (charge, payment) pairing costs: days between them, with landing
 // early made expensive so a payment never jumps ahead to a lunch charged after
 // it while an older lunch still waits, and very late payments made pricier.
-function pairCost(lag: number): number {
-  if (lag < EARLIEST_LAG || lag > LONGEST_LAG) return Infinity;
+function pairCost(lag: number, maxLag = LONGEST_LAG): number {
+  if (lag < EARLIEST_LAG || lag > maxLag) return Infinity;
   if (lag < 0) return 20 + 10 * -lag;
   return lag <= 30 ? lag : 30 + (lag - 30) * 2;
 }
@@ -297,20 +303,28 @@ export function autoMatches(
   const usedPayback = new Set<number>();
   const matches: AutoMatch[] = [];
 
-  // Leaving a charge unpaired costs more the older it is. Ramp pays lunches in
-  // the order they were submitted, so when there are fewer payments than
-  // lunches the ones left waiting should be the newest (still awaiting
-  // approval), not an older lunch that a closer-dated payment skipped over.
-  // The age weight (3 per day) outweighs a day of payment lag (1), which is
-  // what makes "pay the oldest first" win over "pay the nearest".
+  // Among the last three weeks of lunches, leaving one unpaired costs more the
+  // older it is. Ramp pays lunches in the order they were submitted, so when
+  // there are fewer payments than recent lunches the ones left waiting should
+  // be the newest (still awaiting approval), not an older lunch that a
+  // closer-dated payment skipped over. The age weight (3 per day) outweighs a
+  // day of payment lag (1), which is what makes "pay the oldest first" win
+  // over "pay the nearest" there.
+  //
+  // Past three weeks every lunch costs the same to leave unpaired, so the
+  // nearest pairing wins. A deposit that never reached the bank feed back in
+  // May then leaves a May lunch unpaired, instead of every later deposit
+  // shifting one lunch older until the gap surfaces on a lunch from last
+  // month that Ramp has long since paid.
   const UNPAID = 1000;
   const AGE_WEIGHT = 3;
+  const latest = Math.max(...txns.map((t) => t.date.getTime()));
+  const unpaidCost = (c: PaybackTx) =>
+    UNPAID +
+    AGE_WEIGHT * Math.min(USUAL_LAG, differenceInCalendarDays(new Date(latest), c.date));
 
-  const solve = (cs: PaybackTx[], ps: PaybackTx[]) => {
+  const solve = (cs: PaybackTx[], ps: PaybackTx[], maxLag: number) => {
     if (cs.length === 0 || ps.length === 0) return;
-    const newest = Math.max(...cs.map((c) => c.date.getTime()));
-    const unpaidCost = (c: PaybackTx) =>
-      UNPAID + AGE_WEIGHT * differenceInCalendarDays(new Date(newest), c.date);
     const n = cs.length + ps.length;
     const cost: number[][] = [];
     for (let i = 0; i < n; i++) {
@@ -321,7 +335,7 @@ export function autoMatches(
           const p = ps[j];
           const pc = sameMerchant(p, c)
             ? Infinity
-            : pairCost(differenceInCalendarDays(p.date, c.date));
+            : pairCost(differenceInCalendarDays(p.date, c.date), maxLag);
           row[j] = Number.isFinite(pc) ? pc : 1e9;
         } else if (i < cs.length) {
           row[j] = unpaidCost(cs[i]); // charge stays unpaired
@@ -349,16 +363,24 @@ export function autoMatches(
     }
   };
 
-  // Exact amounts, one amount at a time.
-  const byAmount = new Map<number, PaybackTx[]>();
-  for (const c of charges) {
-    const k = owed.get(c.id)!;
-    const arr = byAmount.get(k) ?? [];
-    arr.push(c);
-    byAmount.set(k, arr);
-  }
-  for (const [amount, cs] of byAmount) {
-    solve(cs, inflows.filter((p) => !usedPayback.has(p.id) && state.paybackRemaining(p) === amount));
+  // Exact amounts, one amount at a time: within three weeks first, then the
+  // longer reach for whatever is still unpaired.
+  for (const maxLag of [USUAL_LAG, LONGEST_LAG]) {
+    const byAmount = new Map<number, PaybackTx[]>();
+    for (const c of charges) {
+      const k = owed.get(c.id);
+      if (k == null) continue;
+      const arr = byAmount.get(k) ?? [];
+      arr.push(c);
+      byAmount.set(k, arr);
+    }
+    for (const [amount, cs] of byAmount) {
+      solve(
+        cs,
+        inflows.filter((p) => !usedPayback.has(p.id) && state.paybackRemaining(p) === amount),
+        maxLag,
+      );
+    }
   }
 
   // Near misses for whatever is left: nearest-dated pair first.
