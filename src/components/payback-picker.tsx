@@ -43,19 +43,25 @@ export function PaybackPicker({
   const state = useMemo(() => paybackState(links), [links]);
   const byId = useMemo(() => new Map(pool.map((t) => [t.id, t])), [pool]);
 
+  // Work expenses pair with their deposits automatically, so a payment can
+  // only be tied by hand to an ordinary charge (a friend's share of parking).
+  const handPool = useMemo(() => pool.filter((t) => !(t.reimbursable && t.amountCents < 0)), [pool]);
+  const isWorkCharge = !isPayback && base.reimbursable;
   const suggestions = useMemo(
     () =>
-      isPayback
-        ? chargeCandidates(base, pool, state, 5)
-        : paybackCandidates(base, pool, state, 5),
-    [base, pool, state, isPayback],
+      isWorkCharge
+        ? []
+        : isPayback
+          ? chargeCandidates(base, handPool, state, 5)
+          : paybackCandidates(base, handPool, state, 5),
+    [base, handPool, state, isPayback, isWorkCharge],
   );
   const suggestedIds = new Set(suggestions.map((s) => s.tx.id));
 
   // Everything else on the other side within ~2.5 months, for searching.
   const others = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return pool
+    return handPool
       .filter((t) => {
         if (t.id === base.id || suggestedIds.has(t.id)) return false;
         if (isPayback ? t.amountCents >= 0 : t.amountCents <= 0) return false;
@@ -73,7 +79,7 @@ export function PaybackPicker({
       )
       .slice(0, 30);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pool, base, query, state, isPayback, suggestions]);
+  }, [handPool, base, query, state, isPayback, suggestions]);
 
   const existing = links.filter((l) =>
     isPayback ? l.paybackId === base.id : l.chargeId === base.id,
@@ -127,7 +133,9 @@ export function PaybackPicker({
         </span>
       </div>
       <p className="mb-4 text-[12px] text-foreground-muted">
-        {isPayback
+        {isWorkCharge
+          ? "Work expenses pair with their FieldPulse deposit on their own as your bank syncs. If this one was never submitted or wasn't a work lunch, count it as normal spending below."
+          : isPayback
           ? "Pick the charge this money paid you back for. It won't count as income, and it comes off that charge's category."
           : "Pick the payment that paid you back. It won't count as income, and this charge only counts for your share."}
       </p>
@@ -136,6 +144,8 @@ export function PaybackPicker({
         <div className="mb-4 space-y-1.5">
           {existing.map((l) => {
             const other = byId.get(isPayback ? l.chargeId : l.paybackId);
+            const charge = isPayback ? other : base;
+            const automatic = !!charge?.reimbursable;
             return (
               <div
                 key={l.id}
@@ -146,20 +156,22 @@ export function PaybackPicker({
                   <span className="font-medium">{other ? nameOf(other) : "a transaction"}</span>
                 </div>
                 <span className="mono tabular shrink-0">{formatCents(l.amountCents)}</span>
-                <button
-                  onClick={() => startTransition(() => unlinkPayback(l.id))}
-                  aria-label="Remove link"
-                  className="grid size-7 shrink-0 place-items-center rounded-full text-foreground-faint hover:bg-surface hover:text-foreground"
-                >
-                  <X className="size-3.5" strokeWidth={2} />
-                </button>
+                {!automatic && (
+                  <button
+                    onClick={() => startTransition(() => unlinkPayback(l.id))}
+                    aria-label="Remove link"
+                    className="grid size-7 shrink-0 place-items-center rounded-full text-foreground-faint hover:bg-surface hover:text-foreground"
+                  >
+                    <X className="size-3.5" strokeWidth={2} />
+                  </button>
+                )}
               </div>
             );
           })}
         </div>
       )}
 
-      {baseLeft <= 0 ? (
+      {isWorkCharge ? null : baseLeft <= 0 ? (
         <p className="rounded-xl bg-surface-2 px-3 py-3 text-sm text-foreground-muted">
           {isPayback ? "All of this payment is linked." : "This charge is fully paid back."}
         </p>

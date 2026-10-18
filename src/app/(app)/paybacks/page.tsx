@@ -83,15 +83,9 @@ export default async function PaybacksPage() {
           owedCents={owed.owedCents}
           backLast90={backLast90}
           waiting={owed.waiting.map((w) => ({ tx: view(w.tx.id)!, remaining: w.remaining }))}
-          ready={owed.readyToMatch.map((m) => ({
-            charge: view(m.chargeId)!,
-            payback: view(m.paybackId)!,
-            amountCents: m.amountCents,
-          }))}
           settled={settled}
           loose={loose}
           pool={pool}
-          hasWorkMatches={links.some((l) => byId.get(l.chargeId)?.reimbursable)}
           links={links.map((l) => ({
             id: l.id,
             paybackId: l.paybackId,

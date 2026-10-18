@@ -213,20 +213,20 @@ export default async function DashboardPage({
       />,
     );
   }
-  if (owed.waiting.length > 0 || owed.readyToMatch.length > 0) {
+  // Lunches waiting a few days for FieldPulse are normal; only ones that have
+  // gone a month without a deposit need a look.
+  const overdue = owed.waiting.filter((w) => now.getTime() - w.tx.date.getTime() > 30 * 86_400_000);
+  if (overdue.length > 0) {
+    const overdueCents = overdue.reduce((sum, w) => sum + w.remaining, 0);
     attention.push(
       <AttentionRow
         key="owed"
         href="/paybacks"
         icon={<HandCoins className="size-4" strokeWidth={2} />}
         tone="blue"
-        title={`${formatCents(owed.owedCents)} owed to you`}
-        body={
-          owed.readyToMatch.length > 0
-            ? `Found ${owed.readyToMatch.length} ${owed.readyToMatch.length === 1 ? "payment that pays" : "payments that pay"} it back. Tap to match.`
-            : `${owed.waiting.length} work ${owed.waiting.length === 1 ? "expense is" : "expenses are"} waiting to be paid back.`
-        }
-        cta={owed.readyToMatch.length > 0 ? "Match" : "Review"}
+        title={`${overdue.length} work ${overdue.length === 1 ? "expense hasn't" : "expenses haven't"} been paid back`}
+        body={`${formatCents(overdueCents)} with no FieldPulse deposit after a month.`}
+        cta="Review"
       />,
     );
   }

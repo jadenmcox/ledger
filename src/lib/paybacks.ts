@@ -207,19 +207,23 @@ export type AutoMatch = {
   amountCents: number;
 };
 
-// How long after a work expense its reimbursement usually lands. Matching
-// prefers this window and only reaches further for a payment nothing nearer
-// could explain (a one-of-a-kind amount, like the only $14.18 lunch).
+// Ramp pays a work lunch within days, often the day after the lunch, which can
+// be before the card charge has even posted. So a payment may land a few days
+// before the charge's date. It usually lands within a couple of weeks; the
+// longer reach is only for an amount nothing nearer explains.
+const EARLIEST_LAG = -4;
 const USUAL_LAG = 30;
 const LONGEST_LAG = 90;
 
-// Confident matches for reimbursable work expenses, in two passes. "Amount"
-// is what's expected back, so a $15.43 lunch matches a $15.00 payment.
-//   1. landing 0 to 30 days after the charge, oldest charge first (an
-//      expense report covers everything since the last one);
-//   2. up to 90 days, nearest charge first, for leftovers.
-// Each payment is used once, payments are taken oldest first, and a same-
-// store refund is never mistaken for a reimbursement.
+// Work expenses paired with the payments that paid them back. Every possible
+// pair (same expected amount, payment from 4 days before to 30 days after the
+// charge) is ranked by how close the dates are, and the closest pairs are
+// taken first, each payment and charge used once. Closest-first keeps a run
+// of identical $14.34 lunches lined up with their own deposits, and leaves a
+// charge that was never submitted (a weekend Cava) unpaired instead of letting
+// it steal the next deposit. Exact cents beat a cent-off near miss, and a
+// same-store refund is never mistaken for a reimbursement. "Amount" is what's
+// expected back, so a $15.43 lunch pairs with a $15.00 payment.
 export function autoMatches(
   txns: readonly PaybackTx[],
   state: PaybackState,
@@ -231,49 +235,50 @@ export function autoMatches(
       if (left > 2) owed.set(t.id, left);
     }
   }
-  const charges = txns
-    .filter((t) => owed.has(t.id))
-    .sort((a, b) => a.date.getTime() - b.date.getTime());
-  const inflows = txns
-    .filter((t) => t.amountCents > 0 && state.paybackRemaining(t) > 0)
-    .sort((a, b) => a.date.getTime() - b.date.getTime());
+  const charges = txns.filter((t) => owed.has(t.id));
+  const inflows = txns.filter((t) => t.amountCents > 0 && state.paybackRemaining(t) > 0);
   const usedPayback = new Set<number>();
   const matches: AutoMatch[] = [];
 
-  const pass = (
-    maxLag: number,
-    nearestFirst: boolean,
-    fits: (paid: number, charged: number) => boolean,
-  ) => {
+  const pass = (maxLag: number, fits: (paid: number, owedCents: number) => boolean) => {
+    const pairs: { p: PaybackTx; c: PaybackTx; gap: number }[] = [];
     for (const p of inflows) {
       if (usedPayback.has(p.id)) continue;
       const paid = state.paybackRemaining(p);
-      let best: PaybackTx | null = null;
       for (const c of charges) {
         const left = owed.get(c.id);
-        if (left == null) continue;
+        if (left == null || !fits(paid, left)) continue;
         const lag = differenceInCalendarDays(p.date, c.date);
-        if (lag < 0 || lag > maxLag) continue;
-        if (!fits(paid, left) || sameMerchant(p, c)) continue;
-        // charges are oldest first: keep the first hit, or the last for nearest
-        if (!best || nearestFirst) best = c;
-        if (!nearestFirst) break;
+        if (lag < EARLIEST_LAG || lag > maxLag) continue;
+        if (sameMerchant(p, c)) continue;
+        pairs.push({ p, c, gap: Math.abs(lag) });
       }
-      if (!best) continue;
-      const left = owed.get(best.id)!;
+    }
+    pairs.sort(
+      (a, b) =>
+        a.gap - b.gap ||
+        a.c.date.getTime() - b.c.date.getTime() ||
+        a.p.date.getTime() - b.p.date.getTime() ||
+        a.p.id - b.p.id,
+    );
+    for (const { p, c } of pairs) {
+      const left = owed.get(c.id);
+      if (left == null || usedPayback.has(p.id)) continue;
       usedPayback.add(p.id);
-      owed.delete(best.id);
-      matches.push({ paybackId: p.id, chargeId: best.id, amountCents: Math.min(paid, left) });
+      owed.delete(c.id);
+      matches.push({
+        paybackId: p.id,
+        chargeId: c.id,
+        amountCents: Math.min(state.paybackRemaining(p), left),
+      });
     }
   };
-  // Exact cents first, so a $14.60 payback for a Bellagreen lunch never
-  // claims a $14.61 Sweetgreen; a cent or two off only fills what's left.
   const exact = (paid: number, left: number) => paid === left;
   const near = (paid: number, left: number) => closeTo(paid, left);
-  pass(USUAL_LAG, false, exact);
-  pass(LONGEST_LAG, true, exact);
-  pass(USUAL_LAG, false, near);
-  pass(LONGEST_LAG, true, near);
+  pass(USUAL_LAG, exact);
+  pass(LONGEST_LAG, exact);
+  pass(USUAL_LAG, near);
+  pass(LONGEST_LAG, near);
   return matches;
 }
 
@@ -292,8 +297,6 @@ export type OwedSummary = {
   // Work expenses with money still owed, oldest first.
   waiting: { tx: PaybackTx; remaining: number }[];
   owedCents: number;
-  // Confident exact-amount matches ready to settle in one tap.
-  readyToMatch: AutoMatch[];
 };
 
 // Everything outstanding across all time (capped to the last ~6 months so a
@@ -318,6 +321,5 @@ export function owedSummary(
   return {
     waiting,
     owedCents: waiting.reduce((s, w) => s + w.remaining, 0),
-    readyToMatch: autoMatches(txns, state),
   };
 }

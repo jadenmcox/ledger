@@ -1,21 +1,14 @@
 "use client";
 
-import { confirmDialog } from "@/components/confirm";
 import { useState, useTransition } from "react";
 import { differenceInCalendarDays, format } from "date-fns";
-import { ArrowDown, Check, ChevronRight, HandCoins } from "lucide-react";
-import { Button, Card } from "@/components/ui";
+import { ChevronRight, HandCoins, Sparkles } from "lucide-react";
+import { Card } from "@/components/ui";
 import { StatStrip } from "@/components/stat-strip";
 import { PaybackPicker, type PickerTx } from "@/components/payback-picker";
 import { formatCents, cn } from "@/lib/utils";
 import { expectedBack, WORK_EXPENSE_CAP_CENTS, type PaybackLinkLike } from "@/lib/paybacks";
-import {
-  linkPayback,
-  matchAllPaybacks,
-  recoverDepositsAndRematch,
-  redoWorkMatches,
-  unlinkPayback,
-} from "./actions";
+import { unlinkPayback } from "./actions";
 
 export type PaybackView = PickerTx;
 
@@ -25,18 +18,14 @@ export function PaybacksClient({
   owedCents,
   backLast90,
   waiting,
-  ready,
   settled,
   loose,
   pool,
   links,
-  hasWorkMatches,
 }: {
-  hasWorkMatches: boolean;
   owedCents: number;
   backLast90: number;
   waiting: { tx: PaybackView; remaining: number }[];
-  ready: { charge: PaybackView; payback: PaybackView; amountCents: number }[];
   settled: {
     charge: PaybackView;
     paybacks: { linkId: number; payback: PaybackView; amountCents: number }[];
@@ -47,55 +36,11 @@ export function PaybacksClient({
 }) {
   const [pending, startTransition] = useTransition();
   const [picking, setPicking] = useState<PaybackView | null>(null);
-  const [flash, setFlash] = useState<string | null>(null);
   const today = new Date();
-
-  const matchAll = () =>
-    startTransition(async () => {
-      const r = await matchAllPaybacks();
-      setFlash(r.ok ? `Matched ${r.matched}.` : r.error);
-    });
-  const redo = async () => {
-    const ok = await confirmDialog({
-      title: "Redo every work expense match?",
-      body: "Pairings are cleared and made again, closest dates first. Paybacks from friends that you linked by hand stay as they are.",
-      confirmLabel: "Redo matches",
-    });
-    if (!ok) return;
-    startTransition(async () => {
-      const r = await redoWorkMatches();
-      setFlash(
-        r.ok
-          ? `Redid the matches: ${r.matched} work ${r.matched === 1 ? "expense" : "expenses"} paired with a payment.`
-          : r.error,
-      );
-    });
-  };
-  const recover = () =>
-    startTransition(async () => {
-      const r = await recoverDepositsAndRematch();
-      if (!r.ok) {
-        setFlash(r.error);
-        return;
-      }
-      setFlash(
-        (r.restored === 0
-          ? "Checked your banks: no missing deposits. "
-          : `Found ${r.restored} ${r.restored === 1 ? "deposit" : "deposits"} the bank sync had dropped. `) +
-          `Redid the matches: ${r.matched} work ${r.matched === 1 ? "expense" : "expenses"} paired.` +
-          (r.errors.length ? ` Couldn't check: ${r.errors.join("; ")}` : ""),
-      );
-    });
   const OVERDUE_DAYS = 30;
   const overdue = waiting.filter((w) => differenceInCalendarDays(today, w.tx.date) > OVERDUE_DAYS);
   const recent = waiting.filter((w) => differenceInCalendarDays(today, w.tx.date) <= OVERDUE_DAYS);
-  const matchOne = (paybackId: number, chargeId: number) =>
-    startTransition(async () => {
-      const r = await linkPayback(paybackId, chargeId);
-      if (!r.ok) setFlash(r.error);
-    });
-
-  const nothing = waiting.length === 0 && ready.length === 0 && settled.length === 0 && loose.length === 0;
+  const nothing = waiting.length === 0 && settled.length === 0 && loose.length === 0;
 
   return (
     <div className="space-y-9">
@@ -119,20 +64,13 @@ export function PaybacksClient({
         ]}
       />
 
-      {hasWorkMatches && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-dashed border-border px-4 py-3">
-          <span className="text-[12px] text-foreground-muted">
-            Pairings look off? Redo them all, closest dates first.
-          </span>
-          <Button size="sm" variant="outline" onClick={redo} disabled={pending}>
-            {pending ? "Working…" : "Redo matches"}
-          </Button>
-        </div>
-      )}
-
-      {flash && (
-        <div className="rounded-xl bg-surface px-4 py-3 text-sm text-foreground-muted">{flash}</div>
-      )}
+      <div className="flex items-start gap-2.5 px-1 text-[12px] text-foreground-muted">
+        <Sparkles className="mt-0.5 size-3.5 shrink-0 text-blush-deep" strokeWidth={1.75} />
+        <span>
+          Work lunches pair with their FieldPulse deposits automatically as your bank syncs, closest
+          dates first. FieldPulse pays up to {formatCents(WORK_EXPENSE_CAP_CENTS)} a meal.
+        </span>
+      </div>
 
       {nothing && (
         <Card className="p-6 md:p-8">
@@ -156,52 +94,11 @@ export function PaybacksClient({
         </Card>
       )}
 
-      {ready.length > 0 && (
-        <section>
-          <SectionTitle
-            title="Found the money"
-            hint="payments that exactly match a work expense"
-            right={
-              <Button size="sm" variant="primary" onClick={matchAll} disabled={pending}>
-                <Check className="size-3.5" strokeWidth={2.5} />
-                Match all {ready.length}
-              </Button>
-            }
-          />
-          <Card className="divide-y divide-border overflow-hidden">
-            {ready.map((r) => (
-              <div key={`${r.charge.id}-${r.payback.id}`} className="flex items-center gap-3 px-4 py-3.5 md:px-5">
-                <div className="min-w-0 flex-1 space-y-1.5">
-                  <TxLine tx={r.charge} />
-                  <div className="flex items-center gap-1.5 pl-0.5 text-[11px] text-blue-deep">
-                    <ArrowDown className="size-3" strokeWidth={2} /> paid back by
-                  </div>
-                  <TxLine tx={r.payback} />
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={pending}
-                  onClick={() => matchOne(r.payback.id, r.charge.id)}
-                >
-                  Match
-                </Button>
-              </div>
-            ))}
-          </Card>
-        </section>
-      )}
-
       {overdue.length > 0 && (
         <section>
           <SectionTitle
             title="Overdue"
-            hint={`no payment after ${OVERDUE_DAYS}+ days, ${formatCents(overdue.reduce((t, w) => t + w.remaining, 0))} total. Ramp says paid? Check the bank for deposits that didn't come through.`}
-            right={
-              <Button size="sm" variant="outline" onClick={recover} disabled={pending}>
-                {pending ? "Checking…" : "Check the bank"}
-              </Button>
-            }
+            hint={`no deposit after ${OVERDUE_DAYS}+ days, ${formatCents(overdue.reduce((t, w) => t + w.remaining, 0))} total. Usually it was never submitted, or wasn't a work lunch.`}
           />
           <WaitingList rows={overdue} today={today} onPick={setPicking} />
         </section>
@@ -256,13 +153,17 @@ export function PaybacksClient({
                           {nameOf(p.payback)} · {format(p.payback.date, "MMM d")}
                         </span>
                         <span className="mono tabular text-blue-deep">+{formatCents(p.amountCents)}</span>
-                        <button
-                          disabled={pending}
-                          onClick={() => startTransition(() => unlinkPayback(p.linkId))}
-                          className="rounded-full px-2 py-0.5 text-[11px] text-foreground-faint hover:bg-surface-2 hover:text-foreground"
-                        >
-                          undo
-                        </button>
+                        {/* Work expense pairings are automatic; only a
+                            payback you linked by hand can be undone. */}
+                        {!charge.reimbursable && (
+                          <button
+                            disabled={pending}
+                            onClick={() => startTransition(() => unlinkPayback(p.linkId))}
+                            className="rounded-full px-2 py-0.5 text-[11px] text-foreground-faint hover:bg-surface-2 hover:text-foreground"
+                          >
+                            undo
+                          </button>
+                        )}
                       </div>
                     ))}
                     <div className="text-[11px] text-foreground-faint">
