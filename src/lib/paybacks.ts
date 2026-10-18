@@ -207,23 +207,80 @@ export type AutoMatch = {
   amountCents: number;
 };
 
-// Ramp pays a work lunch within days, often the day after the lunch, which can
-// be before the card charge has even posted. So a payment may land a few days
-// before the charge's date. It usually lands within a couple of weeks; the
-// longer reach is only for an amount nothing nearer explains.
-const EARLIEST_LAG = -4;
-const USUAL_LAG = 30;
+// Ramp pays a work lunch a few days after it, and the card charge posts a day
+// or two after the lunch. So a payment almost always lands on or after the
+// charge's date; a day or so before can happen (a lunch on Friday, paid and
+// posted on Monday). The longer reach covers the odd one paid weeks later.
+const EARLIEST_LAG = -3;
 const LONGEST_LAG = 90;
 
-// Work expenses paired with the payments that paid them back. Every possible
-// pair (same expected amount, payment from 4 days before to 30 days after the
-// charge) is ranked by how close the dates are, and the closest pairs are
-// taken first, each payment and charge used once. Closest-first keeps a run
-// of identical $14.34 lunches lined up with their own deposits, and leaves a
-// charge that was never submitted (a weekend Cava) unpaired instead of letting
-// it steal the next deposit. Exact cents beat a cent-off near miss, and a
-// same-store refund is never mistaken for a reimbursement. "Amount" is what's
-// expected back, so a $15.43 lunch pairs with a $15.00 payment.
+// What a (charge, payment) pairing costs: days between them, with landing
+// early made expensive so a payment never jumps ahead to a lunch charged after
+// it while an older lunch still waits, and very late payments made pricier.
+function pairCost(lag: number): number {
+  if (lag < EARLIEST_LAG || lag > LONGEST_LAG) return Infinity;
+  if (lag < 0) return 20 + 10 * -lag;
+  return lag <= 30 ? lag : 30 + (lag - 30) * 2;
+}
+
+// Minimum-cost assignment (Hungarian method) on a square matrix. Returns, for
+// each row, the column it's assigned to.
+function hungarian(cost: number[][]): number[] {
+  const n = cost.length;
+  const u = new Array(n + 1).fill(0);
+  const v = new Array(n + 1).fill(0);
+  const p = new Array(n + 1).fill(0);
+  const way = new Array(n + 1).fill(0);
+  for (let i = 1; i <= n; i++) {
+    p[0] = i;
+    let j0 = 0;
+    const minv = new Array(n + 1).fill(Infinity);
+    const used = new Array(n + 1).fill(false);
+    do {
+      used[j0] = true;
+      const i0 = p[j0];
+      let delta = Infinity;
+      let j1 = 0;
+      for (let j = 1; j <= n; j++) {
+        if (used[j]) continue;
+        const cur = cost[i0 - 1][j - 1] - u[i0] - v[j];
+        if (cur < minv[j]) {
+          minv[j] = cur;
+          way[j] = j0;
+        }
+        if (minv[j] < delta) {
+          delta = minv[j];
+          j1 = j;
+        }
+      }
+      for (let j = 0; j <= n; j++) {
+        if (used[j]) {
+          u[p[j]] += delta;
+          v[j] -= delta;
+        } else minv[j] -= delta;
+      }
+      j0 = j1;
+    } while (p[j0] !== 0);
+    do {
+      const j1 = way[j0];
+      p[j0] = p[j1];
+      j0 = j1;
+    } while (j0);
+  }
+  const rowToCol = new Array(n).fill(-1);
+  for (let j = 1; j <= n; j++) if (p[j]) rowToCol[p[j] - 1] = j - 1;
+  return rowToCol;
+}
+
+// Pairs work expenses with the payments that paid them back. For each amount
+// (what's expected back, so a $15.43 lunch looks for $15.00), it finds the
+// assignment that pays back as many lunches as possible and, among those,
+// keeps each payment closest after its own lunch. Solving it as a whole,
+// rather than grabbing the nearest pair first, means a run of identical
+// $14.34 lunches lines up with its deposits, a lunch still awaiting approval
+// is the one left waiting, and a lunch that was never submitted doesn't steal
+// a deposit. A same-store refund is never mistaken for a reimbursement, and a
+// cent-off near miss only fills what exact amounts couldn't.
 export function autoMatches(
   txns: readonly PaybackTx[],
   state: PaybackState,
@@ -240,28 +297,36 @@ export function autoMatches(
   const usedPayback = new Set<number>();
   const matches: AutoMatch[] = [];
 
-  const pass = (maxLag: number, fits: (paid: number, owedCents: number) => boolean) => {
-    const pairs: { p: PaybackTx; c: PaybackTx; gap: number }[] = [];
-    for (const p of inflows) {
-      if (usedPayback.has(p.id)) continue;
-      const paid = state.paybackRemaining(p);
-      for (const c of charges) {
-        const left = owed.get(c.id);
-        if (left == null || !fits(paid, left)) continue;
-        const lag = differenceInCalendarDays(p.date, c.date);
-        if (lag < EARLIEST_LAG || lag > maxLag) continue;
-        if (sameMerchant(p, c)) continue;
-        pairs.push({ p, c, gap: Math.abs(lag) });
+  const UNPAID = 1000; // cost of leaving a charge unpaired
+
+  const solve = (cs: PaybackTx[], ps: PaybackTx[]) => {
+    if (cs.length === 0 || ps.length === 0) return;
+    const n = cs.length + ps.length;
+    const cost: number[][] = [];
+    for (let i = 0; i < n; i++) {
+      const row = new Array(n).fill(0);
+      for (let j = 0; j < n; j++) {
+        if (i < cs.length && j < ps.length) {
+          const c = cs[i];
+          const p = ps[j];
+          const pc = sameMerchant(p, c)
+            ? Infinity
+            : pairCost(differenceInCalendarDays(p.date, c.date));
+          row[j] = Number.isFinite(pc) ? pc : 1e9;
+        } else if (i < cs.length) {
+          row[j] = UNPAID; // charge stays unpaired
+        } else {
+          row[j] = 0; // a payment that isn't for any of these lunches
+        }
       }
+      cost.push(row);
     }
-    pairs.sort(
-      (a, b) =>
-        a.gap - b.gap ||
-        a.c.date.getTime() - b.c.date.getTime() ||
-        a.p.date.getTime() - b.p.date.getTime() ||
-        a.p.id - b.p.id,
-    );
-    for (const { p, c } of pairs) {
+    const assign = hungarian(cost);
+    for (let i = 0; i < cs.length; i++) {
+      const j = assign[i];
+      if (j < 0 || j >= ps.length || cost[i][j] >= 1e9) continue;
+      const c = cs[i];
+      const p = ps[j];
       const left = owed.get(c.id);
       if (left == null || usedPayback.has(p.id)) continue;
       usedPayback.add(p.id);
@@ -273,12 +338,39 @@ export function autoMatches(
       });
     }
   };
-  const exact = (paid: number, left: number) => paid === left;
-  const near = (paid: number, left: number) => closeTo(paid, left);
-  pass(USUAL_LAG, exact);
-  pass(LONGEST_LAG, exact);
-  pass(USUAL_LAG, near);
-  pass(LONGEST_LAG, near);
+
+  // Exact amounts, one amount at a time.
+  const byAmount = new Map<number, PaybackTx[]>();
+  for (const c of charges) {
+    const k = owed.get(c.id)!;
+    const arr = byAmount.get(k) ?? [];
+    arr.push(c);
+    byAmount.set(k, arr);
+  }
+  for (const [amount, cs] of byAmount) {
+    solve(cs, inflows.filter((p) => !usedPayback.has(p.id) && state.paybackRemaining(p) === amount));
+  }
+
+  // Near misses for whatever is left: nearest-dated pair first.
+  const pairs: { p: PaybackTx; c: PaybackTx; cost: number }[] = [];
+  for (const c of charges) {
+    const left = owed.get(c.id);
+    if (left == null) continue;
+    for (const p of inflows) {
+      if (usedPayback.has(p.id) || !closeTo(state.paybackRemaining(p), left)) continue;
+      if (sameMerchant(p, c)) continue;
+      const pc = pairCost(differenceInCalendarDays(p.date, c.date));
+      if (Number.isFinite(pc)) pairs.push({ p, c, cost: pc });
+    }
+  }
+  pairs.sort((a, b) => a.cost - b.cost || a.c.date.getTime() - b.c.date.getTime());
+  for (const { p, c } of pairs) {
+    const left = owed.get(c.id);
+    if (left == null || usedPayback.has(p.id)) continue;
+    usedPayback.add(p.id);
+    owed.delete(c.id);
+    matches.push({ paybackId: p.id, chargeId: c.id, amountCents: Math.min(state.paybackRemaining(p), left) });
+  }
   return matches;
 }
 
